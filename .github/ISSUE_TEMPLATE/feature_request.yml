@@ -1,0 +1,53 @@
+name: ✨ Feature request
+description: Suggest a new capability or an improvement.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you write: `ai-commit` is deliberately **one file with zero
+        third-party dependencies**. Proposals that keep it that way are much
+        more likely to be merged.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation where the tool falls short today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should happen? Include the CLI flag or env var you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including "do nothing" — why isn't the current behaviour enough?
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Design constraints
+      options:
+        - label: This can be implemented with the Python standard library only.
+        - label: This keeps `ai_commit.py` a single self-contained file.
+        - label: This does not make the tool modify git history without the user seeing the message first.
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to implement it?
+      options:
+        - "Yes, I'd like to open a PR"
+        - "Maybe, with some guidance"
+        - "No, just suggesting"
+    validations:
+      required: true

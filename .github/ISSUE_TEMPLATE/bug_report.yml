@@ -1,0 +1,93 @@
+name: 🐛 Bug report
+description: Something crashes, errors out, or behaves differently than documented.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! **Never paste your `OPENAI_API_KEY`**, and redact
+        anything sensitive from diffs or logs you share.
+
+        If the problem is only that a generated message was poor quality, use the
+        *Commit message quality* section at the bottom rather than filing a crash.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1. Stage: `git add ...`
+        2. Run: `python ai_commit.py ...`
+        3. Observed:
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / traceback
+      description: Paste the full terminal output. It will be rendered as a code block.
+      render: shell
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`
+      placeholder: "3.12.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: The value of `--model` or `$OPENAI_MODEL`, if not the default.
+      placeholder: "gpt-4o-mini"
+
+  - type: input
+    id: commit
+    attributes:
+      label: ai-commit version
+      description: The commit SHA of `ai_commit.py` you are running (`git rev-parse --short HEAD`).
+      placeholder: "6f72451"
+
+  - type: textarea
+    id: message-quality
+    attributes:
+      label: Commit message quality (only if that is the problem)
+      description: The message you got, and the message you expected.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I reproduced this on the latest commit of `main`.
+          required: true
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I removed my API key and any sensitive content from everything above.
+          required: true
