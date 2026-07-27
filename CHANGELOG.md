@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Version `0.2.0`, not yet published. This is the first release intended for PyPI.
+### Added
+
+- The *Publish* workflow now picks the next version by itself: a run bumps
+  `__version__` (patch by default, `minor`/`major` selectable), rolls the
+  changelog, commits, tags, publishes and creates the GitHub Release. TestPyPI
+  rehearsals build a throwaway `X.Y.Z.devN` version and leave git untouched.
+- `scripts/bump_version.py`, the standard-library helper behind it.
+
+## [0.2.0] - 2026-07-27
+
+First release published to PyPI.
 
 ### Changed
 
@@ -57,5 +67,6 @@ Initial public release.
 - `run-commit.cmd`: Windows wrapper that verifies `OPENAI_API_KEY`, stages
   everything, and forwards its arguments to `commitclerk.py`.
 
-[Unreleased]: https://github.com/alegauss/commitclerk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/alegauss/commitclerk/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/alegauss/commitclerk/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alegauss/commitclerk/releases/tag/v0.1.0

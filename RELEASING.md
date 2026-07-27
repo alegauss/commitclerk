@@ -35,57 +35,70 @@ Fill in **exactly** these values:
 
 ### 3. Create the GitHub environments
 
-In **Settings → Environments**, create two environments named `pypi` and
-`testpypi`. The names must match the workflow and the publisher configuration.
+Both environments already exist: `pypi` and `testpypi`. Their names must keep
+matching the workflow and the publisher configuration.
 
-For `pypi`, adding yourself as a **required reviewer** is recommended: it means
-every upload to the real index pauses for a manual approval click, which is a
-cheap safety net against an accidental or malicious release.
+For `pypi`, adding yourself as a **required reviewer** (Settings → Environments
+→ pypi) is worth considering: every upload to the real index would then pause
+for one approval click. It is a cheap safety net against an accidental release,
+at the cost of the automated path no longer being fully hands-off.
 
 ## Cutting a release
 
-1. **Bump the version.** Edit `__version__` in [`commitclerk.py`](commitclerk.py).
-   That single value is the source of truth — `pyproject.toml` reads it
-   dynamically, and CI fails the release if the git tag disagrees with it.
+Nobody types a version number. Every run of the *Publish* workflow computes the
+next one from `__version__` in [`commitclerk.py`](commitclerk.py), which is the
+single source of truth — `pyproject.toml` reads it dynamically.
 
-2. **Update the changelog.** Move everything under `## [Unreleased]` in
-   [`CHANGELOG.md`](CHANGELOG.md) into a new `## [X.Y.Z] - YYYY-MM-DD` section,
-   and update the link definitions at the bottom.
+**1. Write the changelog.** Add what changed under `## [Unreleased]` in
+[`CHANGELOG.md`](CHANGELOG.md). This is the only manual step; the workflow moves
+that section into a released one for you. If you leave it empty the release
+still goes out, marked as a maintenance release.
 
-3. **Commit and push.**
+**2. Rehearse on TestPyPI** (optional). Actions → *Publish* → *Run workflow*,
+leaving `target` on **testpypi**. It builds `X.Y.(Z+1).devN` — a throwaway
+version so TestPyPI never rejects a duplicate — and commits and tags nothing.
+Verify with:
 
-   ```bash
-   git add commitclerk.py CHANGELOG.md
-   clerk -m "chore: release vX.Y.Z"
-   git push
-   ```
+```bash
+pipx install --index-url https://test.pypi.org/simple/ commitclerk
+clerk --version
+```
 
-4. **Rehearse on TestPyPI** (optional but recommended for the first few
-   releases). Run the *Publish* workflow manually from the Actions tab — a
-   manual run always targets TestPyPI, never PyPI. Then verify:
+**3. Release.** Actions → *Publish* → *Run workflow*, set `target` to **pypi**
+and pick `level` (**patch** by default; `minor` for a new flag or provider,
+`major` for a breaking change). The run then, in order:
 
-   ```bash
-   pipx install --index-url https://test.pypi.org/simple/ commitclerk
-   clerk --version
-   ```
+1. bumps `__version__` and rolls `CHANGELOG.md`,
+2. commits `chore: release vX.Y.Z`, tags `vX.Y.Z` and pushes both,
+3. builds the sdist and wheel and validates them with `twine check`,
+4. uploads to PyPI via OIDC,
+5. creates the GitHub Release with generated notes.
 
-5. **Tag and release.**
+**4. Verify.**
 
-   ```bash
-   git tag -a vX.Y.Z -m "vX.Y.Z"
-   git push origin vX.Y.Z
-   gh release create vX.Y.Z --generate-notes
-   ```
+```bash
+pipx install commitclerk
+clerk --version
+```
 
-   Publishing the GitHub Release triggers the workflow, which builds the sdist
-   and wheel, checks the tag against `__version__`, and uploads to PyPI.
+### Releasing a specific tag by hand
 
-6. **Verify.**
+The automated path is the normal one, but publishing a GitHub Release manually
+still works and uploads exactly that tag. The workflow then refuses to run if
+the tag and `__version__` disagree, so bump the module first:
 
-   ```bash
-   pipx install commitclerk
-   clerk --version
-   ```
+```bash
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+gh release create vX.Y.Z --generate-notes
+```
+
+### Why the GitHub Release is created last
+
+It is created with the built-in `GITHUB_TOKEN`. Releases published by that token
+deliberately do not trigger workflows, which is what keeps `publish.yml` from
+re-entering itself. Creating it after the upload also means a failed upload does
+not leave a release announcing a version that never reached PyPI.
 
 ## Versioning
 

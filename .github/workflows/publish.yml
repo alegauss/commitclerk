@@ -3,23 +3,50 @@ name: Publish
 # Publishing uses PyPI Trusted Publishing (OIDC) — there is no API token stored
 # in this repository. See RELEASING.md for the one-time PyPI configuration.
 #
-#   * Creating a GitHub Release  -> publishes to PyPI
-#   * Running this manually      -> publishes to TestPyPI (dry run of the real thing)
+# Every run picks the next version by itself; nobody types a version number.
+#
+#   * Run manually, target=testpypi (default) -> builds X.Y.(Z+1).devN and uploads
+#     to TestPyPI. Nothing is committed or tagged: a rehearsal leaves no trace.
+#   * Run manually, target=pypi -> bumps the version for real, rolls the
+#     changelog, commits, tags, publishes to PyPI and creates the GitHub Release.
+#   * Publishing a GitHub Release by hand -> publishes exactly that tag to PyPI.
 
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      target:
+        description: Which index to publish to
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+      level:
+        description: Which part of the version to increment
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: read
+
+# Two releases racing each other would fight over the tag and the version bump.
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   build:
     name: Build distributions
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # only exercised when cutting a real release
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
@@ -40,6 +67,32 @@ jobs:
             exit 1
           fi
 
+      # A rehearsal gets a throwaway .devN version so TestPyPI never sees a
+      # collision, and the changelog is left untouched.
+      - name: Bump to a rehearsal version
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+        run: python scripts/bump_version.py --level "${{ inputs.level }}" --dev "${{ github.run_number }}"
+
+      - name: Bump the version and roll the changelog
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
+        run: python scripts/bump_version.py --level "${{ inputs.level }}"
+
+      - name: Read the resulting version
+        id: version
+        run: echo "version=$(python -c 'import commitclerk; print(commitclerk.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag the release
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add commitclerk.py CHANGELOG.md
+          git commit -m "chore: release v${version}"
+          git tag -a "v${version}" -m "v${version}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "v${version}"
+
       - name: Build sdist and wheel
         run: python -m build
 
@@ -53,7 +106,7 @@ jobs:
 
   publish-testpypi:
     name: Publish to TestPyPI
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -70,13 +123,11 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-          # TestPyPI often already holds a build with this version from an
-          # earlier rehearsal; do not fail the run over it.
           skip-existing: true
 
   publish-pypi:
     name: Publish to PyPI
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -91,3 +142,22 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create the GitHub Release
+    # Only for the automated path: a release-triggered run already has one.
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Created with GITHUB_TOKEN on purpose: releases published by the built-in
+      # token do not trigger workflows, so this cannot re-enter publish.yml.
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ needs.build.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --title "v${{ needs.build.outputs.version }}" \
+            --generate-notes
