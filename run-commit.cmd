@@ -14,6 +14,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python "%SCRIPT_DIR%ai_commit.py" %*
+python "%SCRIPT_DIR%commitclerk.py" %*
 
 endlocal

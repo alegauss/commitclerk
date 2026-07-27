@@ -1,16 +1,16 @@
 #!/usr/bin/env python
-"""AI-powered git commit.
+"""commitclerk - AI-powered git commit messages.
 
 Generates a commit message (short imperative title + bulleted summary body)
 from the staged diff using the OpenAI Chat Completions API.
 
 Reads the API key from OPENAI_API_KEY. No third-party dependencies.
 
-Usage:
-    python ai_commit.py                       # AI writes the whole message
-    python ai_commit.py -m "docs: fix X"      # use this exact title; AI writes only the body
-    python ai_commit.py --dry-run             # print message, do not commit
-    python ai_commit.py --model gpt-4o-mini
+Usage (installed as `clerk`, or run the file directly with `python commitclerk.py`):
+    clerk                       # AI writes the whole message
+    clerk -m "docs: fix X"      # use this exact title; AI writes only the body
+    clerk --dry-run             # print message, do not commit
+    clerk --model gpt-4o-mini
 
 Environment:
     OPENAI_API_KEY   required
@@ -32,6 +32,8 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+
+__version__ = "0.2.0"
 
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -166,7 +168,15 @@ def call_openai(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="AI-powered git commit.")
+    parser = argparse.ArgumentParser(
+        prog="clerk",
+        description="commitclerk - AI-powered git commit messages.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"commitclerk {__version__}",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print the message and exit.")
     parser.add_argument(
         "-m",

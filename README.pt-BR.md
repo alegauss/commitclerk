@@ -1,13 +1,14 @@
 <div align="center">
 
-# ai-commit
+# commitclerk
 
 **Escreva mensagens de commit melhores com um comando — a partir do seu diff staged e de um LLM.**
 
+[![PyPI](https://img.shields.io/pypi/v/commitclerk.svg)](https://pypi.org/project/commitclerk/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![Zero dependências](https://img.shields.io/badge/depend%C3%AAncias-zero-brightgreen.svg)](#requisitos)
-[![CI](https://github.com/alegauss/ai-commit/actions/workflows/ci.yml/badge.svg)](https://github.com/alegauss/ai-commit/actions/workflows/ci.yml)
+[![CI](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml/badge.svg)](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-fe5196.svg)](https://www.conventionalcommits.org/)
 
 [Início rápido](#início-rápido) · [Uso](#uso) · [Por que existe](#por-que-existe) · [Contribuindo](CONTRIBUTING.md) · [English](README.md)
@@ -16,11 +17,11 @@
 
 ---
 
-O `ai-commit` é um único arquivo Python — **sem pacotes para instalar, sem virtualenv, sem lockfile**. Ele lê o seu diff staged, pede ao LLM uma mensagem no padrão Conventional Commits, mostra o resultado e faz o commit.
+Um *clerk* (escrivão) registra o que de fato aconteceu. O `commitclerk` lê o seu diff staged, pede ao LLM uma mensagem no padrão Conventional Commits, mostra o resultado e faz o commit — em um único arquivo Python com **zero dependências**, pequeno o bastante para você ler inteiro antes de deixá-lo perto do seu código.
 
 ```console
 $ git add .
-$ python ai_commit.py
+$ clerk
 
 --- commit message ---
 fix: prevent duplicate webhook deliveries on retry
@@ -52,17 +53,19 @@ fix: prevent duplicate webhook deliveries on retry
 
 ## Início rápido
 
-**1. Obtenha o script**
+**1. Instale**
 
 ```bash
-git clone https://github.com/alegauss/ai-commit.git
-cd ai-commit
+pipx install commitclerk    # recomendado
+# ou
+pip install commitclerk
 ```
 
-Ou baixe só o arquivo:
+Ou nem instale — é um arquivo só, sem dependências, então isto também funciona:
 
 ```bash
-curl -O https://raw.githubusercontent.com/alegauss/ai-commit/main/ai_commit.py
+curl -O https://raw.githubusercontent.com/alegauss/commitclerk/main/commitclerk.py
+python commitclerk.py --help
 ```
 
 **2. Configure a chave**
@@ -81,15 +84,19 @@ setx OPENAI_API_KEY "sk-..."
 
 ```bash
 git add .
-python ai_commit.py --dry-run   # confira antes
-python ai_commit.py
+clerk --dry-run   # confira antes
+clerk
 ```
 
 ## Uso
 
 ```
-python ai_commit.py [-m TÍTULO] [--dry-run] [--model MODELO] [--max-chars N]
+clerk [-m TÍTULO] [--dry-run] [--model MODELO] [--max-chars N] [--version]
 ```
+
+A instalação cria dois comandos idênticos, `clerk` e `commitclerk`. Se preferir
+rodar o arquivo direto, troque `clerk` por `python commitclerk.py` em todos os
+exemplos abaixo.
 
 | Flag | Padrão | O que faz |
 |---|---|---|
@@ -97,24 +104,25 @@ python ai_commit.py [-m TÍTULO] [--dry-run] [--model MODELO] [--max-chars N]
 | `--dry-run` | desligado | Imprime a mensagem gerada e sai sem commitar. |
 | `--model MODELO` | `gpt-4o-mini` (ou `$OPENAI_MODEL`) | Modelo da API Chat Completions. |
 | `--max-chars N` | `60000` | Trunca o diff em `N` caracteres antes de enviar à API. |
+| `--version` | — | Mostra a versão e sai. |
 
 ### Exemplos
 
 ```bash
 # A IA escreve a mensagem inteira
-python ai_commit.py
+clerk
 
 # Você escolhe o título, a IA escreve o corpo — o modo mais confiável
-python ai_commit.py -m "refactor: extract retry policy into its own module"
+clerk -m "refactor: extract retry policy into its own module"
 
 # Apenas prévia, nunca commita
-python ai_commit.py --dry-run
+clerk --dry-run
 
 # Um modelo mais forte para uma mudança grande ou sutil
-python ai_commit.py --model gpt-4o
+clerk --model gpt-4o
 
 # Diff muito grande: envie mais contexto
-python ai_commit.py --max-chars 120000
+clerk --max-chars 120000
 ```
 
 ### Códigos de saída
@@ -128,7 +136,7 @@ python ai_commit.py --max-chars 120000
 
 ## Wrapper para Windows
 
-O `run-commit.cmd` é um atalho para Windows: verifica a chave da API, roda `git add *` e chama o `ai_commit.py` repassando os argumentos.
+O `run-commit.cmd` é um atalho para Windows: verifica a chave da API, roda `git add *` e chama o `commitclerk.py` repassando os argumentos.
 
 ```bat
 run-commit.cmd -m "feat: add CSV export to the reports page"
@@ -136,12 +144,12 @@ run-commit.cmd -m "feat: add CSV export to the reports page"
 
 Coloque o diretório do repositório (ou uma cópia dos dois arquivos) no `PATH` para chamá-lo de qualquer repositório.
 
-> **Atenção:** o wrapper adiciona tudo ao stage com `git add *`. Se você prefere escolher o que entra no commit, faça o stage manualmente e chame `python ai_commit.py` direto. O script Python nunca faz stage sozinho.
+> **Atenção:** o wrapper adiciona tudo ao stage com `git add *`. Se você prefere escolher o que entra no commit, faça o stage manualmente e chame `python commitclerk.py` direto. O script Python nunca faz stage sozinho.
 
-No macOS e no Linux, use o script diretamente — um alias resolve:
+No macOS e no Linux, um alias resolve:
 
 ```bash
-alias aic='git add -A && python /caminho/para/ai_commit.py'
+alias ac='git add -A && clerk'
 ```
 
 ## Por que existe
@@ -154,7 +162,7 @@ feat: implement real-time collaboration
 
 …para um commit que só mexeu em Markdown. Seu histórico passa a mentir, e o `git log --grep` e as ferramentas de release herdam a mentira.
 
-O `ai-commit` trata isso de duas formas:
+O `commitclerk` trata isso de duas formas:
 
 1. **Detecção de commits só de documentação.** Se todo arquivo no stage é documentação — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, qualquer coisa em `docs/`, ou nomes conhecidos como `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — o prompt muda para um enquadramento de documentação: usa o prefixo `docs:` e descreve *a mudança na documentação em si* ("registrar X no changelog"), nunca "implementar X".
 
@@ -179,7 +187,7 @@ Ideias que dariam boas primeiras contribuições:
 - [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar
 - [ ] Arquivo de configuração com regras de commit por projeto
 
-Pegue uma delas ou proponha a sua em uma [issue](https://github.com/alegauss/ai-commit/issues).
+Pegue uma delas ou proponha a sua em uma [issue](https://github.com/alegauss/commitclerk/issues).
 
 ## Contribuindo
 

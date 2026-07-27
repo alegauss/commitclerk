@@ -1,7 +1,7 @@
 version: 2
 
 updates:
-  # ai-commit has no third-party runtime dependencies by design, so the only
+  # commitclerk has no third-party runtime dependencies by design, so the only
   # thing to keep current is the CI tooling itself.
   - package-ecosystem: github-actions
     directory: /

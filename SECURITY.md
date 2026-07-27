@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-`ai-commit` is a single script distributed from the `main` branch. Only the
+`commitclerk` is a single script distributed from the `main` branch. Only the
 latest commit on `main` is supported — please verify a problem still reproduces
 there before reporting it.
 
@@ -12,7 +12,7 @@ there before reporting it.
 
 Report it privately through GitHub Security Advisories:
 
-👉 **[Report a vulnerability](https://github.com/alegauss/ai-commit/security/advisories/new)**
+👉 **[Report a vulnerability](https://github.com/alegauss/commitclerk/security/advisories/new)**
 
 Please include:
 
@@ -37,10 +37,10 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 
 - **The staged diff being sent to the OpenAI API.** This is the documented,
   intentional behavior of the tool — see [Privacy and cost](README.md#privacy-and-cost).
-  Do not use `ai-commit` on repositories whose contents may not leave your
+  Do not use `commitclerk` on repositories whose contents may not leave your
   machine.
 - **`run-commit.cmd` staging every change with `git add *`.** This is documented
-  behavior of the wrapper. Stage manually and call `ai_commit.py` directly if
+  behavior of the wrapper. Stage manually and call `commitclerk.py` directly if
   you need control over what is committed.
 - Vulnerabilities in OpenAI's API, in `git`, or in CPython itself — report those
   to their respective maintainers.
@@ -49,7 +49,7 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 
 ## Handling your API key
 
-- `ai-commit` reads `OPENAI_API_KEY` from the environment only. It is never
+- `commitclerk` reads `OPENAI_API_KEY` from the environment only. It is never
   written to a file, never printed, and never passed as a command-line argument.
 - Never paste a key into an issue, pull request, or discussion. If you do,
   [revoke it immediately](https://platform.openai.com/api-keys).

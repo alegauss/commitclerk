@@ -33,8 +33,8 @@
 ## Checklist
 
 - [ ] No third-party dependencies were added (standard library only)
-- [ ] `ai_commit.py` is still a single self-contained file
+- [ ] `commitclerk.py` is still a single self-contained file
 - [ ] `python -m unittest discover -s tests` passes
-- [ ] `python ai_commit.py --dry-run` was run against a real staged diff
+- [ ] `python commitclerk.py --dry-run` was run against a real staged diff
 - [ ] `README.md` updated if a flag, env var or default changed
 - [ ] An entry was added to `CHANGELOG.md` under `## [Unreleased]`

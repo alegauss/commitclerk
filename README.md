@@ -1,13 +1,14 @@
 <div align="center">
 
-# ai-commit
+# commitclerk
 
 **Write better git commit messages in one command — powered by your staged diff and an LLM.**
 
+[![PyPI](https://img.shields.io/pypi/v/commitclerk.svg)](https://pypi.org/project/commitclerk/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#requirements)
-[![CI](https://github.com/alegauss/ai-commit/actions/workflows/ci.yml/badge.svg)](https://github.com/alegauss/ai-commit/actions/workflows/ci.yml)
+[![CI](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml/badge.svg)](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-fe5196.svg)](https://www.conventionalcommits.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -17,11 +18,11 @@
 
 ---
 
-`ai-commit` is a single Python file — **no packages to install, no virtualenv, no lockfile**. It reads your staged diff, asks an LLM for a Conventional Commits message, shows it to you, and commits.
+A *clerk* records what actually happened. `commitclerk` reads your staged diff, asks an LLM for a Conventional Commits message, shows it to you, and commits — in a single Python file with **zero dependencies**, small enough that you can read the whole thing before letting it near your source code.
 
 ```console
 $ git add .
-$ python ai_commit.py
+$ clerk
 
 --- commit message ---
 fix: prevent duplicate webhook deliveries on retry
@@ -54,17 +55,20 @@ fix: prevent duplicate webhook deliveries on retry
 
 ## Quick start
 
-**1. Get the script**
+**1. Install**
 
 ```bash
-git clone https://github.com/alegauss/ai-commit.git
-cd ai-commit
+pipx install commitclerk    # recommended
+# or
+pip install commitclerk
 ```
 
-Or just download the single file:
+Or skip installing entirely — it is one file with no dependencies, so this works
+just as well:
 
 ```bash
-curl -O https://raw.githubusercontent.com/alegauss/ai-commit/main/ai_commit.py
+curl -O https://raw.githubusercontent.com/alegauss/commitclerk/main/commitclerk.py
+python commitclerk.py --help
 ```
 
 **2. Set your API key**
@@ -83,15 +87,19 @@ setx OPENAI_API_KEY "sk-..."
 
 ```bash
 git add .
-python ai_commit.py --dry-run   # look before you leap
-python ai_commit.py
+clerk --dry-run   # look before you leap
+clerk
 ```
 
 ## Usage
 
 ```
-python ai_commit.py [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N]
+clerk [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N] [--version]
 ```
+
+Installing gives you two identical commands, `clerk` and `commitclerk`. If you
+run the file directly instead, replace `clerk` with `python commitclerk.py` in
+every example below.
 
 | Flag | Default | What it does |
 |---|---|---|
@@ -99,24 +107,25 @@ python ai_commit.py [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N]
 | `--dry-run` | off | Print the generated message and exit without committing. |
 | `--model MODEL` | `gpt-4o-mini` (or `$OPENAI_MODEL`) | Chat Completions model to call. |
 | `--max-chars N` | `60000` | Truncate the diff to `N` characters before sending it to the API. |
+| `--version` | — | Print the version and exit. |
 
 ### Examples
 
 ```bash
 # Let the AI write the whole message
-python ai_commit.py
+clerk
 
 # You choose the title, the AI writes the body — the most reliable mode
-python ai_commit.py -m "refactor: extract retry policy into its own module"
+clerk -m "refactor: extract retry policy into its own module"
 
 # Preview only, never commits
-python ai_commit.py --dry-run
+clerk --dry-run
 
 # Use a stronger model for a large or subtle change
-python ai_commit.py --model gpt-4o
+clerk --model gpt-4o
 
 # Very large diff: send more context
-python ai_commit.py --max-chars 120000
+clerk --max-chars 120000
 ```
 
 ### Exit codes
@@ -130,7 +139,7 @@ python ai_commit.py --max-chars 120000
 
 ## Windows wrapper
 
-`run-commit.cmd` is a convenience wrapper for Windows: it checks the API key, runs `git add *`, then calls `ai_commit.py` with whatever arguments you pass through.
+`run-commit.cmd` is a convenience wrapper for Windows: it checks the API key, runs `git add *`, then calls `commitclerk.py` with whatever arguments you pass through.
 
 ```bat
 run-commit.cmd -m "feat: add CSV export to the reports page"
@@ -142,12 +151,12 @@ Put the repo directory (or a copy of both files) on your `PATH` to call it from 
 run-commit.cmd
 ```
 
-> **Heads up:** the wrapper stages everything with `git add *`. If you prefer to curate what goes into the commit, stage it yourself and call `python ai_commit.py` directly. The Python script never stages anything on its own.
+> **Heads up:** the wrapper stages everything with `git add *`. If you prefer to curate what goes into the commit, stage it yourself and call `python commitclerk.py` directly. The Python script never stages anything on its own.
 
-On macOS and Linux, use the script directly — a shell alias does the same job:
+On macOS and Linux, a shell alias does the same job:
 
 ```bash
-alias aic='git add -A && python /path/to/ai_commit.py'
+alias ac='git add -A && clerk'
 ```
 
 ## Why it exists
@@ -160,7 +169,7 @@ feat: implement real-time collaboration
 
 …for a commit that changed nothing but Markdown. Your history is now lying to you, and `git log --grep` and release tooling inherit the lie.
 
-`ai-commit` handles this in two ways:
+`commitclerk` handles this in two ways:
 
 1. **Documentation-only detection.** If every staged file is documentation — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, anything under `docs/`, or a known name like `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — the prompt switches to a docs-only framing: use the `docs:` prefix and describe *the documentation change itself* ("record X in the changelog"), never "implement X".
 
@@ -178,7 +187,7 @@ git diff --staged ──▶ truncate to --max-chars ──▶ doc-only? ──�
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The whole thing is ~230 lines in [`ai_commit.py`](ai_commit.py). It's meant to be read, forked, and adapted to your team's conventions — start with the `_RULES` string.
+The whole thing is ~230 lines in [`commitclerk.py`](commitclerk.py). It's meant to be read, forked, and adapted to your team's conventions — start with the `_RULES` string.
 
 ## Privacy and cost
 
@@ -192,7 +201,7 @@ The whole thing is ~230 lines in [`ai_commit.py`](ai_commit.py). It's meant to b
 <details>
 <summary><strong>"No staged changes. Run <code>git add &lt;files&gt;</code> first."</strong></summary>
 
-Nothing is staged. `ai_commit.py` deliberately never stages for you — run `git add` (or use `run-commit.cmd`, which stages everything).
+Nothing is staged. `commitclerk.py` deliberately never stages for you — run `git add` (or use `run-commit.cmd`, which stages everything).
 </details>
 
 <details>
@@ -229,7 +238,7 @@ Ideas that would make good first contributions:
 - [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing
 - [ ] A configuration file for project-specific commit rules
 
-Grab one, or propose your own in an [issue](https://github.com/alegauss/ai-commit/issues).
+Grab one, or propose your own in an [issue](https://github.com/alegauss/commitclerk/issues).
 
 ## Contributing
 

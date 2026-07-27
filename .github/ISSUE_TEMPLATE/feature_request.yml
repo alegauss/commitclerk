@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before you write: `ai-commit` is deliberately **one file with zero
+        Before you write: `commitclerk` is deliberately **one file with zero
         third-party dependencies**. Proposals that keep it that way are much
         more likely to be merged.
 
@@ -38,7 +38,7 @@ body:
       label: Design constraints
       options:
         - label: This can be implemented with the Python standard library only.
-        - label: This keeps `ai_commit.py` a single self-contained file.
+        - label: This keeps `commitclerk.py` a single self-contained file.
         - label: This does not make the tool modify git history without the user seeing the message first.
 
   - type: dropdown

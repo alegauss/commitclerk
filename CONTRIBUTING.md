@@ -1,4 +1,4 @@
-# Contributing to ai-commit
+# Contributing to commitclerk
 
 Thanks for taking the time to help. This is a small project with a deliberately
 small surface, so the rules are short.
@@ -11,7 +11,7 @@ how good the feature is.
 1. **Zero third-party dependencies.** Standard library only. If a feature needs
    `requests`, it needs `urllib` instead. No `requirements.txt`, no lockfile,
    no build step.
-2. **One file.** `ai_commit.py` stays self-contained and copy-pasteable. Someone
+2. **One file.** `commitclerk.py` stays self-contained and copy-pasteable. Someone
    should be able to `curl` it into a repo and have it work.
 3. **Never surprise the user's history.** The tool prints the message before
    committing and never stages, amends, rebases, or pushes anything by itself.
@@ -23,8 +23,8 @@ how good the feature is.
 ## Getting set up
 
 ```bash
-git clone https://github.com/alegauss/ai-commit.git
-cd ai-commit
+git clone https://github.com/alegauss/commitclerk.git
+cd commitclerk
 export OPENAI_API_KEY="sk-..."
 ```
 
@@ -37,8 +37,8 @@ There is nothing to install. Python 3.8+ and `git` are the only requirements.
 2. Create a branch: `git checkout -b feat/short-description`.
 3. Make the change.
 4. Test it (see below).
-5. Commit — using `ai-commit` itself, ideally:
-   `python ai_commit.py -m "feat: your title"`.
+5. Commit — using `commitclerk` itself, ideally:
+   `python commitclerk.py -m "feat: your title"`.
 6. Open a pull request and fill in the template.
 
 ## Testing your change
@@ -57,19 +57,19 @@ Then verify by hand before opening a PR:
 
 ```bash
 # The CLI still parses
-python ai_commit.py --help
+python commitclerk.py --help
 
 # It still compiles on the versions CI checks
-python -m compileall -q ai_commit.py
+python -m compileall -q commitclerk.py
 
 # A real end-to-end run that commits nothing
 git add <some files>
-python ai_commit.py --dry-run
-python ai_commit.py --dry-run -m "chore: manual check"
+python commitclerk.py --dry-run
+python commitclerk.py --dry-run -m "chore: manual check"
 
 # Documentation-only detection still fires
 git add README.md
-python ai_commit.py --dry-run     # must produce a docs: title
+python commitclerk.py --dry-run     # must produce a docs: title
 ```
 
 If your change touches `_is_doc` / `is_doc_only`, exercise both branches: a
@@ -99,12 +99,18 @@ heart of the tool. When you propose a change to them:
 
 ## Reporting bugs
 
-Open an [issue](https://github.com/alegauss/ai-commit/issues/new/choose) with
+Open an [issue](https://github.com/alegauss/commitclerk/issues/new/choose) with
 the bug report template. Include your Python version, OS, the exact command you
 ran, and — if the problem is a bad commit message — the message you got and the
 one you expected.
 
 **Never paste your API key, and redact anything sensitive from diffs you share.**
+
+## Releasing
+
+Maintainers only — the process is documented in [RELEASING.md](RELEASING.md).
+Releases are published to PyPI automatically from a GitHub Release using
+Trusted Publishing; there are no API tokens in this repository.
 
 ## Security issues
 

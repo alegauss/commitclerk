@@ -61,7 +61,7 @@ representative at an online or offline event.
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement by opening a
 confidential report through
-[GitHub's private reporting](https://github.com/alegauss/ai-commit/security/advisories/new)
+[GitHub's private reporting](https://github.com/alegauss/commitclerk/security/advisories/new)
 or by contacting the maintainer directly through their
 [GitHub profile](https://github.com/alegauss).
 

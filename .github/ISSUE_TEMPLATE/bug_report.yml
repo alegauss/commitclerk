@@ -26,7 +26,7 @@ body:
       label: Steps to reproduce
       value: |
         1. Stage: `git add ...`
-        2. Run: `python ai_commit.py ...`
+        2. Run: `python commitclerk.py ...`
         3. Observed:
     validations:
       required: true
@@ -69,8 +69,8 @@ body:
   - type: input
     id: commit
     attributes:
-      label: ai-commit version
-      description: The commit SHA of `ai_commit.py` you are running (`git rev-parse --short HEAD`).
+      label: commitclerk version
+      description: The commit SHA of `commitclerk.py` you are running (`git rev-parse --short HEAD`).
       placeholder: "6f72451"
 
   - type: textarea
