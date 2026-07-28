@@ -2,7 +2,7 @@
 
 > A command-line tool that writes your git commit messages. It reads the staged diff,
 > asks an LLM (OpenAI Chat Completions) for a Conventional Commits message, prints it,
-> and commits. Implemented as a single Python file (~230 lines) with **zero third-party
+> and commits. Implemented as a single Python file (~460 lines) with **zero third-party
 > dependencies** — standard library only (`urllib`, `subprocess`, `argparse`), Python 3.8+.
 > Installs three identical entry points: `clerk`, `commitclerk`, and `git clerk`.
 > Install with `pipx install commitclerk`, or download `commitclerk.py` and run it directly.
@@ -19,15 +19,17 @@ or GitHub. It calls the OpenAI Chat Completions API using the key in `OPENAI_API
 - **Conventional Commits**: emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes; imperative titles under 72 characters; bodies of 2–6 bullets about *why*; no emojis, headers, or code fences.
 - **Dry run**: `--dry-run` prints the message and commits nothing.
 - **Model agnostic**: any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL` (default `gpt-4o-mini`). The provider is chosen with `--provider` / `$CLERK_PROVIDER` from an adapter table (URL, headers, payload, response extractor); `openai` is the only entry today.
+- **Any OpenAI-compatible endpoint**: `--base-url` / `$OPENAI_BASE_URL` points the same adapter at Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together or Azure. With a local server the staged diff never leaves the machine.
 - **Wrappers**: `run-commit.cmd` (Windows) and `run-commit.sh` (POSIX) check the API key, stage everything with `git add -A`, then pass arguments through. The Python script itself never stages anything.
 
 ## Usage
 
-`clerk [-m TITLE] [--dry-run] [--provider NAME] [--model MODEL] [--max-chars N] [--version]`
+`clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL] [--max-chars N] [--version]`
 
 - `-m`, `--message TITLE` — use TITLE verbatim as the commit title; the AI writes only the body.
 - `--dry-run` — print the message and exit without committing.
 - `--provider NAME` — API provider to call (default `openai`, or `$CLERK_PROVIDER`).
+- `--base-url URL` — base URL of an OpenAI-compatible endpoint (default `https://api.openai.com/v1`, or `$OPENAI_BASE_URL`). Must be http:// or https://.
 - `--model MODEL` — model to call (default: the provider's default; `gpt-4o-mini` or `$OPENAI_MODEL` for `openai`).
 - `--max-chars N` — character budget for the diff; a larger diff is trimmed per file so every changed file still reaches the model (default `60000`).
 - `--version` — print the version and exit.
@@ -40,11 +42,11 @@ anything else passed through from `git commit`.
 
 - Python 3.8+ (no third-party packages)
 - `git` on the `PATH`
-- An OpenAI API key in `OPENAI_API_KEY`
+- An OpenAI API key in `OPENAI_API_KEY` (or a local OpenAI-compatible server plus `--base-url`)
 
 ## Privacy and cost
 
-- The staged diff is sent to the OpenAI API — do not run it on repositories whose contents cannot leave the machine.
+- The staged diff is sent to the configured endpoint (the OpenAI API by default) — on a repository whose contents cannot leave the machine, point `--base-url` at a local model or do not run the tool there.
 - Nothing else is transmitted, stored, or logged: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
 - One Chat Completions call per commit; a fraction of a cent with the default model.

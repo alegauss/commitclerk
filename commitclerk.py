@@ -14,11 +14,13 @@ directly with `python commitclerk.py`):
     clerk --dry-run             # print message, do not commit
     clerk --model gpt-4o-mini
     clerk --provider openai     # select the API provider
+    clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     git clerk                   # same tool, as a native git subcommand
 
 Environment:
     OPENAI_API_KEY   required by the openai provider
     OPENAI_MODEL     optional, overrides the openai provider's default model
+    OPENAI_BASE_URL  optional, overrides the endpoint (Ollama, vLLM, Azure, ...)
     CLERK_PROVIDER   optional, selects the provider (default: openai)
 
 Why the doc-only handling: this script only sees the staged diff, so when a
@@ -251,6 +253,7 @@ PROVIDERS: dict[str, dict] = {
         "label": "OpenAI",
         "default_base": "https://api.openai.com/v1",
         "path": "/chat/completions",
+        "base_env": "OPENAI_BASE_URL",
         "key_env": "OPENAI_API_KEY",
         "key_required": True,
         "model_env": "OPENAI_MODEL",
@@ -296,8 +299,34 @@ def missing_key_env(spec: dict) -> str | None:
     return None
 
 
-def provider_url(spec: dict) -> str:
-    return spec["default_base"].rstrip("/") + spec["path"]
+def resolve_base(spec: dict, cli_base: str | None = None) -> str:
+    """Base URL to call: CLI flag > provider's env var > provider default.
+
+    Most vendors clone the OpenAI wire format, so pointing this at Ollama,
+    LM Studio, vLLM, OpenRouter, Groq, Together or Azure needs no new adapter.
+    """
+    if cli_base:
+        return cli_base
+    env = spec.get("base_env")
+    return (os.environ.get(env) if env else None) or spec["default_base"]
+
+
+def base_url_error(base: str) -> str | None:
+    """Complaint about `base`, or None when it is usable.
+
+    A base URL missing its scheme (`localhost:11434/v1`) otherwise dies deep in
+    urllib with "unknown url type", which reads like a bug in the tool.
+    """
+    scheme = base.split("://", 1)[0].lower() if "://" in base else ""
+    if scheme not in ("http", "https"):
+        return f"base URL must start with http:// or https:// (got '{base}')"
+    if not base.split("://", 1)[1].strip("/"):
+        return f"base URL has no host (got '{base}')"
+    return None
+
+
+def provider_url(spec: dict, base: str | None = None) -> str:
+    return (base or spec["default_base"]).rstrip("/") + spec["path"]
 
 
 def build_user_prompt(
@@ -325,6 +354,7 @@ def call_model(
     *,
     title: str | None = None,
     doc_only: bool = False,
+    base: str | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> str:
     payload = spec["payload"](
@@ -336,7 +366,7 @@ def call_model(
     headers = {"Content-Type": "application/json"}
     headers.update(spec["headers"](api_key))
     req = urllib.request.Request(
-        provider_url(spec),
+        provider_url(spec, base),
         data=json.dumps(payload).encode("utf-8"),
         headers=headers,
         method="POST",
@@ -378,6 +408,12 @@ def main() -> int:
         help=f"API provider (default: {DEFAULT_PROVIDER} or $CLERK_PROVIDER).",
     )
     parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Base URL of an OpenAI-compatible endpoint, e.g. http://localhost:11434/v1 "
+             "for Ollama (default: the provider's own base URL, or $OPENAI_BASE_URL).",
+    )
+    parser.add_argument(
         "--model",
         default=None,
         help="Model to call (default: the provider's default model, or its model "
@@ -408,6 +444,12 @@ def main() -> int:
     api_key = api_key_for(spec)
     model = resolve_model(spec, args.model)
 
+    base = resolve_base(spec, args.base_url)
+    problem = base_url_error(base)
+    if problem:
+        print(f"Error: {problem}.", file=sys.stderr)
+        return 2
+
     diff = get_staged_diff()
     if not diff.strip():
         print("No staged changes. Run `git add <files>` first.", file=sys.stderr)
@@ -418,10 +460,13 @@ def main() -> int:
     diff = budget_diff(diff, args.max_chars)
 
     if args.message:
-        body = call_model(spec, api_key, model, diff, files, title=args.message, doc_only=doc_only)
+        body = call_model(
+            spec, api_key, model, diff, files,
+            title=args.message, doc_only=doc_only, base=base,
+        )
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
-        message = call_model(spec, api_key, model, diff, files, doc_only=doc_only)
+        message = call_model(spec, api_key, model, diff, files, doc_only=doc_only, base=base)
 
     if args.dry_run:
         print(message)

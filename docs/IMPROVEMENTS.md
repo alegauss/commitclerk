@@ -11,27 +11,16 @@ Sections are numbered to match the roadmap's blocks (`§A.1`, `§B.2`, …).
 
 ## A — Provider portability
 
-The `PROVIDERS` table exists, but `openai` is still its only entry: the base URL
-is a per-provider constant and the request shape is Chat-Completions only. Until
-that changes, the addressable market is still capped at organisations allowed to
-send source code to OpenAI, no matter how good the prompt is.
+Any OpenAI-compatible endpoint is now reachable, so the remaining gap is narrower
+than it was: the *request shape* is still Chat-Completions-only, and the keyless
+local path still needs a placeholder key. Two things close it — an Anthropic
+adapter (§A.2) and an `ollama` preset (§A.3) — plus the failure handling in §A.4,
+which becomes more important the moment a flaky local server is in the loop.
 
-### A.1 — One flag reaches most of the market
-
-**`--base-url` (T2) is the cheapest portability win in the whole roadmap, and it
-is worth more than any single adapter.** Ollama, LM Studio, vLLM, llama.cpp's
-server, OpenRouter, Groq, Together, DeepSeek, Fireworks and Azure all speak the
-OpenAI wire format. One flag and one environment variable make every one of them
-work with no new adapter, no test matrix, and no vendor-specific bug surface —
-the table's `openai` entry already knows how to talk to all of them.
-
-Precedence must be explicit and documented, because a user with both a global
-`OPENAI_BASE_URL` and a project config will otherwise be baffled: **CLI flag >
-environment > project config > user config > provider default**.
-
-Keep resisting the `Provider` base class. Two payload builders and two extractors
-cover essentially the entire market, because most vendors clone the OpenAI shape;
-the table stays readable in one sitting, which a class hierarchy would not.
+Keep resisting the `Provider` base class as the table grows. Two payload builders
+and two extractors cover essentially the entire market, because most vendors clone
+the OpenAI shape; the table stays readable in one sitting, which a class hierarchy
+would not.
 
 ### A.2 — Anthropic is the one genuinely different shape
 
@@ -45,17 +34,17 @@ why those four slots are the right decomposition.
 
 ### A.3 — Local models are the privacy answer, and the honest one
 
-The README's "Privacy and cost" section currently ends the conversation with *do
-not run this on repositories whose contents cannot leave your machine*. That is
-admirably honest and also a dead end for a large share of potential users. With
-`--provider ollama` (no API key, `http://localhost:11434/v1`), the same section can
-offer a path instead of a warning.
+`--base-url http://localhost:11434/v1` already works, so what is left is the
+ceremony: the openai provider requires a key, so a local run needs a placeholder
+(`OPENAI_API_KEY=ollama`) that means nothing. A `--provider ollama` preset with
+`key_required: False` and the localhost base URL built in removes both the flag
+and the fake key, and gives the privacy answer a name a reader can search for.
 
 Two caveats to document rather than paper over: small local models write
 noticeably weaker bodies, and the correct mitigation is the house-style few-shot
-work in §B.1 rather than a bigger prompt. The keyless path itself is already
-handled: `key_required` lives in the provider table, so a local model is not
-blocked by a key check meant for a hosted API.
+work in §B.1 rather than a bigger prompt. The keyless mechanism itself is already
+in place: `key_required` lives in the provider table, so a preset that omits a key
+is not blocked by a check meant for a hosted API.
 
 ### A.4 — Failure handling is currently all-or-nothing
 

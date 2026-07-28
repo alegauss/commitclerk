@@ -15,13 +15,13 @@ Shipped tasks are *removed* from this file — they are not marked ✅ here.
 
 ## The thesis
 
-commitclerk today is a very good ~240-line script with one genuinely differentiated
+commitclerk today is a very good ~460-line script with one genuinely differentiated
 idea: **it refuses to describe documentation prose as work that was implemented.**
 Everything below is an answer to one of three questions:
 
-1. **Will it scale technically?** Right now the tool is hard-wired to one vendor,
-   truncates large diffs by cutting off the end, and knows nothing about the repo
-   beyond the staged diff. Blocks **A**, **B** and **C** fix the ceiling.
+1. **Will it scale technically?** The tool speaks exactly one request shape, and
+   it knows nothing about the repo beyond the staged diff. Blocks **A**, **B** and
+   **C** fix the ceiling.
 2. **Can a team actually adopt it?** A tool that ships a raw diff to a third party
    with no redaction, no config file, no offline path and no `commit-msg`
    validation cannot be mandated by anyone. Blocks **D**, **E**, **F** and **G**
@@ -55,14 +55,14 @@ Everything below is an answer to one of three questions:
 
 ## Block A — Provider portability
 
-*Being an OpenAI-only tool caps the addressable audience at teams allowed to send
-source code to OpenAI. Local models are the single biggest unlock.* → [§A](IMPROVEMENTS.md#a--provider-portability)
+*Any OpenAI-compatible endpoint already works. What is left is the one genuinely
+different request shape, a first-class local preset, and not losing a commit to a
+transient 429.* → [§A](IMPROVEMENTS.md#a--provider-portability)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T2 | 💭 | `--base-url` / `$OPENAI_BASE_URL`: any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, OpenRouter, Groq, Together, Azure) works with zero new code. The cheapest possible portability win. → §A.1 | — |
 | T3 | 💭 | Anthropic Messages adapter (`/v1/messages`, `x-api-key`, `anthropic-version`, `system` as a top-level field, `content` blocks in the response). → §A.2 | — |
-| T4 | 💭 | `--provider ollama` preset requiring no API key, documented as the "your diff never leaves this machine" path. → §A.3 | T2 |
+| T4 | 💭 | `--provider ollama` preset requiring no API key, documented as the "your diff never leaves this machine" path. → §A.3 | — |
 | T5 | 💭 | Retry with exponential backoff + jitter on 429/5xx, plus `--timeout`. One transient 429 currently loses the whole commit. → §A.4 | — |
 | T6 | 💭 | Capability fallback: if a model rejects `temperature` or the parameter name differs (reasoning models), retry once without it instead of dying with a raw API error. → §A.4 | T5 |
 
@@ -190,7 +190,7 @@ If you want the highest value per unit of effort, roughly:
 
 1. **T49** — trivial, and it fixes the discovery problem.
 2. **T16, T11** — the diff pipeline's honesty gaps, in the tool's own core competence.
-3. **T2, T5** — portability and resilience for almost no code.
+3. **T4, T5** — the local-model preset and retry: resilience for almost no code.
 4. **T25, T28** — config plus lint; together they unlock team adoption.
 5. **T19, T21** — the two blockers for corporate approval.
 6. **T7, T8** — the quality jump nobody else in this niche ships.

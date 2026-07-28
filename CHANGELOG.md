@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--base-url` / `$OPENAI_BASE_URL`: any OpenAI-compatible endpoint.** Ollama,
+  LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, DeepSeek and Azure all
+  speak the OpenAI wire format, so one flag reaches all of them with no new code
+  and no new dependency — and pointing it at `http://localhost:11434/v1` means the
+  staged diff never leaves your machine, which is the honest answer to *"we can't
+  send source code to a third party"*. A base URL without a scheme now fails with
+  a readable message instead of urllib's "unknown url type", and only `http://`
+  and `https://` are accepted. `SECURITY.md` gained a **Where your data goes**
+  section spelling out the single request, the destination you control, and the
+  cleartext caveat for non-loopback `http://`.
 - **`--provider` / `$CLERK_PROVIDER`, and a provider adapter table.** The API
   endpoint, headers, request payload and response extractor are no longer
   hard-wired module constants: they are four slots in a small table, one entry per

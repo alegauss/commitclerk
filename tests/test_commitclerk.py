@@ -186,6 +186,9 @@ class TestSystemPrompt(unittest.TestCase):
 class TestProviderTable(unittest.TestCase):
     _SLOTS = ("label", "default_base", "path", "default_model", "headers", "payload", "extract")
 
+    def test_openai_reads_the_conventional_base_url_variable(self):
+        self.assertEqual(commitclerk.PROVIDERS["openai"]["base_env"], "OPENAI_BASE_URL")
+
     def test_every_provider_fills_every_slot(self):
         for name, spec in commitclerk.PROVIDERS.items():
             for slot in self._SLOTS:
@@ -219,6 +222,57 @@ class TestProviderTable(unittest.TestCase):
             commitclerk.provider_url(commitclerk.PROVIDERS["openai"]),
             "https://api.openai.com/v1/chat/completions",
         )
+
+    def test_an_explicit_base_replaces_the_provider_default(self):
+        self.assertEqual(
+            commitclerk.provider_url(commitclerk.PROVIDERS["openai"], "https://api.groq.com/openai/v1"),
+            "https://api.groq.com/openai/v1/chat/completions",
+        )
+
+
+class TestResolveBase(unittest.TestCase):
+    def setUp(self):
+        self.spec = commitclerk.PROVIDERS["openai"]
+
+    def test_cli_flag_wins_over_environment(self):
+        with mock.patch.dict(os.environ, {"OPENAI_BASE_URL": "http://from-env/v1"}):
+            self.assertEqual(
+                commitclerk.resolve_base(self.spec, "http://from-cli/v1"), "http://from-cli/v1"
+            )
+
+    def test_environment_wins_over_provider_default(self):
+        with mock.patch.dict(os.environ, {"OPENAI_BASE_URL": "http://from-env/v1"}):
+            self.assertEqual(commitclerk.resolve_base(self.spec), "http://from-env/v1")
+
+    def test_falls_back_to_the_provider_default(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(commitclerk.resolve_base(self.spec), "https://api.openai.com/v1")
+
+    def test_provider_without_a_base_env_uses_its_default(self):
+        self.assertEqual(
+            commitclerk.resolve_base({"default_base": "http://localhost:1234/v1"}),
+            "http://localhost:1234/v1",
+        )
+
+
+class TestBaseUrlValidation(unittest.TestCase):
+    def test_http_and_https_are_accepted(self):
+        for base in ("http://localhost:11434/v1", "https://api.openai.com/v1", "HTTPS://X/v1"):
+            with self.subTest(base=base):
+                self.assertIsNone(commitclerk.base_url_error(base))
+
+    def test_a_missing_scheme_is_reported_not_crashed_on(self):
+        # urllib would otherwise fail with "unknown url type", which reads like
+        # a bug in the tool rather than a typo in the flag.
+        self.assertIn("http://", commitclerk.base_url_error("localhost:11434/v1"))
+
+    def test_a_non_http_scheme_is_rejected(self):
+        self.assertIsNotNone(commitclerk.base_url_error("file:///etc/passwd"))
+        self.assertIsNotNone(commitclerk.base_url_error("ftp://example.com/v1"))
+
+    def test_a_scheme_with_no_host_is_rejected(self):
+        self.assertIn("no host", commitclerk.base_url_error("http://"))
+        self.assertIn("no host", commitclerk.base_url_error("https:///"))
 
 
 class TestResolveModel(unittest.TestCase):

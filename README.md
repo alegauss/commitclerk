@@ -48,14 +48,14 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Doc-aware** | Detects documentation-only commits and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
-| 🔧 **Model agnostic** | Any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL`. Providers live in a small adapter table selected by `--provider`. |
+| 🔧 **Model agnostic** | Any OpenAI Chat Completions model via `--model`, and any OpenAI-compatible endpoint via `--base-url` — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
 
 - **Python 3.8+** — no third-party packages
 - **git** on your `PATH`
-- An **OpenAI API key** in `OPENAI_API_KEY`
+- An **OpenAI API key** in `OPENAI_API_KEY` — or a local OpenAI-compatible server plus `--base-url`
 
 ## Quick start
 
@@ -98,7 +98,8 @@ clerk             # or: git clerk
 ## Usage
 
 ```
-clerk [-m TITLE] [--dry-run] [--provider NAME] [--model MODEL] [--max-chars N] [--version]
+clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL]
+      [--max-chars N] [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -112,6 +113,7 @@ example below.
 | `-m`, `--message TITLE` | — | Use `TITLE` verbatim as the commit title; the AI writes only the body bullets. |
 | `--dry-run` | off | Print the generated message and exit without committing. |
 | `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which API provider to call. `openai` today; more providers are added to the same adapter table. |
+| `--base-url URL` | `https://api.openai.com/v1` (or `$OPENAI_BASE_URL`) | Point at any **OpenAI-compatible** endpoint — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model. |
 | `--version` | — | Print the version and exit. |
@@ -133,6 +135,9 @@ clerk --model gpt-4o
 
 # Very large diff: raise the budget so less of each file is trimmed
 clerk --max-chars 120000
+
+# A local model, so the diff never leaves your machine
+OPENAI_API_KEY=ollama clerk --base-url http://localhost:11434/v1 --model qwen2.5-coder
 ```
 
 ### Exit codes
@@ -207,6 +212,7 @@ variable, and **a flag always beats the environment**:
 |---|---|---|
 | `OPENAI_API_KEY` | `openai` | The API key. Required; read from the environment only, never written to disk. |
 | `OPENAI_MODEL` | `openai` | Default model, when `--model` is not given. |
+| `OPENAI_BASE_URL` | `openai` | Default endpoint, when `--base-url` is not given. |
 | `CLERK_PROVIDER` | all | Default provider, when `--provider` is not given. |
 
 Providers are a table of four slots in [`commitclerk.py`](commitclerk.py) — URL,
@@ -218,9 +224,29 @@ new abstraction layer; `openai` is the only entry today.
 OPENAI_MODEL=gpt-4o clerk -m "fix: reject expired tokens on refresh"
 ```
 
+### OpenAI-compatible endpoints
+
+Most vendors speak the OpenAI wire format, so `--base-url` covers them with no
+new code and no new dependency:
+
+```bash
+# Ollama (local) — most servers ignore the key, but one must be set
+OPENAI_API_KEY=ollama clerk --base-url http://localhost:11434/v1 --model qwen2.5-coder
+
+# LM Studio (local)
+OPENAI_API_KEY=lmstudio clerk --base-url http://localhost:1234/v1 --model your-loaded-model
+
+# A hosted gateway (OpenRouter, Groq, Together, Azure, …)
+clerk --base-url https://openrouter.ai/api/v1 --model anthropic/claude-3.5-sonnet
+```
+
+Two honest caveats: small local models write noticeably weaker bodies than a
+hosted frontier model — `-m "<title>"` helps a lot there — and a custom endpoint
+is a **different destination for your diff**, so point it somewhere you trust.
+
 ## Privacy and cost
 
-- **Your staged diff is sent to the OpenAI API.** Do not run this on repositories whose contents cannot leave your machine. Check your employer's policy first.
+- **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or whatever `--base-url` / `$OPENAI_BASE_URL` names. On a repository whose contents may not leave your machine, point `--base-url` at a local model (see [OpenAI-compatible endpoints](#openai-compatible-endpoints)) or don't run the tool there at all. Check your employer's policy first.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
 - Cost is a single Chat Completions call per commit. With the default `gpt-4o-mini` and a typical diff, that is a fraction of a cent.
@@ -266,7 +292,7 @@ project's positioning and non-goals in [`docs/STRATEGY.md`](docs/STRATEGY.md).
 Ideas that would make good first contributions:
 
 - [ ] `prepare-commit-msg` git hook installer (T36)
-- [ ] Support for additional providers — Anthropic, Azure OpenAI, Ollama / local models (T2–T4)
+- [ ] Support for additional providers — an Anthropic adapter and a keyless `ollama` preset (T3, T4)
 - [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing (T31)
 - [ ] A configuration file for project-specific commit rules (T25)
 - [ ] `clerk --lint`: validate an existing message with no API call, as a `commit-msg` hook (T28)

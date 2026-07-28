@@ -46,14 +46,14 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Consciente de documentação** | Detecta commits só de documentação e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
-| 🔧 **Independente de modelo** | Qualquer modelo da API Chat Completions via `--model` ou `$OPENAI_MODEL`. Os provedores ficam em uma pequena tabela de adaptadores, escolhida por `--provider`. |
+| 🔧 **Independente de modelo** | Qualquer modelo da API Chat Completions via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url` — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. |
 | 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
 
 ## Requisitos
 
 - **Python 3.8+** — sem pacotes de terceiros
 - **git** no `PATH`
-- Uma **chave da API da OpenAI** em `OPENAI_API_KEY`
+- Uma **chave da API da OpenAI** em `OPENAI_API_KEY` — ou um servidor local compatível com a OpenAI e o `--base-url`
 
 ## Início rápido
 
@@ -95,7 +95,8 @@ clerk             # ou: git clerk
 ## Uso
 
 ```
-clerk [-m TÍTULO] [--dry-run] [--provider NOME] [--model MODELO] [--max-chars N] [--version]
+clerk [-m TÍTULO] [--dry-run] [--provider NOME] [--base-url URL] [--model MODELO]
+      [--max-chars N] [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -109,6 +110,7 @@ todos os exemplos abaixo.
 | `-m`, `--message TÍTULO` | — | Usa `TÍTULO` literalmente como título do commit; a IA escreve apenas os bullets do corpo. |
 | `--dry-run` | desligado | Imprime a mensagem gerada e sai sem commitar. |
 | `--provider NOME` | `openai` (ou `$CLERK_PROVIDER`) | Qual provedor de API chamar. Hoje só `openai`; novos provedores entram na mesma tabela de adaptadores. |
+| `--base-url URL` | `https://api.openai.com/v1` (ou `$OPENAI_BASE_URL`) | Aponta para qualquer endpoint **compatível com a OpenAI** — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODELO` | o padrão do provedor — `gpt-4o-mini` (ou `$OPENAI_MODEL`) no `openai` | Modelo a chamar. |
 | `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo. |
 | `--version` | — | Mostra a versão e sai. |
@@ -130,6 +132,9 @@ clerk --model gpt-4o
 
 # Diff muito grande: aumente o orçamento para cortar menos de cada arquivo
 clerk --max-chars 120000
+
+# Um modelo local, para o diff nunca sair da sua máquina
+OPENAI_API_KEY=ollama clerk --base-url http://localhost:11434/v1 --model qwen2.5-coder
 ```
 
 ### Códigos de saída
@@ -192,6 +197,7 @@ Ainda não existe arquivo de configuração. Tudo é flag ou variável de ambien
 |---|---|---|
 | `OPENAI_API_KEY` | `openai` | A chave da API. Obrigatória; lida só do ambiente, nunca gravada em disco. |
 | `OPENAI_MODEL` | `openai` | Modelo padrão, quando `--model` não é passado. |
+| `OPENAI_BASE_URL` | `openai` | Endpoint padrão, quando `--base-url` não é passado. |
 | `CLERK_PROVIDER` | todos | Provedor padrão, quando `--provider` não é passado. |
 
 Os provedores são uma tabela de quatro campos no [`commitclerk.py`](commitclerk.py)
@@ -204,9 +210,30 @@ acrescentar uma entrada na tabela, não criar uma camada de abstração; hoje
 OPENAI_MODEL=gpt-4o clerk -m "fix: reject expired tokens on refresh"
 ```
 
+### Endpoints compatíveis com a OpenAI
+
+A maioria dos fornecedores fala o mesmo protocolo da OpenAI, então o `--base-url`
+cobre todos eles sem código novo e sem dependência nova:
+
+```bash
+# Ollama (local) — a maioria dos servidores ignora a chave, mas alguma precisa estar definida
+OPENAI_API_KEY=ollama clerk --base-url http://localhost:11434/v1 --model qwen2.5-coder
+
+# LM Studio (local)
+OPENAI_API_KEY=lmstudio clerk --base-url http://localhost:1234/v1 --model seu-modelo-carregado
+
+# Um gateway hospedado (OpenRouter, Groq, Together, Azure, …)
+clerk --base-url https://openrouter.ai/api/v1 --model anthropic/claude-3.5-sonnet
+```
+
+Duas ressalvas honestas: modelos locais pequenos escrevem corpos visivelmente
+piores que um modelo hospedado de ponta — o `-m "<título>"` ajuda muito nesses
+casos — e um endpoint customizado é **outro destino para o seu diff**, então
+aponte para algum lugar em que você confia.
+
 ## Privacidade e custo
 
-- **Seu diff staged é enviado para a API da OpenAI.** Não use em repositórios cujo conteúdo não pode sair da sua máquina. Confira a política da sua empresa antes.
+- **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou o que `--base-url` / `$OPENAI_BASE_URL` apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, aponte o `--base-url` para um modelo local (veja [Endpoints compatíveis com a OpenAI](#endpoints-compatíveis-com-a-openai)) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
 - Nada além disso é transmitido, armazenado ou registrado pela ferramenta: sem telemetria, sem analytics, sem configuração remota.
 - A chave da API é lida do ambiente e nunca é gravada em disco.
 - O custo é uma única chamada à API por commit. Com o `gpt-4o-mini` padrão e um diff típico, é uma fração de centavo.
@@ -220,7 +247,7 @@ e o posicionamento e os não-objetivos em [`docs/STRATEGY.md`](docs/STRATEGY.md)
 Ideias que dariam boas primeiras contribuições:
 
 - [ ] Instalador de hook `prepare-commit-msg` (T36)
-- [ ] Suporte a outros provedores — Anthropic, Azure OpenAI, Ollama / modelos locais (T2–T4)
+- [ ] Suporte a outros provedores — um adaptador da Anthropic e um preset `ollama` sem chave (T3, T4)
 - [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar (T31)
 - [ ] Arquivo de configuração com regras de commit por projeto (T25)
 - [ ] `clerk --lint`: validar uma mensagem existente sem chamar a API, como hook `commit-msg` (T28)
