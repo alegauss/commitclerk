@@ -8,7 +8,8 @@ if "%OPENAI_API_KEY%"=="" (
     exit /b 2
 )
 
-git add *
+REM -A, not a glob: a glob skips dotfiles and never records deletions.
+git add -A
 if errorlevel 1 (
     echo git add failed.
     exit /b 1

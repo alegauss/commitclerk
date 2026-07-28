@@ -134,19 +134,25 @@ clerk --max-chars 120000
 | `2` | `OPENAI_API_KEY` não está definida. |
 | outros | Repassados do `git commit`. |
 
-## Wrapper para Windows
+## Wrappers
 
-O `run-commit.cmd` é um atalho para Windows: verifica a chave da API, roda `git add *` e chama o `commitclerk.py` repassando os argumentos.
+Dois atalhos fazem as mesmas três coisas: verificam a chave da API, adicionam tudo ao stage com `git add -A` e chamam o `commitclerk.py` repassando os argumentos.
 
 ```bat
+REM Windows
 run-commit.cmd -m "feat: add CSV export to the reports page"
 ```
 
-Coloque o diretório do repositório (ou uma cópia dos dois arquivos) no `PATH` para chamá-lo de qualquer repositório.
+```bash
+# macOS / Linux
+./run-commit.sh -m "feat: add CSV export to the reports page"
+```
 
-> **Atenção:** o wrapper adiciona tudo ao stage com `git add *`. Se você prefere escolher o que entra no commit, faça o stage manualmente e chame `python commitclerk.py` direto. O script Python nunca faz stage sozinho.
+Coloque o diretório do repositório (ou uma cópia do wrapper e do `commitclerk.py`) no `PATH` para chamá-lo de qualquer repositório.
 
-No macOS e no Linux, um alias resolve:
+> **Atenção:** os wrappers adicionam tudo ao stage, inclusive arquivos novos, removidos e começados por ponto. Se você prefere escolher o que entra no commit, faça o stage manualmente e chame `python commitclerk.py` direto. O script Python nunca faz stage sozinho.
+
+Se você prefere não usar wrapper nenhum, um alias resolve:
 
 ```bash
 alias ac='git add -A && clerk'
@@ -185,7 +191,6 @@ e o posicionamento e os não-objetivos em [`docs/STRATEGY.md`](docs/STRATEGY.md)
 
 Ideias que dariam boas primeiras contribuições:
 
-- [ ] Um wrapper `run-commit.sh` para POSIX equivalente ao `run-commit.cmd` (T38)
 - [ ] Instalador de hook `prepare-commit-msg` (T36)
 - [ ] Suporte a outros provedores — Anthropic, Azure OpenAI, Ollama / modelos locais (T1–T4)
 - [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar (T31)

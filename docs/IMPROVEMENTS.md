@@ -436,15 +436,6 @@ Git treats any `git-<name>` executable on `PATH` as a subcommand. Adding
 `git-clerk = "commitclerk:main"` to `[project.scripts]` is one line, and `git add
 -A && git clerk` reads like git rather than like a bolt-on.
 
-### G.3 — Fix the wrapper while porting it
-
-`run-commit.cmd` runs `git add *`. That is shell globbing, and it has two real
-bugs: it **skips dotfiles** (`.github/`, `.gitignore`, `.env.example`) and it
-**does not stage deletions**, so a commit that removes a file silently does not.
-The POSIX port should use `git add -A`, and `run-commit.cmd` should be fixed to
-match in the same task — porting a bug to a second platform is worse than not
-porting.
-
 ### G.4 — `pre-commit`
 
 `.pre-commit-hooks.yaml` is a dozen lines and plugs the tool into the framework a

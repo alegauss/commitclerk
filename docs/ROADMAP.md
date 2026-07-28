@@ -144,7 +144,6 @@ is `git commit --amend`.* → [§F](IMPROVEMENTS.md#f--interaction--ux)
 | --- | --- | --- | --- |
 | T36 | 💭 | `prepare-commit-msg` hook + `clerk --install-hook` / `--uninstall-hook`. Must no-op for merge, squash, rebase and `-m`-supplied messages, and must never block a commit when the API is down. → §G.1 | T21 |
 | T37 | 💭 | Ship a `git-clerk` console script so `git clerk` works as a native subcommand — a one-line `pyproject.toml` change with disproportionate ergonomic value. → §G.2 | — |
-| T38 | 💭 | POSIX `run-commit.sh` matching the Windows wrapper — **and fix the staging bug**: `git add *` is shell globbing, so it misses dotfiles and does not record deletions. Both wrappers should use `git add -A`. → §G.3 | — |
 | T39 | 💭 | `.pre-commit-hooks.yaml` so the tool is installable through the `pre-commit` framework the rest of the Python world already runs. → §G.4 | T28, T36 |
 
 ## Block H — Beyond a single commit
@@ -192,7 +191,7 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 
 If you want the highest value per unit of effort, roughly:
 
-1. **T38, T49, T37** — trivial, and they fix a real staging bug plus the discovery problem.
+1. **T49, T37** — trivial, and they fix the discovery problem.
 2. **T13, T16, T11** — the diff pipeline's honesty gaps, in the tool's own core competence.
 3. **T2, T5** — portability and resilience for almost no code.
 4. **T25, T28** — config plus lint; together they unlock team adoption.

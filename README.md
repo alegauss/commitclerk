@@ -137,23 +137,25 @@ clerk --max-chars 120000
 | `2` | `OPENAI_API_KEY` is not set. |
 | other | Passed through from `git commit`. |
 
-## Windows wrapper
+## Wrappers
 
-`run-commit.cmd` is a convenience wrapper for Windows: it checks the API key, runs `git add *`, then calls `commitclerk.py` with whatever arguments you pass through.
+Two convenience wrappers do the same three things: check the API key, stage everything with `git add -A`, then call `commitclerk.py` with whatever arguments you pass through.
 
 ```bat
+REM Windows
 run-commit.cmd -m "feat: add CSV export to the reports page"
 ```
 
-Put the repo directory (or a copy of both files) on your `PATH` to call it from any repo:
-
-```bat
-run-commit.cmd
+```bash
+# macOS / Linux
+./run-commit.sh -m "feat: add CSV export to the reports page"
 ```
 
-> **Heads up:** the wrapper stages everything with `git add *`. If you prefer to curate what goes into the commit, stage it yourself and call `python commitclerk.py` directly. The Python script never stages anything on its own.
+Put the repo directory (or a copy of the wrapper plus `commitclerk.py`) on your `PATH` to call it from any repo.
 
-On macOS and Linux, a shell alias does the same job:
+> **Heads up:** the wrappers stage everything, including new, deleted and dot-prefixed files. If you prefer to curate what goes into the commit, stage it yourself and call `python commitclerk.py` directly. The Python script never stages anything on its own.
+
+If you'd rather not use a wrapper at all, a shell alias does the same job:
 
 ```bash
 alias ac='git add -A && clerk'
@@ -201,7 +203,7 @@ The whole thing is ~230 lines in [`commitclerk.py`](commitclerk.py). It's meant 
 <details>
 <summary><strong>"No staged changes. Run <code>git add &lt;files&gt;</code> first."</strong></summary>
 
-Nothing is staged. `commitclerk.py` deliberately never stages for you — run `git add` (or use `run-commit.cmd`, which stages everything).
+Nothing is staged. `commitclerk.py` deliberately never stages for you — run `git add` (or use `run-commit.cmd` / `run-commit.sh`, which stage everything).
 </details>
 
 <details>
@@ -236,7 +238,6 @@ project's positioning and non-goals in [`docs/STRATEGY.md`](docs/STRATEGY.md).
 
 Ideas that would make good first contributions:
 
-- [ ] A POSIX `run-commit.sh` wrapper to match `run-commit.cmd` (T38)
 - [ ] `prepare-commit-msg` git hook installer (T36)
 - [ ] Support for additional providers — Anthropic, Azure OpenAI, Ollama / local models (T1–T4)
 - [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing (T31)

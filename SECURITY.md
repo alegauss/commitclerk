@@ -39,9 +39,9 @@ credit will be given in the advisory unless you prefer to stay anonymous.
   intentional behavior of the tool — see [Privacy and cost](README.md#privacy-and-cost).
   Do not use `commitclerk` on repositories whose contents may not leave your
   machine.
-- **`run-commit.cmd` staging every change with `git add *`.** This is documented
-  behavior of the wrapper. Stage manually and call `commitclerk.py` directly if
-  you need control over what is committed.
+- **`run-commit.cmd` / `run-commit.sh` staging every change with `git add -A`.**
+  This is documented behavior of the wrappers. Stage manually and call
+  `commitclerk.py` directly if you need control over what is committed.
 - Vulnerabilities in OpenAI's API, in `git`, or in CPython itself — report those
   to their respective maintainers.
 - The quality or accuracy of generated commit messages. That is a bug report,

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `run-commit.sh`, a POSIX wrapper matching `run-commit.cmd`: it checks
+  `OPENAI_API_KEY`, stages everything, and forwards its arguments to
+  `commitclerk.py`. macOS and Linux users no longer need to hand-roll an alias.
+
+### Fixed
+
+- **The wrappers now stage with `git add -A` instead of `git add *`.** The glob
+  skipped dot-prefixed paths (`.github/`, `.gitignore`) and never recorded
+  deletions, so removing a file could silently be left out of the commit — and
+  out of the diff the message was written from.
+
 ## [0.2.1] - 2026-07-28
 
 First release published to PyPI. Version `0.2.0` was prepared but never

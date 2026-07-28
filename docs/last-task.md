@@ -19,4 +19,4 @@ land.
 Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
-*(nothing shipped yet — T1–T55 were created on 2026-07-27 and are all open)*
+- **T38 SHIPPED** (Block G §G.3 — POSIX wrapper + `git add -A` staging fix) — 2026-07-27.
