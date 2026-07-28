@@ -51,7 +51,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit — e, se o modelo rejeitar um parâmetro, a requisição é corrigida e reenviada. |
 | 🗂️ **Classifica o que mudou** | Cada arquivo é tipado como `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, então um lockfile ou um bump de `vendor/` nunca vira o assunto da sua mensagem de commit. |
 | 🧭 **Vê o que o diff esconde** | Renomeações, mudanças de permissão, remoções e o *tamanho* de arquivos binários vêm do `git --stat --summary`, então um `git mv` é descrito como um move, não como uma reescrita. |
-| 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
+| 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo — e lockfiles e bumps de `vendor/` são reduzidos a uma linha, para não sufocarem a sua mudança de verdade. |
 
 ## Requisitos
 
@@ -117,7 +117,7 @@ todos os exemplos abaixo.
 | `--base-url URL` | `https://api.openai.com/v1` (ou `$OPENAI_BASE_URL`) | Aponta para qualquer endpoint **compatível com a OpenAI** — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODELO` | o padrão do provedor — `gpt-4o-mini` (ou `$OPENAI_MODEL`) no `openai` | Modelo a chamar. |
 | `--timeout S` | `60` | Segundos de espera por requisição à API. Aumente para um modelo local lento. |
-| `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo. |
+| `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo; arquivos gerados e vendorizados são reduzidos antes a uma linha. |
 | `--version` | — | Mostra a versão e sai. |
 
 ### Exemplos
@@ -200,6 +200,13 @@ do diff. O `commitclerk` classifica cada arquivo no stage — `code`, `test`, `d
 `generated`, `config`, `vendor`, `binary` —, anota a lista de arquivos com essas
 classes e instrui o modelo a tirar o tipo do commit dos arquivos que são o *ponto*
 da mudança, nunca fazendo de arquivos gerados, vendorizados ou binários o assunto.
+
+A classificação também decide o que vale a pena enviar. O corpo do diff de um
+arquivo gerado ou vendorizado é substituído por uma única linha que o nomeia e conta
+suas alterações, e isso acontece *antes* do orçamento por arquivo, então o espaço
+sobra para o código. Em um repositório real, um bump de lockfile com 300 pacotes ao
+lado de uma correção de duas linhas caiu de 39 505 caracteres de diff para 342 — com
+a correção de duas linhas intacta.
 
 Há um terceiro ponto cego, estrutural: um diff unificado não diz que um arquivo foi
 *renomeado* (a menos que o repositório tenha detecção de rename ligada), que a

@@ -476,7 +476,7 @@
           <tr><td><code>--base-url URL</code></td><td><code>https://api.openai.com/v1</code></td><td>Any OpenAI-compatible endpoint — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure — or set <code>$OPENAI_BASE_URL</code>.</td></tr>
           <tr><td><code>--model MODEL</code></td><td><code>gpt-4o-mini</code></td><td>Model to call — the provider's default, or set <code>$OPENAI_MODEL</code>.</td></tr>
           <tr><td><code>--timeout S</code></td><td><code>60</code></td><td>Seconds to wait for each API request. Raise it for a slow local model; transient failures are retried twice with backoff.</td></tr>
-          <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Character budget for the diff. A larger diff is trimmed <b>per file</b>, so every changed file still reaches the model.</td></tr>
+          <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Character budget for the diff. A larger diff is trimmed <b>per file</b>, so every changed file still reaches the model; lockfiles and vendored files collapse to one line first.</td></tr>
           <tr><td><code>--version</code></td><td>—</td><td>Print the version and exit.</td></tr>
         </tbody>
       </table>

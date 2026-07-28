@@ -53,7 +53,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
 | 🗂️ **Classifies what changed** | Each file is typed as `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, so a lockfile or a `vendor/` bump never becomes the subject of your commit message. |
 | 🧭 **Sees what the diff hides** | Renames, mode changes, deletions and binary file *sizes* come from `git --stat --summary`, so a `git mv` is described as a move rather than a rewrite. |
-| 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
+| 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model — and lockfiles and `vendor/` bumps are collapsed to one line so they stop crowding out your actual change. |
 
 ## Requirements
 
@@ -120,7 +120,7 @@ example below.
 | `--base-url URL` | `https://api.openai.com/v1` (or `$OPENAI_BASE_URL`) | Point at any **OpenAI-compatible** endpoint — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
 | `--timeout S` | `60` | Seconds to wait for each API request. Raise it for a slow local model. |
-| `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model. |
+| `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model; generated and vendored files are collapsed to a one-line placeholder first. |
 | `--version` | — | Print the version and exit. |
 
 ### Examples
@@ -203,6 +203,12 @@ A second blind spot is *proportion*. A three-line bug fix that also regenerates
 `config`, `vendor`, `binary` — annotates the file list with those classes, and
 instructs the model to take the commit type from the files that are the *point* of
 the change and never to make generated, vendored or binary files the subject.
+
+Classification also decides what is worth sending. A generated or vendored file's
+diff body is replaced by a single line naming it and counting its changes, which
+happens *before* the per-file budget so the space goes to the code instead. On a
+real repository, a 300-package lockfile bump next to a two-line bug fix shrank from
+39 505 characters of diff to 342 — with the two-line fix intact.
 
 A third blind spot is structural: a unified diff does not say that a file was
 *renamed* (unless the repo has rename detection on), that its permissions changed,

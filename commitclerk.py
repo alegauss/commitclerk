@@ -60,6 +60,12 @@ MAX_DIFF_CHARS = 60_000
 # The change summary is one line per file: dense enough to always send, but a
 # thousand-file commit still needs a ceiling.
 MAX_SUMMARY_CHARS = 2_000
+# Classes whose diff body is never worth budget: the model is told not to narrate
+# them, so sending thousands of lines only crowds out the files that matter.
+DEMOTED_CLASSES = ("generated", "vendor")
+# ...but only once the body is big enough to be worth replacing. A two-line lockfile
+# bump costs nothing, and a placeholder would be longer than the content.
+DEMOTE_MIN_CHARS = 500
 REQUEST_TIMEOUT = 60
 
 # Transient failures: rate limits, gateway hiccups, and Anthropic's 529 overload.
@@ -309,6 +315,57 @@ def _split_header(chunk: str) -> tuple[list[str], list[str]]:
         if line.startswith("@@"):
             return lines[:i], lines[i:]
     return lines, []
+
+
+def chunk_path(chunk: str) -> str | None:
+    """The file a diff chunk is about, taken from its `diff --git a/x b/x` header.
+
+    The b-side is used, so a rename reports its new name.
+    """
+    first = chunk.split("\n", 1)[0]
+    if not first.startswith("diff --git "):
+        return None
+    parts = first.split(" b/", 1)
+    return parts[1].strip() or None if len(parts) == 2 else None
+
+
+def count_changes(chunk: str) -> tuple[int, int]:
+    """Added and removed line counts for one diff chunk."""
+    added = removed = 0
+    for line in chunk.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    return added, removed
+
+
+def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLASSES) -> str:
+    """Replace the body of files that can never be the subject with one line.
+
+    A `package-lock.json` bump is thousands of lines the model has been told not to
+    narrate, competing for the same budget as the three-line fix that is the actual
+    commit. The header stays — silently dropping a file would repeat the mistake
+    head-truncation used to make — and the counts stay, because "regenerated the
+    lockfile (+8412 -3110)" is the whole of what a reader needs.
+    """
+    if not classes:
+        return diff
+    out = []
+    for chunk in split_diff(diff):
+        path = chunk_path(chunk)
+        klass = classes.get(path) if path else None
+        header, body = _split_header(chunk)
+        body_text = "".join(body)
+        if klass in classes_to_demote and len(body_text) > DEMOTE_MIN_CHARS:
+            added, removed = count_changes(body_text)
+            out.append(
+                "".join(header)
+                + f"[... {klass} file, +{added} -{removed}, contents not shown ...]\n"
+            )
+        else:
+            out.append(chunk)
+    return "".join(out)
 
 
 def _allocate_round_robin(bodies: list[list[str]], remaining: int) -> list[int]:
@@ -805,7 +862,8 @@ def main() -> int:
         type=int,
         default=MAX_DIFF_CHARS,
         help="Budget for the diff, in characters. Oversized diffs are trimmed per file "
-             "so every changed file stays visible to the model.",
+             "so every changed file stays visible to the model, and the contents of "
+             "generated or vendored files are replaced by a one-line placeholder.",
     )
     args = parser.parse_args()
 
@@ -840,7 +898,9 @@ def main() -> int:
     classes = classify_files(files, diff)
     doc_only = is_doc_only(files)
     summary = get_staged_summary()
-    diff = budget_diff(diff, args.max_chars)
+    # Demote before budgeting, so the space a lockfile was using is handed to the
+    # files the commit is actually about.
+    diff = budget_diff(demote_diff(diff, classes), args.max_chars)
 
     if args.message:
         body = call_model(

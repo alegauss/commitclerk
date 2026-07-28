@@ -76,22 +76,6 @@ excellent early tasks.
 
 ## C — Diff intelligence
 
-### C.2 — Generated files are eating the budget
-
-The taxonomy that this section used to argue for now exists: every staged file is
-classified, the class rides along in the prompt, and the rules keep generated and
-vendored files from becoming the subject of the message. What has *not* changed is
-the budget: a `package-lock.json` change is still 12 000 lines of diff body
-competing for `--max-chars` with the three-line fix that is the real commit.
-
-**T15** spends the classification the tool already computes: replace a generated
-file's diff body with one line — `- package-lock.json (generated, +8412 -3110)`,
-the counts coming free from the change summary — and hand the reclaimed budget to
-the `code` files. Cheaper *and* more accurate, since the model can no longer be
-distracted by content it was told not to narrate. Keep the file listed: silently
-dropping a file from the prompt would be the head-truncation mistake again, in a
-new place.
-
 ### C.3 — The doc guard has an all-or-nothing bug
 
 `is_doc_only()` requires **every** file to be documentation. So the very scenario

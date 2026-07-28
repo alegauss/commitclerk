@@ -68,12 +68,11 @@ under-exploited: the repository is full of cheap, local, zero-cost context.* →
 
 ## Block C — Diff intelligence
 
-*Every file now reaches the model and every file is classified. What is left is
-proportion: a lockfile still eats the budget, and the doc guard still has a cliff.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
+*Every file reaches the model, classified, with generated noise collapsed. What is
+left is the doc guard's cliff edge and the commit no budget can fit.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T15 | 💭 | Demote generated files (lockfiles, snapshots, `dist/`, `*.min.*`, migrations, `.po`) to a one-line "N generated files changed" instead of thousands of diff lines competing for the budget. → §C.2 | — |
 | T16 | 💭 | **Mixed doc+code commits**: today one code file disables the doc guard entirely, so a 900-line CHANGELOG edit plus a typo fix can still produce `feat:`. Make the guard per-file rather than all-or-nothing. → §C.3 | — |
 | T17 | 💭 | Map-reduce pass for very large diffs (opt-in): summarize each oversized file separately, then write the message from the summaries. Handles the commit that no budget can fit. → §C.4 | — |
 | T18 | 💭 | Warn when the same files have *unstaged* changes too — the message may describe a version of the code that is not the one being committed. → §C.5 | — |
@@ -178,7 +177,7 @@ If you want the highest value per unit of effort, roughly:
 
 1. **T49** — trivial, and it fixes the discovery problem.
 2. **T16** — the last honesty gap in the diff pipeline, in the tool's own core competence.
-3. **T15, T16** — the taxonomy's two payoffs: stop letting lockfiles eat the budget, and close the doc-guard gap.
+3. **T16** — close the doc-guard gap, the last hole in the tool's headline claim.
 4. **T25, T28** — config plus lint; together they unlock team adoption.
 5. **T19, T21** — the two blockers for corporate approval.
 6. **T7, T8** — the quality jump nobody else in this niche ships.

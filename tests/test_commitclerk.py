@@ -281,6 +281,79 @@ class TestBudgetDiff(unittest.TestCase):
         self.assertLessEqual(len(result), 500 + len(_HEAD_CUT_NOTE))
 
 
+class TestChunkPath(unittest.TestCase):
+    def test_reads_the_b_side(self):
+        self.assertEqual(commitclerk.chunk_path(_file_chunk("src/app.py", 1)), "src/app.py")
+
+    def test_a_rename_reports_its_new_name(self):
+        chunk = "diff --git a/old.py b/new.py\nsimilarity index 98%\nrename from old.py\n"
+        self.assertEqual(commitclerk.chunk_path(chunk), "new.py")
+
+    def test_a_chunk_without_a_header_has_no_path(self):
+        self.assertIsNone(commitclerk.chunk_path("@@ -1 +1 @@\n+x\n"))
+
+
+class TestCountChanges(unittest.TestCase):
+    def test_counts_added_and_removed_lines(self):
+        chunk = "@@ -1,2 +1,3 @@\n-old\n+new\n+extra\n context\n"
+        self.assertEqual(commitclerk.count_changes(chunk), (2, 1))
+
+    def test_file_headers_are_not_counted_as_changes(self):
+        self.assertEqual(commitclerk.count_changes("--- a/x\n+++ b/x\n"), (0, 0))
+
+
+class TestDemoteDiff(unittest.TestCase):
+    def test_a_large_generated_body_is_replaced_by_one_line(self):
+        classes = {"package-lock.json": "generated"}
+        diff = _file_chunk("package-lock.json", 400)
+        result = commitclerk.demote_diff(diff, classes)
+        self.assertIn("diff --git a/package-lock.json", result)  # header survives
+        self.assertIn("generated file, +400 -0, contents not shown", result)
+        self.assertNotIn("line 5 in package-lock.json", result)
+        self.assertLess(len(result), len(diff) / 10)
+
+    def test_code_is_never_demoted(self):
+        diff = _file_chunk("app.py", 400)
+        classes = {"app.py": "code"}
+        self.assertEqual(commitclerk.demote_diff(diff, classes), diff)
+
+    def test_vendored_code_is_demoted_too(self):
+        diff = _file_chunk("vendor/pkg/x.go", 400)
+        classes = {"vendor/pkg/x.go": "vendor"}
+        self.assertIn("vendor file,", commitclerk.demote_diff(diff, classes))
+
+    def test_a_small_generated_change_is_left_alone(self):
+        # A two-line lockfile bump is cheaper to send than to explain.
+        diff = _file_chunk("go.sum", 2)
+        classes = {"go.sum": "generated"}
+        self.assertEqual(commitclerk.demote_diff(diff, classes), diff)
+
+    def test_a_commit_of_nothing_but_generated_files_still_names_them(self):
+        diff = _file_chunk("package-lock.json", 400) + _file_chunk("yarn.lock", 400)
+        classes = {"package-lock.json": "generated", "yarn.lock": "generated"}
+        result = commitclerk.demote_diff(diff, classes)
+        self.assertIn("package-lock.json", result)
+        self.assertIn("yarn.lock", result)
+
+    def test_without_classes_nothing_changes(self):
+        diff = _file_chunk("package-lock.json", 400)
+        self.assertEqual(commitclerk.demote_diff(diff, {}), diff)
+
+    def test_the_reclaimed_budget_goes_to_the_files_that_matter(self):
+        # The payoff: at a budget where the lockfile used to crowd out the fix,
+        # the code file now arrives whole.
+        diff = _file_chunk("package-lock.json", 2_000) + _file_chunk("app.py", 120)
+        classes = {"package-lock.json": "generated", "app.py": "code"}
+        budget = 4_000
+
+        without = commitclerk.budget_diff(diff, budget)
+        with_demotion = commitclerk.budget_diff(commitclerk.demote_diff(diff, classes), budget)
+
+        self.assertNotIn("line 119 in app.py", without)
+        self.assertIn("line 119 in app.py", with_demotion)
+        self.assertLessEqual(len(with_demotion), budget)
+
+
 class TestProgName(unittest.TestCase):
     def test_git_subcommand_is_shown_as_git_clerk(self):
         self.assertEqual(commitclerk.prog_name("/usr/local/bin/git-clerk"), "git clerk")

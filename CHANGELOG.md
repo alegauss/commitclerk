@@ -106,6 +106,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Generated and vendored files no longer spend the diff budget.** Their contents
+  are replaced by one line — `[... generated file, +300 -300, contents not shown ...]`
+  — under the `diff --git` header, so the file is still named and counted but its
+  body stops competing with the change the commit is actually about. Measured on a
+  real repo: a 300-package `package-lock.json` bump alongside a two-line bug fix went
+  from 39 505 characters of diff to 342, with the fix intact instead of sharing the
+  budget with a lockfile the model had already been told not to narrate. Demotion
+  runs *before* the per-file budget, so the reclaimed space is redistributed to the
+  `code` files. Bodies under 500 characters are left alone — a two-line lockfile bump
+  is cheaper to send than to explain.
 - **An empty model response now fails instead of committing an empty message.**
   Whichever provider is in use, a reply with no message text ends the run with an
   error naming the model, rather than handing `git commit` a blank body.
