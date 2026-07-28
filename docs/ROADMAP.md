@@ -19,8 +19,8 @@ commitclerk today is a very good ~460-line script with one genuinely differentia
 idea: **it refuses to describe documentation prose as work that was implemented.**
 Everything below is an answer to one of three questions:
 
-1. **Will it scale technically?** The tool speaks exactly one request shape, and
-   it knows nothing about the repo beyond the staged diff. Blocks **A**, **B** and
+1. **Will it scale technically?** The tool knows nothing about the repo beyond the
+   staged diff, and one transient 429 still loses a commit. Blocks **A**, **B** and
    **C** fix the ceiling.
 2. **Can a team actually adopt it?** A tool that ships a raw diff to a third party
    with no redaction, no config file, no offline path and no `commit-msg`
@@ -55,13 +55,11 @@ Everything below is an answer to one of three questions:
 
 ## Block A — Provider portability
 
-*Any OpenAI-compatible endpoint already works. What is left is the one genuinely
-different request shape, a first-class local preset, and not losing a commit to a
-transient 429.* → [§A](IMPROVEMENTS.md#a--provider-portability)
+*OpenAI, Anthropic and any OpenAI-compatible endpoint already work. What is left
+is a first-class local preset and not losing a commit to a transient 429.* → [§A](IMPROVEMENTS.md#a--provider-portability)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T3 | 💭 | Anthropic Messages adapter (`/v1/messages`, `x-api-key`, `anthropic-version`, `system` as a top-level field, `content` blocks in the response). → §A.2 | — |
 | T4 | 💭 | `--provider ollama` preset requiring no API key, documented as the "your diff never leaves this machine" path. → §A.3 | — |
 | T5 | 💭 | Retry with exponential backoff + jitter on 429/5xx, plus `--timeout`. One transient 429 currently loses the whole commit. → §A.4 | — |
 | T6 | 💭 | Capability fallback: if a model rejects `temperature` or the parameter name differs (reasoning models), retry once without it instead of dying with a raw API error. → §A.4 | T5 |

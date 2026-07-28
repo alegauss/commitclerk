@@ -13,15 +13,18 @@ directly with `python commitclerk.py`):
     clerk -m "docs: fix X"      # use this exact title; AI writes only the body
     clerk --dry-run             # print message, do not commit
     clerk --model gpt-4o-mini
-    clerk --provider openai     # select the API provider
+    clerk --provider anthropic  # select the API provider
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     git clerk                   # same tool, as a native git subcommand
 
 Environment:
-    OPENAI_API_KEY   required by the openai provider
-    OPENAI_MODEL     optional, overrides the openai provider's default model
-    OPENAI_BASE_URL  optional, overrides the endpoint (Ollama, vLLM, Azure, ...)
-    CLERK_PROVIDER   optional, selects the provider (default: openai)
+    OPENAI_API_KEY      required by the openai provider
+    OPENAI_MODEL        optional, overrides the openai provider's default model
+    OPENAI_BASE_URL     optional, overrides the endpoint (Ollama, vLLM, Azure, ...)
+    ANTHROPIC_API_KEY   required by the anthropic provider
+    ANTHROPIC_MODEL     optional, overrides the anthropic provider's default model
+    ANTHROPIC_BASE_URL  optional, overrides the anthropic endpoint
+    CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Why the doc-only handling: this script only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
@@ -43,9 +46,14 @@ import urllib.request
 __version__ = "0.2.1"
 
 DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
 DEFAULT_PROVIDER = "openai"
 MAX_DIFF_CHARS = 60_000
 REQUEST_TIMEOUT = 60
+
+# Anthropic requires max_tokens and pins the wire format with a version header.
+ANTHROPIC_VERSION = "2023-06-01"
+ANTHROPIC_MAX_TOKENS = 8192
 
 # A commit touching ONLY these counts as documentation-only: it gets a docs:
 # prefix and a framing that describes the doc change itself.
@@ -245,6 +253,29 @@ def _openai_extract(data: dict) -> str:
     return data["choices"][0]["message"]["content"]
 
 
+def _anthropic_payload(model: str, system: str, user: str) -> dict:
+    # Four things differ from the Chat Completions shape: the system prompt is a
+    # top-level field rather than a message, max_tokens is required, the response
+    # is a list of content blocks, and the auth header is x-api-key. No
+    # temperature: current reasoning models reject it outright (HTTP 400), and
+    # the rules in the prompt already constrain the output far more than a
+    # sampling knob would.
+    return {
+        "model": model,
+        "max_tokens": ANTHROPIC_MAX_TOKENS,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+    }
+
+
+def _anthropic_extract(data: dict) -> str:
+    """First text block — not `content[0]`, which may be a thinking block."""
+    for block in data.get("content") or []:
+        if block.get("type") == "text":
+            return block.get("text", "")
+    return ""
+
+
 # A provider is four small slots — url, headers, payload, extract — in a table,
 # not a class hierarchy: this file is meant to be read in one sitting, and those
 # four slots are exactly what differs between vendors.
@@ -261,6 +292,22 @@ PROVIDERS: dict[str, dict] = {
         "headers": lambda key: {"Authorization": f"Bearer {key}"},
         "payload": _openai_payload,
         "extract": _openai_extract,
+    },
+    "anthropic": {
+        "label": "Anthropic",
+        "default_base": "https://api.anthropic.com/v1",
+        "path": "/messages",
+        "base_env": "ANTHROPIC_BASE_URL",
+        "key_env": "ANTHROPIC_API_KEY",
+        "key_required": True,
+        "model_env": "ANTHROPIC_MODEL",
+        "default_model": DEFAULT_ANTHROPIC_MODEL,
+        "headers": lambda key: {
+            "x-api-key": key,
+            "anthropic-version": ANTHROPIC_VERSION,
+        },
+        "payload": _anthropic_payload,
+        "extract": _anthropic_extract,
     },
 }
 
@@ -380,7 +427,17 @@ def call_model(
         raise SystemExit(f"{label} API error {exc.code}: {body}")
     except urllib.error.URLError as exc:
         raise SystemExit(f"{label} API request failed: {exc}")
-    return spec["extract"](data).strip()
+
+    text = spec["extract"](data).strip()
+    if not text:
+        # Better to fail than to hand `git commit` an empty message. The usual
+        # cause is a reasoning model that spent the whole output budget before
+        # writing any prose.
+        raise SystemExit(
+            f"{label} returned no message text (model: {model}). "
+            "Try a smaller diff, or a model that does not reason before answering."
+        )
+    return text
 
 
 def main() -> int:
@@ -411,7 +468,8 @@ def main() -> int:
         "--base-url",
         default=None,
         help="Base URL of an OpenAI-compatible endpoint, e.g. http://localhost:11434/v1 "
-             "for Ollama (default: the provider's own base URL, or $OPENAI_BASE_URL).",
+             "for Ollama (default: the provider's own base URL, or its base-url "
+             "environment variable).",
     )
     parser.add_argument(
         "--model",

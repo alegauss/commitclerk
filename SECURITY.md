@@ -28,8 +28,8 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 
 - Command injection or arbitrary code execution through crafted repository
   contents, filenames, branch names, or CLI arguments
-- Leakage of the `OPENAI_API_KEY` to disk, logs, process arguments, or any
-  destination other than the configured API endpoint
+- Leakage of an API key (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) to disk, logs,
+  process arguments, or any destination other than the configured API endpoint
 - Sending repository content anywhere other than the configured API endpoint
 - Anything that causes an unintended, destructive git operation
 
@@ -45,7 +45,8 @@ is under your control:
 
 | What you set | Effect |
 |---|---|
-| nothing | The default OpenAI endpoint. |
+| nothing | The default OpenAI endpoint, `https://api.openai.com/v1/chat/completions`. |
+| `--provider anthropic` | Anthropic's Messages API, `https://api.anthropic.com/v1/messages`, authenticated with `ANTHROPIC_API_KEY`. |
 | `--base-url` / `$OPENAI_BASE_URL` | The diff goes to **that** host instead — including `http://localhost:...` for a local model, in which case nothing leaves the machine. |
 
 Two consequences worth being explicit about: a custom base URL is a deliberate
@@ -65,16 +66,17 @@ before the request is built.
 - **`run-commit.cmd` / `run-commit.sh` staging every change with `git add -A`.**
   This is documented behavior of the wrappers. Stage manually and call
   `commitclerk.py` directly if you need control over what is committed.
-- Vulnerabilities in OpenAI's API, in `git`, or in CPython itself — report those
-  to their respective maintainers.
+- Vulnerabilities in a provider's API (OpenAI, Anthropic), in `git`, or in CPython
+  itself — report those to their respective maintainers.
 - The quality or accuracy of generated commit messages. That is a bug report,
   not a security issue.
 
 ## Handling your API key
 
-- `commitclerk` reads the provider's key (`OPENAI_API_KEY`) from the environment
-  only. It is never written to a file, never printed, and never passed as a
-  command-line argument.
+- `commitclerk` reads the selected provider's key (`OPENAI_API_KEY` or
+  `ANTHROPIC_API_KEY`) from the environment only. It is never written to a file,
+  never printed, and never passed as a command-line argument. Only the selected
+  provider's key is read — choosing one provider does not touch the other's key.
 - The key is sent to whatever `--base-url` names. Do not pair a real OpenAI key
   with a third-party base URL you do not trust — use a key issued by that host.
 - Never paste a key into an issue, pull request, or discussion. If you do,

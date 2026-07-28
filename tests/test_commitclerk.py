@@ -336,6 +336,63 @@ class TestOpenAIAdapter(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Bearer sk-test")
 
 
+class TestAnthropicAdapter(unittest.TestCase):
+    def setUp(self):
+        self.spec = commitclerk.PROVIDERS["anthropic"]
+
+    def test_url_is_the_messages_endpoint(self):
+        self.assertEqual(
+            commitclerk.provider_url(self.spec), "https://api.anthropic.com/v1/messages"
+        )
+
+    def test_headers_use_x_api_key_and_a_pinned_version(self):
+        headers = self.spec["headers"]("sk-ant-test")
+        self.assertEqual(headers["x-api-key"], "sk-ant-test")
+        self.assertEqual(headers["anthropic-version"], commitclerk.ANTHROPIC_VERSION)
+        self.assertNotIn("Authorization", headers)
+
+    def test_system_prompt_is_a_top_level_field(self):
+        payload = commitclerk._anthropic_payload("claude-haiku-4-5", "SYSTEM", "USER")
+        self.assertEqual(payload["system"], "SYSTEM")
+        self.assertEqual([m["role"] for m in payload["messages"]], ["user"])
+        self.assertEqual(payload["messages"][0]["content"], "USER")
+
+    def test_max_tokens_is_always_sent(self):
+        # Unlike Chat Completions, the Messages API rejects a request without it.
+        payload = commitclerk._anthropic_payload("claude-haiku-4-5", "s", "u")
+        self.assertEqual(payload["max_tokens"], commitclerk.ANTHROPIC_MAX_TOKENS)
+
+    def test_no_temperature_is_sent(self):
+        # Current reasoning models return 400 when temperature is present.
+        self.assertNotIn("temperature", commitclerk._anthropic_payload("m", "s", "u"))
+
+    def test_extract_reads_a_text_block(self):
+        data = {"content": [{"type": "text", "text": "fix: do a thing"}]}
+        self.assertEqual(commitclerk._anthropic_extract(data), "fix: do a thing")
+
+    def test_extract_skips_leading_thinking_blocks(self):
+        # content[0] is not necessarily the answer on a reasoning model.
+        data = {
+            "content": [
+                {"type": "thinking", "thinking": "hmm"},
+                {"type": "text", "text": "fix: do a thing"},
+            ]
+        }
+        self.assertEqual(commitclerk._anthropic_extract(data), "fix: do a thing")
+
+    def test_extract_of_a_textless_response_is_empty_not_an_exception(self):
+        self.assertEqual(commitclerk._anthropic_extract({"content": []}), "")
+        self.assertEqual(commitclerk._anthropic_extract({}), "")
+
+    def test_reads_its_own_environment_variables(self):
+        with mock.patch.dict(
+            os.environ, {"ANTHROPIC_MODEL": "claude-opus-5", "OPENAI_MODEL": "gpt-4o"}
+        ):
+            self.assertEqual(commitclerk.resolve_model(self.spec), "claude-opus-5")
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(commitclerk.missing_key_env(self.spec), "ANTHROPIC_API_KEY")
+
+
 class TestBuildUserPrompt(unittest.TestCase):
     def test_lists_files_and_the_diff(self):
         prompt = commitclerk.build_user_prompt("DIFFBODY", ["a.py", "b.py"])

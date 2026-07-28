@@ -19,6 +19,7 @@ land.
 Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
+- **T3 SHIPPED** (Block A §A.2 — Anthropic Messages adapter) — 2026-07-27.
 - **T2 SHIPPED** (Block A §A.1 — `--base-url` / `$OPENAI_BASE_URL`) — 2026-07-27.
 - **T1 SHIPPED** (Block A §A.1 — provider adapter table + `--provider`) — 2026-07-27.
 - **T56 SHIPPED** (Block I §I.3 — GitHub Pages landing page + logo) — 2026-07-27.

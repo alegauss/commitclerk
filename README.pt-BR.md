@@ -46,14 +46,14 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Consciente de documentação** | Detecta commits só de documentação e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
-| 🔧 **Independente de modelo** | Qualquer modelo da API Chat Completions via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url` — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. |
+| 🔧 **Independente de modelo** | OpenAI ou Anthropic via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url` — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. |
 | 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
 
 ## Requisitos
 
 - **Python 3.8+** — sem pacotes de terceiros
 - **git** no `PATH`
-- Uma **chave da API da OpenAI** em `OPENAI_API_KEY` — ou um servidor local compatível com a OpenAI e o `--base-url`
+- Uma **chave de API** — `OPENAI_API_KEY`, ou `ANTHROPIC_API_KEY` com `--provider anthropic`, ou um servidor local compatível com a OpenAI e o `--base-url`
 
 ## Início rápido
 
@@ -109,7 +109,7 @@ todos os exemplos abaixo.
 |---|---|---|
 | `-m`, `--message TÍTULO` | — | Usa `TÍTULO` literalmente como título do commit; a IA escreve apenas os bullets do corpo. |
 | `--dry-run` | desligado | Imprime a mensagem gerada e sai sem commitar. |
-| `--provider NOME` | `openai` (ou `$CLERK_PROVIDER`) | Qual provedor de API chamar. Hoje só `openai`; novos provedores entram na mesma tabela de adaptadores. |
+| `--provider NOME` | `openai` (ou `$CLERK_PROVIDER`) | Qual provedor de API chamar: `openai` ou `anthropic`. |
 | `--base-url URL` | `https://api.openai.com/v1` (ou `$OPENAI_BASE_URL`) | Aponta para qualquer endpoint **compatível com a OpenAI** — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODELO` | o padrão do provedor — `gpt-4o-mini` (ou `$OPENAI_MODEL`) no `openai` | Modelo a chamar. |
 | `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo. |
@@ -198,12 +198,36 @@ Ainda não existe arquivo de configuração. Tudo é flag ou variável de ambien
 | `OPENAI_API_KEY` | `openai` | A chave da API. Obrigatória; lida só do ambiente, nunca gravada em disco. |
 | `OPENAI_MODEL` | `openai` | Modelo padrão, quando `--model` não é passado. |
 | `OPENAI_BASE_URL` | `openai` | Endpoint padrão, quando `--base-url` não é passado. |
+| `ANTHROPIC_API_KEY` | `anthropic` | A chave da API. Obrigatória com `--provider anthropic`. |
+| `ANTHROPIC_MODEL` | `anthropic` | Modelo padrão, quando `--model` não é passado. |
+| `ANTHROPIC_BASE_URL` | `anthropic` | Endpoint padrão, quando `--base-url` não é passado. |
 | `CLERK_PROVIDER` | todos | Provedor padrão, quando `--provider` não é passado. |
 
 Os provedores são uma tabela de quatro campos no [`commitclerk.py`](commitclerk.py)
 — URL, headers, payload da requisição e extrator da resposta. Adicionar um é
-acrescentar uma entrada na tabela, não criar uma camada de abstração; hoje
-`openai` é a única entrada.
+acrescentar uma entrada na tabela, não criar uma camada de abstração.
+
+### Provedores
+
+| `--provider` | Endpoint | Chave | Modelo padrão |
+|---|---|---|---|
+| `openai` | `https://api.openai.com/v1/chat/completions` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| `anthropic` | `https://api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` |
+
+```bash
+# Anthropic, com o padrão barato
+ANTHROPIC_API_KEY="sk-ant-..." clerk --provider anthropic
+
+# Anthropic, modelo mais forte para uma mudança sutil
+clerk --provider anthropic --model claude-opus-5 -m "refactor: split the retry policy out"
+
+# Torne-o o padrão deste shell
+export CLERK_PROVIDER=anthropic
+```
+
+Os dois padrões são deliberadamente modelos pequenos e baratos — uma mensagem de
+commit é um resumo curto de um diff, não um problema de raciocínio, e isso roda em
+todo commit. Use o `--model` quando a mudança for sutil o bastante para precisar.
 
 ```bash
 # Fixe um modelo para um repositório, sem mexer no ambiente global
@@ -233,10 +257,10 @@ aponte para algum lugar em que você confia.
 
 ## Privacidade e custo
 
-- **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou o que `--base-url` / `$OPENAI_BASE_URL` apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, aponte o `--base-url` para um modelo local (veja [Endpoints compatíveis com a OpenAI](#endpoints-compatíveis-com-a-openai)) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
+- **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou a API da Anthropic com `--provider anthropic`, ou o que `--base-url` apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, aponte o `--base-url` para um modelo local (veja [Endpoints compatíveis com a OpenAI](#endpoints-compatíveis-com-a-openai)) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
 - Nada além disso é transmitido, armazenado ou registrado pela ferramenta: sem telemetria, sem analytics, sem configuração remota.
 - A chave da API é lida do ambiente e nunca é gravada em disco.
-- O custo é uma única chamada à API por commit. Com o `gpt-4o-mini` padrão e um diff típico, é uma fração de centavo.
+- O custo é uma única chamada à API por commit. Com o modelo padrão de qualquer um dos provedores e um diff típico, é uma fração de centavo.
 
 ## Roadmap
 
@@ -247,7 +271,7 @@ e o posicionamento e os não-objetivos em [`docs/STRATEGY.md`](docs/STRATEGY.md)
 Ideias que dariam boas primeiras contribuições:
 
 - [ ] Instalador de hook `prepare-commit-msg` (T36)
-- [ ] Suporte a outros provedores — um adaptador da Anthropic e um preset `ollama` sem chave (T3, T4)
+- [ ] Um preset `--provider ollama` sem chave, para modelos locais (T4)
 - [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar (T31)
 - [ ] Arquivo de configuração com regras de commit por projeto (T25)
 - [ ] `clerk --lint`: validar uma mensagem existente sem chamar a API, como hook `commit-msg` (T28)

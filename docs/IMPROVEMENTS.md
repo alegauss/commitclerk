@@ -11,26 +11,15 @@ Sections are numbered to match the roadmap's blocks (`§A.1`, `§B.2`, …).
 
 ## A — Provider portability
 
-Any OpenAI-compatible endpoint is now reachable, so the remaining gap is narrower
-than it was: the *request shape* is still Chat-Completions-only, and the keyless
-local path still needs a placeholder key. Two things close it — an Anthropic
-adapter (§A.2) and an `ollama` preset (§A.3) — plus the failure handling in §A.4,
-which becomes more important the moment a flaky local server is in the loop.
+Two providers and any OpenAI-compatible endpoint are reachable, so what is left in
+this block is narrow: the keyless local path still needs a placeholder key (§A.3),
+and a single transient failure still throws away a commit (§A.4) — which matters
+more, not less, once a flaky local server is in the loop.
 
 Keep resisting the `Provider` base class as the table grows. Two payload builders
 and two extractors cover essentially the entire market, because most vendors clone
 the OpenAI shape; the table stays readable in one sitting, which a class hierarchy
 would not.
-
-### A.2 — Anthropic is the one genuinely different shape
-
-Worth calling out so the adapter table is designed with it in mind rather than
-retrofitted: `POST /v1/messages`, `x-api-key` instead of `Authorization: Bearer`,
-a required `anthropic-version` header, `max_tokens` **required**, the system
-prompt as a **top-level `system` field** rather than a message with
-`role: "system"`, and a response whose text is at `content[0].text`. All four
-adapter slots (`url`, `headers`, `payload`, `extract`) differ — which is exactly
-why those four slots are the right decomposition.
 
 ### A.3 — Local models are the privacy answer, and the honest one
 

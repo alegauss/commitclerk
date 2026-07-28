@@ -401,7 +401,7 @@
       <div class="card reveal">
         <div class="ico">🔧</div>
         <h3>Model agnostic</h3>
-        <p>Any OpenAI Chat Completions model via <code>--model</code>, and any OpenAI-compatible endpoint via <code>--base-url</code> — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. Cheap by default, stronger when the change is subtle, local when the diff must stay put.</p>
+        <p>OpenAI or Anthropic via <code>--provider</code>, any model via <code>--model</code>, and any OpenAI-compatible endpoint via <code>--base-url</code> — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. Cheap by default, stronger when the change is subtle, local when the diff must stay put.</p>
       </div>
     </div>
   </div>
@@ -472,7 +472,7 @@
         <tbody>
           <tr><td><code>-m</code>, <code>--message TITLE</code></td><td>—</td><td>Use <b>TITLE</b> verbatim as the commit title; the AI writes only the body bullets.</td></tr>
           <tr><td><code>--dry-run</code></td><td>off</td><td>Print the generated message and exit without committing.</td></tr>
-          <tr><td><code>--provider NAME</code></td><td><code>openai</code></td><td>Which API provider to call — or set <code>$CLERK_PROVIDER</code>. Providers are entries in a small adapter table.</td></tr>
+          <tr><td><code>--provider NAME</code></td><td><code>openai</code></td><td><code>openai</code> or <code>anthropic</code> — or set <code>$CLERK_PROVIDER</code>. Providers are entries in a small adapter table.</td></tr>
           <tr><td><code>--base-url URL</code></td><td><code>https://api.openai.com/v1</code></td><td>Any OpenAI-compatible endpoint — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure — or set <code>$OPENAI_BASE_URL</code>.</td></tr>
           <tr><td><code>--model MODEL</code></td><td><code>gpt-4o-mini</code></td><td>Model to call — the provider's default, or set <code>$OPENAI_MODEL</code>.</td></tr>
           <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Character budget for the diff. A larger diff is trimmed <b>per file</b>, so every changed file still reaches the model.</td></tr>
@@ -497,7 +497,10 @@ clerk <span class="g">--dry-run</span>
 clerk <span class="g">--model</span> gpt-4o
 
 <span class="c"># a local model — the diff never leaves your machine</span>
-clerk <span class="g">--base-url</span> http://localhost:11434/v1</div>
+clerk <span class="g">--base-url</span> http://localhost:11434/v1
+
+<span class="c"># Anthropic instead of OpenAI</span>
+clerk <span class="g">--provider</span> anthropic</div>
       </div>
       <div class="split-txt">
         <h2 style="font-size:1.3rem">Exit codes</h2>
@@ -597,7 +600,7 @@ alias ac='git add -A &amp;&amp; clerk'</div>
       <h2>Know what leaves your machine</h2>
       <p>
         <b>Your staged diff is sent to the API you configured</b> — <code>api.openai.com</code> by
-        default. That is the whole point, and it is the one thing to be deliberate about. On a
+        default, or <code>api.anthropic.com</code> with <code>--provider anthropic</code>. That is the whole point, and it is the one thing to be deliberate about. On a
         repository whose contents cannot leave your machine, point <code>--base-url</code> at a
         local model (<code>http://localhost:11434/v1</code> for Ollama) — or don't run the tool
         there at all. Check your employer's policy first.

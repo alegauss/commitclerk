@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--provider anthropic`: Claude models via the Anthropic Messages API.** The
+  second entry in the provider table, and the one that proves the four-slot shape
+  was the right decomposition — all four differ from OpenAI's: `POST /v1/messages`,
+  an `x-api-key` plus `anthropic-version` header pair, the system prompt as a
+  top-level field with a required `max_tokens`, and a response made of content
+  blocks. Reads `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL`, and
+  defaults to `claude-haiku-4-5` — small and cheap like the OpenAI default, because
+  this runs on every commit; `--model claude-opus-5` when a change is subtle. Two
+  details worth knowing: the response text is read from the first *text* block
+  rather than the first block, so a model that thinks before answering still works,
+  and no `temperature` is sent, because current reasoning models reject it.
 - **`--base-url` / `$OPENAI_BASE_URL`: any OpenAI-compatible endpoint.** Ollama,
   LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, DeepSeek and Azure all
   speak the OpenAI wire format, so one flag reaches all of them with no new code
@@ -43,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `commitclerk.py`. macOS and Linux users no longer need to hand-roll an alias.
 
 ### Changed
+
+- **An empty model response now fails instead of committing an empty message.**
+  Whichever provider is in use, a reply with no message text ends the run with an
+  error naming the model, rather than handing `git commit` a blank body.
 
 - **Large diffs are now trimmed per file instead of cut off at the end.**
   `--max-chars` used to chop the diff at N characters, which meant a big commit's

@@ -48,14 +48,14 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Doc-aware** | Detects documentation-only commits and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
-| 🔧 **Model agnostic** | Any OpenAI Chat Completions model via `--model`, and any OpenAI-compatible endpoint via `--base-url` — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. |
+| 🔧 **Model agnostic** | OpenAI or Anthropic via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url` — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
 
 - **Python 3.8+** — no third-party packages
 - **git** on your `PATH`
-- An **OpenAI API key** in `OPENAI_API_KEY` — or a local OpenAI-compatible server plus `--base-url`
+- An **API key** — `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` with `--provider anthropic`, or a local OpenAI-compatible server plus `--base-url`
 
 ## Quick start
 
@@ -112,7 +112,7 @@ example below.
 |---|---|---|
 | `-m`, `--message TITLE` | — | Use `TITLE` verbatim as the commit title; the AI writes only the body bullets. |
 | `--dry-run` | off | Print the generated message and exit without committing. |
-| `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which API provider to call. `openai` today; more providers are added to the same adapter table. |
+| `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which API provider to call: `openai` or `anthropic`. |
 | `--base-url URL` | `https://api.openai.com/v1` (or `$OPENAI_BASE_URL`) | Point at any **OpenAI-compatible** endpoint — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model. |
@@ -213,11 +213,36 @@ variable, and **a flag always beats the environment**:
 | `OPENAI_API_KEY` | `openai` | The API key. Required; read from the environment only, never written to disk. |
 | `OPENAI_MODEL` | `openai` | Default model, when `--model` is not given. |
 | `OPENAI_BASE_URL` | `openai` | Default endpoint, when `--base-url` is not given. |
+| `ANTHROPIC_API_KEY` | `anthropic` | The API key. Required for `--provider anthropic`. |
+| `ANTHROPIC_MODEL` | `anthropic` | Default model, when `--model` is not given. |
+| `ANTHROPIC_BASE_URL` | `anthropic` | Default endpoint, when `--base-url` is not given. |
 | `CLERK_PROVIDER` | all | Default provider, when `--provider` is not given. |
 
 Providers are a table of four slots in [`commitclerk.py`](commitclerk.py) — URL,
 headers, request payload, response extractor. Adding one is a table entry, not a
-new abstraction layer; `openai` is the only entry today.
+new abstraction layer.
+
+### Providers
+
+| `--provider` | Endpoint | Key | Default model |
+|---|---|---|---|
+| `openai` | `https://api.openai.com/v1/chat/completions` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| `anthropic` | `https://api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` |
+
+```bash
+# Anthropic, cheap default
+ANTHROPIC_API_KEY="sk-ant-..." clerk --provider anthropic
+
+# Anthropic, stronger model for a subtle change
+clerk --provider anthropic --model claude-opus-5 -m "refactor: split the retry policy out"
+
+# Make it the default for this shell
+export CLERK_PROVIDER=anthropic
+```
+
+Both defaults are deliberately small, cheap models — a commit message is a short
+summary of a diff, not a reasoning problem, and this runs on every commit. Reach
+for `--model` when a change is subtle enough to need it.
 
 ```bash
 # Pin a model for one repository, without touching your global environment
@@ -246,10 +271,10 @@ is a **different destination for your diff**, so point it somewhere you trust.
 
 ## Privacy and cost
 
-- **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or whatever `--base-url` / `$OPENAI_BASE_URL` names. On a repository whose contents may not leave your machine, point `--base-url` at a local model (see [OpenAI-compatible endpoints](#openai-compatible-endpoints)) or don't run the tool there at all. Check your employer's policy first.
+- **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` names. On a repository whose contents may not leave your machine, point `--base-url` at a local model (see [OpenAI-compatible endpoints](#openai-compatible-endpoints)) or don't run the tool there at all. Check your employer's policy first.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
-- Cost is a single Chat Completions call per commit. With the default `gpt-4o-mini` and a typical diff, that is a fraction of a cent.
+- Cost is a single API call per commit. With either provider's default model and a typical diff, that is a fraction of a cent.
 
 ## Troubleshooting
 
@@ -260,15 +285,15 @@ Nothing is staged. `commitclerk.py` deliberately never stages for you — run `g
 </details>
 
 <details>
-<summary><strong>"Error: OPENAI_API_KEY is not set."</strong></summary>
+<summary><strong>"Error: OPENAI_API_KEY is not set." (or <code>ANTHROPIC_API_KEY</code>)</strong></summary>
 
-Export the key in the shell you are actually using. On Windows, `setx` only affects **new** terminals — reopen yours after running it.
+Each provider reads its own key variable — see [Configuration](#configuration). Export it in the shell you are actually using. On Windows, `setx` only affects **new** terminals — reopen yours after running it.
 </details>
 
 <details>
-<summary><strong>"OpenAI API error 401 / 429"</strong></summary>
+<summary><strong>"OpenAI API error 401 / 429" (or "Anthropic API error ...")</strong></summary>
 
-`401` means the key is invalid or revoked. `429` means rate-limited or out of quota — check your usage at the OpenAI dashboard, or retry with a smaller `--max-chars`.
+The message is prefixed with the provider that rejected the call. `401` means the key is invalid or revoked. `429` means rate-limited or out of quota — check your usage on that provider's dashboard, or retry with a smaller `--max-chars`.
 </details>
 
 <details>
@@ -292,7 +317,7 @@ project's positioning and non-goals in [`docs/STRATEGY.md`](docs/STRATEGY.md).
 Ideas that would make good first contributions:
 
 - [ ] `prepare-commit-msg` git hook installer (T36)
-- [ ] Support for additional providers — an Anthropic adapter and a keyless `ollama` preset (T3, T4)
+- [ ] A keyless `--provider ollama` preset for local models (T4)
 - [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing (T31)
 - [ ] A configuration file for project-specific commit rules (T25)
 - [ ] `clerk --lint`: validate an existing message with no API call, as a `commit-msg` hook (T28)
