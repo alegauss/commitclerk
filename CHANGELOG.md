@@ -9,17 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.1] - 2026-07-28
 
-### Added
-
-- The *Publish* workflow now picks the next version by itself: a run bumps
-  `__version__` (patch by default, `minor`/`major` selectable), rolls the
-  changelog, commits, tags, publishes and creates the GitHub Release. TestPyPI
-  rehearsals build a throwaway `X.Y.Z.devN` version and leave git untouched.
-- `scripts/bump_version.py`, the standard-library helper behind it.
-
-## [0.2.0] - 2026-07-27
-
-First release published to PyPI.
+First release published to PyPI. Version `0.2.0` was prepared but never
+released — it has no tag and was never uploaded — so its entries are recorded
+here, under the version that actually shipped.
 
 ### Changed
 
@@ -35,8 +27,13 @@ First release published to PyPI.
 - **Installable from PyPI**: `pipx install commitclerk`, providing the `clerk`
   and `commitclerk` commands. Still zero runtime dependencies.
 - `--version` flag.
-- Automated publishing via GitHub Releases using PyPI Trusted Publishing (OIDC),
-  with a manual TestPyPI rehearsal path — see `RELEASING.md`.
+- Automated publishing with PyPI Trusted Publishing (OIDC), no API token in the
+  repository. Every *Publish* run picks the next version by itself: it bumps
+  `__version__` (patch by default, `minor`/`major` selectable), rolls this
+  changelog, commits, tags, uploads and creates the GitHub Release. TestPyPI
+  rehearsals build a throwaway `X.Y.Z.devN` version and leave git untouched.
+  See `RELEASING.md`.
+- `scripts/bump_version.py`, the standard-library helper behind it.
 - Project documentation: `README.md` (plus a Brazilian Portuguese translation),
   `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `RELEASING.md` and
   this changelog.
@@ -70,6 +67,5 @@ Initial public release.
   everything, and forwards its arguments to `commitclerk.py`.
 
 [Unreleased]: https://github.com/alegauss/commitclerk/compare/v0.2.1...HEAD
-[0.2.1]: https://github.com/alegauss/commitclerk/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/alegauss/commitclerk/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/alegauss/commitclerk/releases/tag/v0.1.0
+[0.2.1]: https://github.com/alegauss/commitclerk/releases/tag/v0.2.1
+[0.1.0]: https://github.com/alegauss/commitclerk/commit/6f72451
