@@ -14,6 +14,7 @@ directly with `python commitclerk.py`):
     clerk --dry-run             # print message, do not commit
     clerk --model gpt-4o-mini
     clerk --provider anthropic  # select the API provider
+    clerk --provider ollama     # local model, no API key, nothing leaves the box
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     git clerk                   # same tool, as a native git subcommand
 
@@ -24,6 +25,8 @@ Environment:
     ANTHROPIC_API_KEY   required by the anthropic provider
     ANTHROPIC_MODEL     optional, overrides the anthropic provider's default model
     ANTHROPIC_BASE_URL  optional, overrides the anthropic endpoint
+    OLLAMA_MODEL        optional, overrides the ollama provider's default model
+    OLLAMA_BASE_URL     optional, overrides the ollama endpoint
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Why the doc-only handling: this script only sees the staged diff, so when a
@@ -47,6 +50,7 @@ __version__ = "0.2.1"
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
+DEFAULT_OLLAMA_MODEL = "qwen2.5-coder"
 DEFAULT_PROVIDER = "openai"
 MAX_DIFF_CHARS = 60_000
 REQUEST_TIMEOUT = 60
@@ -308,6 +312,21 @@ PROVIDERS: dict[str, dict] = {
         },
         "payload": _anthropic_payload,
         "extract": _anthropic_extract,
+    },
+    # A local server speaking the OpenAI wire format: same two adapter functions,
+    # a localhost base URL, and no key at all — this is the "the diff never leaves
+    # this machine" path, so it has to work with nothing configured.
+    "ollama": {
+        "label": "Ollama",
+        "default_base": "http://localhost:11434/v1",
+        "path": "/chat/completions",
+        "base_env": "OLLAMA_BASE_URL",
+        "key_required": False,
+        "model_env": "OLLAMA_MODEL",
+        "default_model": DEFAULT_OLLAMA_MODEL,
+        "headers": lambda key: {},
+        "payload": _openai_payload,
+        "extract": _openai_extract,
     },
 }
 

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--provider ollama`: a local model, no API key, nothing over the network.**
+  The README's privacy section used to end the conversation with *do not run this
+  on repositories whose contents cannot leave your machine*; now it can offer a
+  path instead. The preset points at `http://localhost:11434/v1` and requires no
+  key — previously the same setup needed both `--base-url` and a placeholder
+  `OPENAI_API_KEY=ollama` that meant nothing. Reads `OLLAMA_MODEL` /
+  `OLLAMA_BASE_URL`, defaults to `qwen2.5-coder`. Small local models write weaker
+  bodies than a hosted model; `-m "<title>"` closes most of that gap.
 - **`--provider anthropic`: Claude models via the Anthropic Messages API.** The
   second entry in the provider table, and the one that proves the four-slot shape
   was the right decomposition — all four differ from OpenAI's: `POST /v1/messages`,
@@ -58,7 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An empty model response now fails instead of committing an empty message.**
   Whichever provider is in use, a reply with no message text ends the run with an
   error naming the model, rather than handing `git commit` a blank body.
-
 - **Large diffs are now trimmed per file instead of cut off at the end.**
   `--max-chars` used to chop the diff at N characters, which meant a big commit's
   later files — the ones `git diff` happens to sort last, not the least

@@ -11,29 +11,15 @@ Sections are numbered to match the roadmap's blocks (`§A.1`, `§B.2`, …).
 
 ## A — Provider portability
 
-Two providers and any OpenAI-compatible endpoint are reachable, so what is left in
-this block is narrow: the keyless local path still needs a placeholder key (§A.3),
-and a single transient failure still throws away a commit (§A.4) — which matters
-more, not less, once a flaky local server is in the loop.
+Three providers — two hosted, one local and keyless — and any OpenAI-compatible
+endpoint are reachable, so one gap is left in this block: a single transient
+failure still throws away a commit (§A.4), which matters more, not less, now that a
+flaky local server can be in the loop.
 
 Keep resisting the `Provider` base class as the table grows. Two payload builders
 and two extractors cover essentially the entire market, because most vendors clone
 the OpenAI shape; the table stays readable in one sitting, which a class hierarchy
 would not.
-
-### A.3 — Local models are the privacy answer, and the honest one
-
-`--base-url http://localhost:11434/v1` already works, so what is left is the
-ceremony: the openai provider requires a key, so a local run needs a placeholder
-(`OPENAI_API_KEY=ollama`) that means nothing. A `--provider ollama` preset with
-`key_required: False` and the localhost base URL built in removes both the flag
-and the fake key, and gives the privacy answer a name a reader can search for.
-
-Two caveats to document rather than paper over: small local models write
-noticeably weaker bodies, and the correct mitigation is the house-style few-shot
-work in §B.1 rather than a bigger prompt. The keyless mechanism itself is already
-in place: `key_required` lives in the provider table, so a preset that omits a key
-is not blocked by a check meant for a hosted API.
 
 ### A.4 — Failure handling is currently all-or-nothing
 

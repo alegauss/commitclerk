@@ -47,7 +47,8 @@ is under your control:
 |---|---|
 | nothing | The default OpenAI endpoint, `https://api.openai.com/v1/chat/completions`. |
 | `--provider anthropic` | Anthropic's Messages API, `https://api.anthropic.com/v1/messages`, authenticated with `ANTHROPIC_API_KEY`. |
-| `--base-url` / `$OPENAI_BASE_URL` | The diff goes to **that** host instead — including `http://localhost:...` for a local model, in which case nothing leaves the machine. |
+| `--provider ollama` | A local server at `http://localhost:11434/v1`, with **no API key** and nothing sent over the network. |
+| `--base-url` / a provider's base-url variable | The diff goes to **that** host instead — including any other `http://localhost:...` server, in which case nothing leaves the machine. |
 
 Two consequences worth being explicit about: a custom base URL is a deliberate
 change of destination for your source code, so point it only at a host you trust;
@@ -61,8 +62,8 @@ before the request is built.
 - **The staged diff being sent to the configured API endpoint.** This is the
   documented, intentional behavior of the tool — see
   [Privacy and cost](README.md#privacy-and-cost). Do not use `commitclerk` on
-  repositories whose contents may not leave your machine, unless you have pointed
-  `--base-url` at a local model.
+  repositories whose contents may not leave your machine, unless you are running a
+  local model (`--provider ollama`, or `--base-url` pointed at your own server).
 - **`run-commit.cmd` / `run-commit.sh` staging every change with `git add -A`.**
   This is documented behavior of the wrappers. Stage manually and call
   `commitclerk.py` directly if you need control over what is committed.

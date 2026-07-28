@@ -55,12 +55,11 @@ Everything below is an answer to one of three questions:
 
 ## Block A — Provider portability
 
-*OpenAI, Anthropic and any OpenAI-compatible endpoint already work. What is left
-is a first-class local preset and not losing a commit to a transient 429.* → [§A](IMPROVEMENTS.md#a--provider-portability)
+*OpenAI, Anthropic, a keyless local preset and any OpenAI-compatible endpoint all
+work. What is left is not losing a commit to a transient failure.* → [§A](IMPROVEMENTS.md#a--provider-portability)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T4 | 💭 | `--provider ollama` preset requiring no API key, documented as the "your diff never leaves this machine" path. → §A.3 | — |
 | T5 | 💭 | Retry with exponential backoff + jitter on 429/5xx, plus `--timeout`. One transient 429 currently loses the whole commit. → §A.4 | — |
 | T6 | 💭 | Capability fallback: if a model rejects `temperature` or the parameter name differs (reasoning models), retry once without it instead of dying with a raw API error. → §A.4 | T5 |
 
@@ -188,7 +187,7 @@ If you want the highest value per unit of effort, roughly:
 
 1. **T49** — trivial, and it fixes the discovery problem.
 2. **T16, T11** — the diff pipeline's honesty gaps, in the tool's own core competence.
-3. **T4, T5** — the local-model preset and retry: resilience for almost no code.
+3. **T5** — retry on 429/5xx: resilience for almost no code.
 4. **T25, T28** — config plus lint; together they unlock team adoption.
 5. **T19, T21** — the two blockers for corporate approval.
 6. **T7, T8** — the quality jump nobody else in this niche ships.

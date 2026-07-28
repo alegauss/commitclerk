@@ -48,14 +48,15 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Doc-aware** | Detects documentation-only commits and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
-| 🔧 **Model agnostic** | OpenAI or Anthropic via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url` — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure. |
+| 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
+| 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
 
 - **Python 3.8+** — no third-party packages
 - **git** on your `PATH`
-- An **API key** — `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` with `--provider anthropic`, or a local OpenAI-compatible server plus `--base-url`
+- An **API key** — `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` with `--provider anthropic`. No key at all with `--provider ollama`, which talks to a local model instead.
 
 ## Quick start
 
@@ -112,7 +113,7 @@ example below.
 |---|---|---|
 | `-m`, `--message TITLE` | — | Use `TITLE` verbatim as the commit title; the AI writes only the body bullets. |
 | `--dry-run` | off | Print the generated message and exit without committing. |
-| `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which API provider to call: `openai` or `anthropic`. |
+| `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which provider to call: `openai`, `anthropic`, or `ollama` (local, no key). |
 | `--base-url URL` | `https://api.openai.com/v1` (or `$OPENAI_BASE_URL`) | Point at any **OpenAI-compatible** endpoint — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model. |
@@ -136,8 +137,8 @@ clerk --model gpt-4o
 # Very large diff: raise the budget so less of each file is trimmed
 clerk --max-chars 120000
 
-# A local model, so the diff never leaves your machine
-OPENAI_API_KEY=ollama clerk --base-url http://localhost:11434/v1 --model qwen2.5-coder
+# A local model, so the diff never leaves your machine — no API key needed
+clerk --provider ollama
 ```
 
 ### Exit codes
@@ -216,6 +217,8 @@ variable, and **a flag always beats the environment**:
 | `ANTHROPIC_API_KEY` | `anthropic` | The API key. Required for `--provider anthropic`. |
 | `ANTHROPIC_MODEL` | `anthropic` | Default model, when `--model` is not given. |
 | `ANTHROPIC_BASE_URL` | `anthropic` | Default endpoint, when `--base-url` is not given. |
+| `OLLAMA_MODEL` | `ollama` | Default model, when `--model` is not given. |
+| `OLLAMA_BASE_URL` | `ollama` | Default endpoint, when `--base-url` is not given. |
 | `CLERK_PROVIDER` | all | Default provider, when `--provider` is not given. |
 
 Providers are a table of four slots in [`commitclerk.py`](commitclerk.py) — URL,
@@ -228,6 +231,7 @@ new abstraction layer.
 |---|---|---|---|
 | `openai` | `https://api.openai.com/v1/chat/completions` | `OPENAI_API_KEY` | `gpt-4o-mini` |
 | `anthropic` | `https://api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` |
+| `ollama` | `http://localhost:11434/v1/chat/completions` | none | `qwen2.5-coder` |
 
 ```bash
 # Anthropic, cheap default
@@ -251,13 +255,12 @@ OPENAI_MODEL=gpt-4o clerk -m "fix: reject expired tokens on refresh"
 
 ### OpenAI-compatible endpoints
 
-Most vendors speak the OpenAI wire format, so `--base-url` covers them with no
-new code and no new dependency:
+Most vendors speak the OpenAI wire format, so `--base-url` covers them with no new
+code and no new dependency. A local Ollama server already has a preset —
+`--provider ollama`, which points at `localhost` and asks for no key — so
+`--base-url` is for everything else:
 
 ```bash
-# Ollama (local) — most servers ignore the key, but one must be set
-OPENAI_API_KEY=ollama clerk --base-url http://localhost:11434/v1 --model qwen2.5-coder
-
 # LM Studio (local)
 OPENAI_API_KEY=lmstudio clerk --base-url http://localhost:1234/v1 --model your-loaded-model
 
@@ -271,7 +274,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 
 ## Privacy and cost
 
-- **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` names. On a repository whose contents may not leave your machine, point `--base-url` at a local model (see [OpenAI-compatible endpoints](#openai-compatible-endpoints)) or don't run the tool there at all. Check your employer's policy first.
+- **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
 - Cost is a single API call per commit. With either provider's default model and a typical diff, that is a fraction of a cent.
@@ -317,7 +320,6 @@ project's positioning and non-goals in [`docs/STRATEGY.md`](docs/STRATEGY.md).
 Ideas that would make good first contributions:
 
 - [ ] `prepare-commit-msg` git hook installer (T36)
-- [ ] A keyless `--provider ollama` preset for local models (T4)
 - [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing (T31)
 - [ ] A configuration file for project-specific commit rules (T25)
 - [ ] `clerk --lint`: validate an existing message with no API call, as a `commit-msg` hook (T28)

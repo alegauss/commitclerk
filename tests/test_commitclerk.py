@@ -393,6 +393,41 @@ class TestAnthropicAdapter(unittest.TestCase):
             self.assertEqual(commitclerk.missing_key_env(self.spec), "ANTHROPIC_API_KEY")
 
 
+class TestOllamaPreset(unittest.TestCase):
+    def setUp(self):
+        self.spec = commitclerk.PROVIDERS["ollama"]
+
+    def test_needs_no_api_key_at_all(self):
+        # The whole point of the preset: it must work with nothing configured.
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(commitclerk.missing_key_env(self.spec))
+            self.assertIsNone(commitclerk.api_key_for(self.spec))
+
+    def test_sends_no_authorization_header(self):
+        self.assertEqual(self.spec["headers"](None), {})
+
+    def test_defaults_to_the_local_server(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                commitclerk.provider_url(self.spec, commitclerk.resolve_base(self.spec)),
+                "http://localhost:11434/v1/chat/completions",
+            )
+
+    def test_reuses_the_openai_wire_format(self):
+        self.assertIs(self.spec["payload"], commitclerk._openai_payload)
+        self.assertIs(self.spec["extract"], commitclerk._openai_extract)
+
+    def test_has_its_own_model_and_base_url_variables(self):
+        with mock.patch.dict(
+            os.environ, {"OLLAMA_MODEL": "codellama", "OLLAMA_BASE_URL": "http://box:11434/v1"}
+        ):
+            self.assertEqual(commitclerk.resolve_model(self.spec), "codellama")
+            self.assertEqual(commitclerk.resolve_base(self.spec), "http://box:11434/v1")
+
+    def test_a_local_base_url_passes_validation(self):
+        self.assertIsNone(commitclerk.base_url_error(self.spec["default_base"]))
+
+
 class TestBuildUserPrompt(unittest.TestCase):
     def test_lists_files_and_the_diff(self):
         prompt = commitclerk.build_user_prompt("DIFFBODY", ["a.py", "b.py"])
