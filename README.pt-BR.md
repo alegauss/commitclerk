@@ -39,6 +39,7 @@ fix: prevent duplicate webhook deliveries on retry
 | | |
 |---|---|
 | 🪶 **Zero dependências** | Só biblioteca padrão (`urllib`, `subprocess`, `argparse`). Copie o arquivo e use. |
+| 🔗 **Nativo do git** | Também instala como `git clerk`, então mora onde sua memória muscular de git já está. |
 | ✍️ **O título pode ser seu** | `-m "feat: add X"` usa seu título literalmente e deixa a IA escrever só o corpo. |
 | 📄 **Consciente de documentação** | Detecta commits só de documentação e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
@@ -85,7 +86,7 @@ setx OPENAI_API_KEY "sk-..."
 ```bash
 git add .
 clerk --dry-run   # confira antes
-clerk
+clerk             # ou: git clerk
 ```
 
 ## Uso
@@ -94,9 +95,11 @@ clerk
 clerk [-m TÍTULO] [--dry-run] [--model MODELO] [--max-chars N] [--version]
 ```
 
-A instalação cria dois comandos idênticos, `clerk` e `commitclerk`. Se preferir
-rodar o arquivo direto, troque `clerk` por `python commitclerk.py` em todos os
-exemplos abaixo.
+A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
+`git clerk` — o git roda qualquer `git-<nome>` do seu `PATH` como subcomando,
+então `git add -A && git clerk` se lê como git, e não como um apêndice. Se
+preferir rodar o arquivo direto, troque `clerk` por `python commitclerk.py` em
+todos os exemplos abaixo.
 
 | Flag | Padrão | O que faz |
 |---|---|---|

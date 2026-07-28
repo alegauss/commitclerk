@@ -41,6 +41,7 @@ fix: prevent duplicate webhook deliveries on retry
 | | |
 |---|---|
 | 🪶 **Zero dependencies** | Standard library only (`urllib`, `subprocess`, `argparse`). Drop the file in and run it. |
+| 🔗 **Git-native** | Installs as `git clerk` too, so it lives where the rest of your git muscle memory already is. |
 | ✍️ **You can own the title** | `-m "feat: add X"` uses your title verbatim and lets the AI write only the body. |
 | 📄 **Doc-aware** | Detects documentation-only commits and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
@@ -88,7 +89,7 @@ setx OPENAI_API_KEY "sk-..."
 ```bash
 git add .
 clerk --dry-run   # look before you leap
-clerk
+clerk             # or: git clerk
 ```
 
 ## Usage
@@ -97,9 +98,11 @@ clerk
 clerk [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N] [--version]
 ```
 
-Installing gives you two identical commands, `clerk` and `commitclerk`. If you
-run the file directly instead, replace `clerk` with `python commitclerk.py` in
-every example below.
+Installing gives you three identical entry points: `clerk`, `commitclerk`, and
+`git clerk` — git runs any `git-<name>` on your `PATH` as a subcommand, so
+`git add -A && git clerk` reads like git rather than like a bolt-on. If you run
+the file directly instead, replace `clerk` with `python commitclerk.py` in every
+example below.
 
 | Flag | Default | What it does |
 |---|---|---|

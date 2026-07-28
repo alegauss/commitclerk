@@ -54,6 +54,9 @@ Changelog = "https://github.com/alegauss/commitclerk/blob/main/CHANGELOG.md"
 [project.scripts]
 clerk = "commitclerk:main"
 commitclerk = "commitclerk:main"
+# git treats any `git-<name>` on PATH as a subcommand, so this one line is all
+# `git clerk` needs.
+git-clerk = "commitclerk:main"
 
 [tool.setuptools]
 py-modules = ["commitclerk"]

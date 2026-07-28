@@ -20,3 +20,4 @@ Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
 - **T38 SHIPPED** (Block G §G.3 — POSIX wrapper + `git add -A` staging fix) — 2026-07-27.
+- **T37 SHIPPED** (Block G §G.2 — `git-clerk` entry point) — 2026-07-27.

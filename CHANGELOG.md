@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`git clerk` works as a native git subcommand.** Installing now also provides
+  a `git-clerk` entry point, which git picks up from `PATH` automatically —
+  `git add -A && git clerk` needs no alias and no new command to remember.
+  `--help` names whichever entry point you actually invoked.
 - `run-commit.sh`, a POSIX wrapper matching `run-commit.cmd`: it checks
   `OPENAI_API_KEY`, stages everything, and forwards its arguments to
   `commitclerk.py`. macOS and Linux users no longer need to hand-roll an alias.

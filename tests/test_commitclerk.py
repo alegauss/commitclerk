@@ -77,6 +77,20 @@ class TestTruncate(unittest.TestCase):
         self.assertIn("truncated", result)
 
 
+class TestProgName(unittest.TestCase):
+    def test_git_subcommand_is_shown_as_git_clerk(self):
+        self.assertEqual(commitclerk.prog_name("/usr/local/bin/git-clerk"), "git clerk")
+        self.assertEqual(commitclerk.prog_name(r"C:\Python\Scripts\git-clerk.exe"), "git clerk")
+
+    def test_console_scripts_keep_their_own_name(self):
+        self.assertEqual(commitclerk.prog_name("/usr/local/bin/clerk"), "clerk")
+        self.assertEqual(commitclerk.prog_name(r"C:\Python\Scripts\commitclerk.exe"), "commitclerk")
+
+    def test_direct_invocation_and_empty_argv(self):
+        self.assertEqual(commitclerk.prog_name("commitclerk.py"), "commitclerk")
+        self.assertEqual(commitclerk.prog_name(""), "clerk")
+
+
 class TestSystemPrompt(unittest.TestCase):
     def test_body_only_prompt_forbids_a_title(self):
         prompt = commitclerk._system_prompt(body_only=True)

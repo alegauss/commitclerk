@@ -6,11 +6,13 @@ from the staged diff using the OpenAI Chat Completions API.
 
 Reads the API key from OPENAI_API_KEY. No third-party dependencies.
 
-Usage (installed as `clerk`, or run the file directly with `python commitclerk.py`):
+Usage (installed as `clerk`, `commitclerk` or `git clerk`, or run the file
+directly with `python commitclerk.py`):
     clerk                       # AI writes the whole message
     clerk -m "docs: fix X"      # use this exact title; AI writes only the body
     clerk --dry-run             # print message, do not commit
     clerk --model gpt-4o-mini
+    git clerk                   # same tool, as a native git subcommand
 
 Environment:
     OPENAI_API_KEY   required
@@ -96,6 +98,19 @@ def _system_prompt(*, body_only: bool) -> str:
     )
 
 
+def prog_name(argv0: str) -> str:
+    """Name to show in --help, derived from how the tool was actually invoked.
+
+    Installed as `git-clerk`, git runs us for `git clerk`, so printing
+    `usage: clerk` there would document a command the user did not type.
+    """
+    base = os.path.basename(argv0)
+    stem = os.path.splitext(base)[0]
+    if stem == "git-clerk":
+        return "git clerk"
+    return stem or "clerk"
+
+
 def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
@@ -169,7 +184,7 @@ def call_openai(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        prog="clerk",
+        prog=prog_name(sys.argv[0]),
         description="commitclerk - AI-powered git commit messages.",
     )
     parser.add_argument(

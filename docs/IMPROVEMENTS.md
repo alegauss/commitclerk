@@ -430,12 +430,6 @@ It is also where a bug hurts most, so the constraints are non-negotiable:
   hook it displaced, and must refuse to clobber a foreign hook it did not write —
   check for a marker comment before overwriting.
 
-### G.2 — `git clerk`
-
-Git treats any `git-<name>` executable on `PATH` as a subcommand. Adding
-`git-clerk = "commitclerk:main"` to `[project.scripts]` is one line, and `git add
--A && git clerk` reads like git rather than like a bolt-on.
-
 ### G.4 — `pre-commit`
 
 `.pre-commit-hooks.yaml` is a dozen lines and plugs the tool into the framework a
