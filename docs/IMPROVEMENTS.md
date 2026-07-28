@@ -173,22 +173,6 @@ excellent early tasks.
 
 ## C — Diff intelligence
 
-### C.1 — Head-truncation is the crudest possible budget
-
-`truncate()` cuts at 60 000 characters and appends a notice. The consequence is
-sharp: in a 20-file commit that exceeds the budget, the *last* files — often the
-actual point of the commit, since `git diff` orders by path, not importance — are
-entirely invisible to the model, which then writes a confident message about the
-first few files it happened to see.
-
-A per-file budget fixes this in perhaps thirty lines: split the diff on
-`diff --git` boundaries, always keep every file's header line and hunk headers,
-then distribute the remaining budget **round-robin** across files (rather than
-proportionally, which just reproduces the original bias in favour of large files).
-Every file gets seen; large files get truncated with a per-file
-`[... N lines truncated ...]` marker so the model knows the shape of what it is
-missing.
-
 ### C.2 — A file taxonomy generalises the founding idea
 
 `is_doc_only()` is a boolean, and the tool's best feature hangs off it. The

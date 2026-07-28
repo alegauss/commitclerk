@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="commitclerk logo: a signed-off commit node beside the message it wrote">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B2540"/>
+      <stop offset=".55" stop-color="#121A2C"/>
+      <stop offset="1" stop-color="#0A0E18"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".78" cy=".10" r=".70">
+      <stop offset="0" stop-color="#E9A33A" stop-opacity=".30"/>
+      <stop offset="1" stop-color="#E9A33A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="seal" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0" stop-color="#F9CB77"/>
+      <stop offset=".55" stop-color="#EDA53C"/>
+      <stop offset="1" stop-color="#D0821F"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="116" fill="url(#tile)"/>
+  <rect width="512" height="512" rx="116" fill="url(#glow)"/>
+
+  <!-- the branch: history running through the commit -->
+  <path d="M148 118 V394" stroke="#E9A33A" stroke-opacity=".34" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="148" cy="122" r="18" fill="#0E1320" stroke="#E9A33A" stroke-opacity=".55" stroke-width="11"/>
+  <circle cx="148" cy="390" r="18" fill="#0E1320" stroke="#E9A33A" stroke-opacity=".55" stroke-width="11"/>
+
+  <!-- the seal: the clerk signs the record off -->
+  <circle cx="148" cy="256" r="72" fill="#E9A33A" fill-opacity=".14"/>
+  <circle cx="148" cy="256" r="56" fill="url(#seal)"/>
+  <path d="M124 258 l19 21 l34 -44" fill="none" stroke="#141B2B" stroke-width="19"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- the record: a title line and the body it wrote -->
+  <rect x="236" y="202" width="152" height="24" rx="12" fill="#F7BE63"/>
+  <rect x="236" y="250" width="184" height="17" rx="8.5" fill="#8494B8"/>
+  <rect x="236" y="292" width="128" height="17" rx="8.5" fill="#5C6A8C"/>
+</svg>

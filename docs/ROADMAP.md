@@ -88,11 +88,10 @@ last file changed is simply invisible to the model.* → [§C](IMPROVEMENTS.md#c
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T13 | 💭 | Replace head-truncation with a **per-file budget**: every file keeps its header and a fair share of the remaining characters, so the tail of a big commit is never silently dropped. → §C.1 | — |
 | T14 | 💭 | **File-class taxonomy** — `code · test · docs · generated · config · vendor · binary` — replacing the boolean doc-only flag. The class mix is summarized in the prompt and drives the type prefix. → §C.2 | — |
-| T15 | 💭 | Demote generated files (lockfiles, snapshots, `dist/`, `*.min.*`, migrations, `.po`) to a one-line "N generated files changed" instead of thousands of diff lines competing for the budget. → §C.2 | T13, T14 |
+| T15 | 💭 | Demote generated files (lockfiles, snapshots, `dist/`, `*.min.*`, migrations, `.po`) to a one-line "N generated files changed" instead of thousands of diff lines competing for the budget. → §C.2 | T14 |
 | T16 | 💭 | **Mixed doc+code commits**: today one code file disables the doc guard entirely, so a 900-line CHANGELOG edit plus a typo fix can still produce `feat:`. Make the guard per-file rather than all-or-nothing. → §C.3 | T14 |
-| T17 | 💭 | Map-reduce pass for very large diffs (opt-in): summarize each oversized file separately, then write the message from the summaries. Handles the commit that no budget can fit. → §C.4 | T13 |
+| T17 | 💭 | Map-reduce pass for very large diffs (opt-in): summarize each oversized file separately, then write the message from the summaries. Handles the commit that no budget can fit. → §C.4 | — |
 | T18 | 💭 | Warn when the same files have *unstaged* changes too — the message may describe a version of the code that is not the one being committed. → §C.5 | — |
 
 ## Block D — Trust & safety
@@ -191,7 +190,7 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 If you want the highest value per unit of effort, roughly:
 
 1. **T49** — trivial, and it fixes the discovery problem.
-2. **T13, T16, T11** — the diff pipeline's honesty gaps, in the tool's own core competence.
+2. **T16, T11** — the diff pipeline's honesty gaps, in the tool's own core competence.
 3. **T2, T5** — portability and resilience for almost no code.
 4. **T25, T28** — config plus lint; together they unlock team adoption.
 5. **T19, T21** — the two blockers for corporate approval.

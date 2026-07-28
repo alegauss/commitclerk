@@ -45,6 +45,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | Qualquer modelo da API Chat Completions via `--model` ou `$OPENAI_MODEL`. |
+| 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
 
 ## Requisitos
 
@@ -106,7 +107,7 @@ todos os exemplos abaixo.
 | `-m`, `--message TÍTULO` | — | Usa `TÍTULO` literalmente como título do commit; a IA escreve apenas os bullets do corpo. |
 | `--dry-run` | desligado | Imprime a mensagem gerada e sai sem commitar. |
 | `--model MODELO` | `gpt-4o-mini` (ou `$OPENAI_MODEL`) | Modelo da API Chat Completions. |
-| `--max-chars N` | `60000` | Trunca o diff em `N` caracteres antes de enviar à API. |
+| `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo. |
 | `--version` | — | Mostra a versão e sai. |
 
 ### Exemplos
@@ -124,7 +125,7 @@ clerk --dry-run
 # Um modelo mais forte para uma mudança grande ou sutil
 clerk --model gpt-4o
 
-# Diff muito grande: envie mais contexto
+# Diff muito grande: aumente o orçamento para cortar menos de cada arquivo
 clerk --max-chars 120000
 ```
 

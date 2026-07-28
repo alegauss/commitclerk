@@ -77,6 +77,77 @@ class TestTruncate(unittest.TestCase):
         self.assertIn("truncated", result)
 
 
+_HEAD_CUT_NOTE = "\n\n[...diff truncated for context length...]"
+
+
+def _file_chunk(name: str, body_lines: int) -> str:
+    """A minimal but realistically shaped single-file diff chunk."""
+    return (
+        f"diff --git a/{name} b/{name}\n"
+        f"index 1111111..2222222 100644\n"
+        f"--- a/{name}\n"
+        f"+++ b/{name}\n"
+        f"@@ -1,{body_lines} +1,{body_lines} @@\n"
+        + "".join(f"+line {i} in {name}\n" for i in range(body_lines))
+    )
+
+
+class TestSplitDiff(unittest.TestCase):
+    def test_splits_on_file_boundaries(self):
+        diff = _file_chunk("a.py", 2) + _file_chunk("b.py", 3)
+        chunks = commitclerk.split_diff(diff)
+        self.assertEqual(len(chunks), 2)
+        self.assertTrue(chunks[0].startswith("diff --git a/a.py"))
+        self.assertTrue(chunks[1].startswith("diff --git a/b.py"))
+        self.assertEqual("".join(chunks), diff)
+
+    def test_empty_diff_yields_no_chunks(self):
+        self.assertEqual(commitclerk.split_diff(""), [])
+
+    def test_added_line_that_looks_like_a_header_does_not_split(self):
+        # A diff of this very project can contain "+diff --git ..." as content.
+        diff = "diff --git a/a.md b/a.md\n@@ -1 +1 @@\n+diff --git a/fake b/fake\n"
+        self.assertEqual(len(commitclerk.split_diff(diff)), 1)
+
+
+class TestBudgetDiff(unittest.TestCase):
+    def test_diff_within_budget_is_untouched(self):
+        diff = _file_chunk("a.py", 2)
+        self.assertEqual(commitclerk.budget_diff(diff, 10_000), diff)
+
+    def test_every_file_survives_an_oversized_diff(self):
+        # Head-truncation would drop z.py entirely: it sorts last and the first
+        # file alone blows the budget.
+        diff = _file_chunk("a.py", 500) + _file_chunk("m.py", 500) + _file_chunk("z.py", 500)
+        result = commitclerk.budget_diff(diff, 2_000)
+        for name in ("a.py", "m.py", "z.py"):
+            with self.subTest(name=name):
+                self.assertIn(f"diff --git a/{name} b/{name}", result)
+                self.assertIn(f"line 0 in {name}", result)
+
+    def test_result_respects_the_limit_and_marks_what_it_dropped(self):
+        diff = _file_chunk("a.py", 500) + _file_chunk("z.py", 500)
+        result = commitclerk.budget_diff(diff, 2_000)
+        self.assertLessEqual(len(result), 2_000)
+        self.assertIn("lines truncated ...]", result)
+
+    def test_a_small_file_is_kept_whole_next_to_a_huge_one(self):
+        diff = _file_chunk("huge.py", 2_000) + _file_chunk("tiny.py", 2)
+        result = commitclerk.budget_diff(diff, 3_000)
+        self.assertIn("line 0 in tiny.py", result)
+        self.assertIn("line 1 in tiny.py", result)
+
+    def test_single_file_falls_back_to_head_truncation(self):
+        result = commitclerk.budget_diff(_file_chunk("a.py", 500), 400)
+        self.assertLessEqual(len(result), 400 + len(_HEAD_CUT_NOTE))
+        self.assertIn("truncated", result)
+
+    def test_headers_alone_over_budget_still_respects_the_limit(self):
+        diff = "".join(_file_chunk(f"f{i}.py", 5) for i in range(200))
+        result = commitclerk.budget_diff(diff, 500)
+        self.assertLessEqual(len(result), 500 + len(_HEAD_CUT_NOTE))
+
+
 class TestProgName(unittest.TestCase):
     def test_git_subcommand_is_shown_as_git_clerk(self):
         self.assertEqual(commitclerk.prog_name("/usr/local/bin/git-clerk"), "git clerk")

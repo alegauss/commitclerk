@@ -47,6 +47,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | Any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL`. |
+| 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
 
@@ -109,7 +110,7 @@ example below.
 | `-m`, `--message TITLE` | — | Use `TITLE` verbatim as the commit title; the AI writes only the body bullets. |
 | `--dry-run` | off | Print the generated message and exit without committing. |
 | `--model MODEL` | `gpt-4o-mini` (or `$OPENAI_MODEL`) | Chat Completions model to call. |
-| `--max-chars N` | `60000` | Truncate the diff to `N` characters before sending it to the API. |
+| `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model. |
 | `--version` | — | Print the version and exit. |
 
 ### Examples
@@ -127,7 +128,7 @@ clerk --dry-run
 # Use a stronger model for a large or subtle change
 clerk --model gpt-4o
 
-# Very large diff: send more context
+# Very large diff: raise the budget so less of each file is trimmed
 clerk --max-chars 120000
 ```
 
@@ -185,9 +186,9 @@ The same rule set also keeps titles imperative and under 72 characters, keeps bo
 ## How it works
 
 ```
-git diff --staged ──▶ truncate to --max-chars ──▶ doc-only? ──▶ build prompt
-                                                                    │
-                                     Chat Completions API ◀─────────┘
+git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──▶ build prompt
+                                                                          │
+                                           Chat Completions API ◀─────────┘
                                                 │
                               message ──▶ print ──▶ git commit -F -
 ```
@@ -230,7 +231,7 @@ Use `-m "<your title>"`. The AI then writes only the body, and the framing of th
 <details>
 <summary><strong>The diff got truncated</strong></summary>
 
-Diffs are cut at 60 000 characters by default. Raise it with `--max-chars`, or — better — split the change into smaller commits.
+The diff budget is 60 000 characters by default. Past that, each file is trimmed to a fair share and marked with `[... N lines truncated ...]` — every file still reaches the model, but large ones arrive incomplete. Raise the budget with `--max-chars`, or — better — split the change into smaller commits.
 </details>
 
 ## Roadmap

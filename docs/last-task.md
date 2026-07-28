@@ -21,3 +21,4 @@ Format, exactly one line per task:
 
 - **T38 SHIPPED** (Block G §G.3 — POSIX wrapper + `git add -A` staging fix) — 2026-07-27.
 - **T37 SHIPPED** (Block G §G.2 — `git-clerk` entry point) — 2026-07-27.
+- **T13 SHIPPED** (Block C §C.1 — per-file diff budget) — 2026-07-27.

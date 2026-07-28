@@ -136,6 +136,94 @@ def truncate(diff: str, limit: int) -> str:
     return diff[:limit] + "\n\n[...diff truncated for context length...]"
 
 
+# Room set aside per file for its own "[... N lines truncated ...]" marker, so
+# the markers can never push the result past the caller's limit.
+_MARKER_RESERVE = 40
+
+
+def split_diff(diff: str) -> list[str]:
+    """Split a unified diff into one chunk per file, in the original order."""
+    chunks: list[str] = []
+    current: list[str] = []
+    for line in diff.splitlines(keepends=True):
+        if line.startswith("diff --git ") and current:
+            chunks.append("".join(current))
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        chunks.append("".join(current))
+    return chunks
+
+
+def _split_header(chunk: str) -> tuple[list[str], list[str]]:
+    """Separate a file chunk's header (up to the first hunk) from its body."""
+    lines = chunk.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        if line.startswith("@@"):
+            return lines[:i], lines[i:]
+    return lines, []
+
+
+def _allocate_round_robin(bodies: list[list[str]], remaining: int) -> list[int]:
+    """How many leading lines of each body fit, handing out one line at a time."""
+    taken = [0] * len(bodies)
+    done = [not body for body in bodies]
+    while remaining > 0 and not all(done):
+        for i, body in enumerate(bodies):
+            if done[i]:
+                continue
+            cost = len(body[taken[i]]) if taken[i] < len(body) else remaining + 1
+            if cost > remaining:
+                done[i] = True
+                continue
+            taken[i] += 1
+            remaining -= cost
+    return taken
+
+
+def budget_diff(diff: str, limit: int) -> str:
+    """Fit `diff` into `limit` chars while keeping every file visible.
+
+    Head-truncation hides whole files: `git diff` orders by path, not by
+    importance, so cutting at N characters can drop the very files the commit
+    was about. Instead every file keeps its header, and the remaining budget is
+    handed out **round-robin** one line at a time — proportional shares would
+    just reproduce the same bias towards large files.
+    """
+    if len(diff) <= limit:
+        return diff
+
+    chunks = split_diff(diff)
+    if len(chunks) <= 1:
+        # One file: there is nothing to be fair between.
+        return truncate(diff, limit)
+
+    headers, bodies = [], []
+    for chunk in chunks:
+        header, body = _split_header(chunk)
+        headers.append(header)
+        bodies.append(body)
+
+    reserved = sum(len("".join(h)) + _MARKER_RESERVE for h in headers)
+    taken = _allocate_round_robin(bodies, limit - reserved)
+
+    out = []
+    for i in range(len(chunks)):
+        text = "".join(headers[i] + bodies[i][:taken[i]])
+        dropped = len(bodies[i]) - taken[i]
+        if dropped:
+            if text and not text.endswith("\n"):
+                text += "\n"
+            text += f"[... {dropped} lines truncated ...]\n"
+        out.append(text)
+
+    result = "".join(out)
+    # Only reachable when the headers alone overrun the budget (a commit with a
+    # very large number of files); the caller's limit still wins.
+    return result if len(result) <= limit else truncate(result, limit)
+
+
 def call_openai(
     api_key: str,
     model: str,
@@ -209,7 +297,8 @@ def main() -> int:
         "--max-chars",
         type=int,
         default=MAX_DIFF_CHARS,
-        help="Truncate the diff to this many chars before sending.",
+        help="Budget for the diff, in characters. Oversized diffs are trimmed per file "
+             "so every changed file stays visible to the model.",
     )
     args = parser.parse_args()
 
@@ -225,7 +314,7 @@ def main() -> int:
 
     files = get_staged_files()
     doc_only = is_doc_only(files)
-    diff = truncate(diff, args.max_chars)
+    diff = budget_diff(diff, args.max_chars)
 
     if args.message:
         body = call_openai(api_key, args.model, diff, files, title=args.message, doc_only=doc_only)

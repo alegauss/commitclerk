@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `OPENAI_API_KEY`, stages everything, and forwards its arguments to
   `commitclerk.py`. macOS and Linux users no longer need to hand-roll an alias.
 
+### Changed
+
+- **Large diffs are now trimmed per file instead of cut off at the end.**
+  `--max-chars` used to chop the diff at N characters, which meant a big commit's
+  later files — the ones `git diff` happens to sort last, not the least
+  important ones — were invisible to the model, and it wrote a confident message
+  about the handful of files it saw. Every changed file now keeps its header and
+  a round-robin share of the budget, with a `[... N lines truncated ...]` marker
+  where content was dropped. On a real 12-file, 18 KB commit at a 2 000-character
+  budget, the old behaviour showed 2 files; the new one shows all 12.
+
 ### Fixed
 
 - **The wrappers now stage with `git add -A` instead of `git add *`.** The glob
