@@ -19,6 +19,7 @@ land.
 Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
+- **T1 SHIPPED** (Block A §A.1 — provider adapter table + `--provider`) — 2026-07-27.
 - **T56 SHIPPED** (Block I §I.3 — GitHub Pages landing page + logo) — 2026-07-27.
 - **T38 SHIPPED** (Block G §G.3 — POSIX wrapper + `git add -A` staging fix) — 2026-07-27.
 - **T37 SHIPPED** (Block G §G.2 — `git-clerk` entry point) — 2026-07-27.

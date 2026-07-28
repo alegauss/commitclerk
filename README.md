@@ -48,7 +48,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Doc-aware** | Detects documentation-only commits and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
-| 🔧 **Model agnostic** | Any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL`. |
+| 🔧 **Model agnostic** | Any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL`. Providers live in a small adapter table selected by `--provider`. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
@@ -98,7 +98,7 @@ clerk             # or: git clerk
 ## Usage
 
 ```
-clerk [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N] [--version]
+clerk [-m TITLE] [--dry-run] [--provider NAME] [--model MODEL] [--max-chars N] [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -111,7 +111,8 @@ example below.
 |---|---|---|
 | `-m`, `--message TITLE` | — | Use `TITLE` verbatim as the commit title; the AI writes only the body bullets. |
 | `--dry-run` | off | Print the generated message and exit without committing. |
-| `--model MODEL` | `gpt-4o-mini` (or `$OPENAI_MODEL`) | Chat Completions model to call. |
+| `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which API provider to call. `openai` today; more providers are added to the same adapter table. |
+| `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model. |
 | `--version` | — | Print the version and exit. |
 
@@ -140,7 +141,7 @@ clerk --max-chars 120000
 |---|---|
 | `0` | Committed (or `--dry-run` printed the message). |
 | `1` | Nothing staged — run `git add` first. |
-| `2` | `OPENAI_API_KEY` is not set. |
+| `2` | Configuration problem — the provider's API key is not set, or `--provider` names a provider that does not exist. |
 | other | Passed through from `git commit`. |
 
 ## Wrappers
@@ -190,12 +191,32 @@ The same rule set also keeps titles imperative and under 72 characters, keeps bo
 ```
 git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──▶ build prompt
                                                                           │
-                                           Chat Completions API ◀─────────┘
+                                        provider API (--provider) ◀────────┘
                                                 │
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The whole thing is ~230 lines in [`commitclerk.py`](commitclerk.py). It's meant to be read, forked, and adapted to your team's conventions — start with the `_RULES` string.
+The whole thing is ~440 lines in [`commitclerk.py`](commitclerk.py). It's meant to be read, forked, and adapted to your team's conventions — start with the `_RULES` string.
+
+## Configuration
+
+There is no configuration file (yet). Everything is a flag or an environment
+variable, and **a flag always beats the environment**:
+
+| Variable | Used by | What it sets |
+|---|---|---|
+| `OPENAI_API_KEY` | `openai` | The API key. Required; read from the environment only, never written to disk. |
+| `OPENAI_MODEL` | `openai` | Default model, when `--model` is not given. |
+| `CLERK_PROVIDER` | all | Default provider, when `--provider` is not given. |
+
+Providers are a table of four slots in [`commitclerk.py`](commitclerk.py) — URL,
+headers, request payload, response extractor. Adding one is a table entry, not a
+new abstraction layer; `openai` is the only entry today.
+
+```bash
+# Pin a model for one repository, without touching your global environment
+OPENAI_MODEL=gpt-4o clerk -m "fix: reject expired tokens on refresh"
+```
 
 ## Privacy and cost
 
@@ -245,7 +266,7 @@ project's positioning and non-goals in [`docs/STRATEGY.md`](docs/STRATEGY.md).
 Ideas that would make good first contributions:
 
 - [ ] `prepare-commit-msg` git hook installer (T36)
-- [ ] Support for additional providers — Anthropic, Azure OpenAI, Ollama / local models (T1–T4)
+- [ ] Support for additional providers — Anthropic, Azure OpenAI, Ollama / local models (T2–T4)
 - [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing (T31)
 - [ ] A configuration file for project-specific commit rules (T25)
 - [ ] `clerk --lint`: validate an existing message with no API call, as a `commit-msg` hook (T28)

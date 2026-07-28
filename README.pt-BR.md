@@ -13,7 +13,7 @@
 [![CI](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml/badge.svg)](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-fe5196.svg)](https://www.conventionalcommits.org/)
 
-[Site](https://alegauss.github.io/commitclerk/) · [Início rápido](#início-rápido) · [Uso](#uso) · [Por que existe](#por-que-existe) · [Contribuindo](CONTRIBUTING.md) · [English](README.md)
+[Site](https://alegauss.github.io/commitclerk/) · [Início rápido](#início-rápido) · [Uso](#uso) · [Por que existe](#por-que-existe) · [Configuração](#configuração) · [Contribuindo](CONTRIBUTING.md) · [English](README.md)
 
 </div>
 
@@ -46,7 +46,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Consciente de documentação** | Detecta commits só de documentação e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
-| 🔧 **Independente de modelo** | Qualquer modelo da API Chat Completions via `--model` ou `$OPENAI_MODEL`. |
+| 🔧 **Independente de modelo** | Qualquer modelo da API Chat Completions via `--model` ou `$OPENAI_MODEL`. Os provedores ficam em uma pequena tabela de adaptadores, escolhida por `--provider`. |
 | 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
 
 ## Requisitos
@@ -95,7 +95,7 @@ clerk             # ou: git clerk
 ## Uso
 
 ```
-clerk [-m TÍTULO] [--dry-run] [--model MODELO] [--max-chars N] [--version]
+clerk [-m TÍTULO] [--dry-run] [--provider NOME] [--model MODELO] [--max-chars N] [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -108,7 +108,8 @@ todos os exemplos abaixo.
 |---|---|---|
 | `-m`, `--message TÍTULO` | — | Usa `TÍTULO` literalmente como título do commit; a IA escreve apenas os bullets do corpo. |
 | `--dry-run` | desligado | Imprime a mensagem gerada e sai sem commitar. |
-| `--model MODELO` | `gpt-4o-mini` (ou `$OPENAI_MODEL`) | Modelo da API Chat Completions. |
+| `--provider NOME` | `openai` (ou `$CLERK_PROVIDER`) | Qual provedor de API chamar. Hoje só `openai`; novos provedores entram na mesma tabela de adaptadores. |
+| `--model MODELO` | o padrão do provedor — `gpt-4o-mini` (ou `$OPENAI_MODEL`) no `openai` | Modelo a chamar. |
 | `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo. |
 | `--version` | — | Mostra a versão e sai. |
 
@@ -137,7 +138,7 @@ clerk --max-chars 120000
 |---|---|
 | `0` | Commit feito (ou `--dry-run` imprimiu a mensagem). |
 | `1` | Nada no stage — rode `git add` antes. |
-| `2` | `OPENAI_API_KEY` não está definida. |
+| `2` | Problema de configuração — a chave da API do provedor não está definida, ou `--provider` aponta para um provedor que não existe. |
 | outros | Repassados do `git commit`. |
 
 ## Wrappers
@@ -182,6 +183,27 @@ O `commitclerk` trata isso de duas formas:
 
 O mesmo conjunto de regras mantém títulos no imperativo e abaixo de 72 caracteres, corpos com 2 a 6 bullets sobre o *porquê* em vez de repetir o diff arquivo por arquivo, e proíbe emojis, headers e blocos de código.
 
+## Configuração
+
+Ainda não existe arquivo de configuração. Tudo é flag ou variável de ambiente, e
+**a flag sempre vence a variável**:
+
+| Variável | Usada por | O que define |
+|---|---|---|
+| `OPENAI_API_KEY` | `openai` | A chave da API. Obrigatória; lida só do ambiente, nunca gravada em disco. |
+| `OPENAI_MODEL` | `openai` | Modelo padrão, quando `--model` não é passado. |
+| `CLERK_PROVIDER` | todos | Provedor padrão, quando `--provider` não é passado. |
+
+Os provedores são uma tabela de quatro campos no [`commitclerk.py`](commitclerk.py)
+— URL, headers, payload da requisição e extrator da resposta. Adicionar um é
+acrescentar uma entrada na tabela, não criar uma camada de abstração; hoje
+`openai` é a única entrada.
+
+```bash
+# Fixe um modelo para um repositório, sem mexer no ambiente global
+OPENAI_MODEL=gpt-4o clerk -m "fix: reject expired tokens on refresh"
+```
+
 ## Privacidade e custo
 
 - **Seu diff staged é enviado para a API da OpenAI.** Não use em repositórios cujo conteúdo não pode sair da sua máquina. Confira a política da sua empresa antes.
@@ -198,7 +220,7 @@ e o posicionamento e os não-objetivos em [`docs/STRATEGY.md`](docs/STRATEGY.md)
 Ideias que dariam boas primeiras contribuições:
 
 - [ ] Instalador de hook `prepare-commit-msg` (T36)
-- [ ] Suporte a outros provedores — Anthropic, Azure OpenAI, Ollama / modelos locais (T1–T4)
+- [ ] Suporte a outros provedores — Anthropic, Azure OpenAI, Ollama / modelos locais (T2–T4)
 - [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar (T31)
 - [ ] Arquivo de configuração com regras de commit por projeto (T25)
 - [ ] `clerk --lint`: validar uma mensagem existente sem chamar a API, como hook `commit-msg` (T28)

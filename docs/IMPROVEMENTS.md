@@ -11,47 +11,27 @@ Sections are numbered to match the roadmap's blocks (`§A.1`, `§B.2`, …).
 
 ## A — Provider portability
 
-Today `API_URL` is a module constant pointing at
-`https://api.openai.com/v1/chat/completions`, and the payload is
-Chat-Completions-shaped. That single constant is the tool's addressable-market
-ceiling: any organisation that cannot send source code to OpenAI cannot use
-commitclerk at all, no matter how good the prompt is.
+The `PROVIDERS` table exists, but `openai` is still its only entry: the base URL
+is a per-provider constant and the request shape is Chat-Completions only. Until
+that changes, the addressable market is still capped at organisations allowed to
+send source code to OpenAI, no matter how good the prompt is.
 
-### A.1 — An adapter table, not an abstraction layer
+### A.1 — One flag reaches most of the market
 
-The temptation is a `Provider` base class with subclasses. Resist it: this is a
-one-file, zero-dependency tool and the whole point is that a reader can hold it
-in their head. The right shape is a **dict of small dicts** —
-
-```python
-PROVIDERS = {
-    "openai": {
-        "url": "{base}/chat/completions",
-        "headers": lambda key: {"Authorization": f"Bearer {key}"},
-        "payload": _openai_payload,
-        "extract": lambda d: d["choices"][0]["message"]["content"],
-        "key_env": "OPENAI_API_KEY",
-        "base_env": "OPENAI_BASE_URL",
-        "default_base": "https://api.openai.com/v1",
-    },
-    ...
-}
-```
-
-— roughly forty lines total for three providers, with `call_openai()` becoming
-`call_model(provider, ...)`. Two payload builders and two extractors cover
-essentially the entire market, because most vendors clone the OpenAI shape.
-
-**`--base-url` (T2) is deliberately separate from `--provider` (T1) and is worth
-more.** Ollama, LM Studio, vLLM, llama.cpp's server, OpenRouter, Groq, Together,
-DeepSeek, Fireworks and Azure all speak the OpenAI wire format. One flag and one
-environment variable make every one of them work with no adapter, no test matrix,
-and no vendor-specific bug surface. Ship `--base-url` first even if the adapter
-table slips.
+**`--base-url` (T2) is the cheapest portability win in the whole roadmap, and it
+is worth more than any single adapter.** Ollama, LM Studio, vLLM, llama.cpp's
+server, OpenRouter, Groq, Together, DeepSeek, Fireworks and Azure all speak the
+OpenAI wire format. One flag and one environment variable make every one of them
+work with no new adapter, no test matrix, and no vendor-specific bug surface —
+the table's `openai` entry already knows how to talk to all of them.
 
 Precedence must be explicit and documented, because a user with both a global
 `OPENAI_BASE_URL` and a project config will otherwise be baffled: **CLI flag >
 environment > project config > user config > provider default**.
+
+Keep resisting the `Provider` base class. Two payload builders and two extractors
+cover essentially the entire market, because most vendors clone the OpenAI shape;
+the table stays readable in one sitting, which a class hierarchy would not.
 
 ### A.2 — Anthropic is the one genuinely different shape
 
@@ -73,13 +53,13 @@ offer a path instead of a warning.
 
 Two caveats to document rather than paper over: small local models write
 noticeably weaker bodies, and the correct mitigation is the house-style few-shot
-work in §B.1 rather than a bigger prompt. And a local model with no key must not
-fall through the `OPENAI_API_KEY is not set` guard — that check has to move from
-`main()` into the provider, since some providers have no key at all.
+work in §B.1 rather than a bigger prompt. The keyless path itself is already
+handled: `key_required` lives in the provider table, so a local model is not
+blocked by a key check meant for a hosted API.
 
 ### A.4 — Failure handling is currently all-or-nothing
 
-`call_openai` raises `SystemExit` on the first `HTTPError`. A single 429 —
+`call_model` raises `SystemExit` on the first `HTTPError`. A single 429 —
 routine on a free tier — throws away the commit. Exponential backoff with jitter
 on 429 and 5xx (3 attempts, ~1s/2s/4s, honouring `Retry-After` when present)
 costs about fifteen lines and removes the most common reason a user gives up.

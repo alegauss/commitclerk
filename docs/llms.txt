@@ -18,20 +18,22 @@ or GitHub. It calls the OpenAI Chat Completions API using the key in `OPENAI_API
 - **Documentation-only detection**: if every staged file is documentation (`.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, anything under `docs/`, or a known name like CHANGELOG / README / ROADMAP / CONTRIBUTING), the prompt switches to a docs-only framing — use the `docs:` prefix and describe the documentation change itself ("record X in the changelog"), never "implement X". This exists because a diff-only generator reading changelog prose about already-shipped work will mislabel a Markdown-only commit as `feat:`, and `git log --grep` plus release tooling then inherit the lie.
 - **Conventional Commits**: emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes; imperative titles under 72 characters; bodies of 2–6 bullets about *why*; no emojis, headers, or code fences.
 - **Dry run**: `--dry-run` prints the message and commits nothing.
-- **Model agnostic**: any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL` (default `gpt-4o-mini`).
+- **Model agnostic**: any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL` (default `gpt-4o-mini`). The provider is chosen with `--provider` / `$CLERK_PROVIDER` from an adapter table (URL, headers, payload, response extractor); `openai` is the only entry today.
 - **Wrappers**: `run-commit.cmd` (Windows) and `run-commit.sh` (POSIX) check the API key, stage everything with `git add -A`, then pass arguments through. The Python script itself never stages anything.
 
 ## Usage
 
-`clerk [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N] [--version]`
+`clerk [-m TITLE] [--dry-run] [--provider NAME] [--model MODEL] [--max-chars N] [--version]`
 
 - `-m`, `--message TITLE` — use TITLE verbatim as the commit title; the AI writes only the body.
 - `--dry-run` — print the message and exit without committing.
-- `--model MODEL` — Chat Completions model (default `gpt-4o-mini`, or `$OPENAI_MODEL`).
-- `--max-chars N` — truncate the diff before sending it to the API (default `60000`).
+- `--provider NAME` — API provider to call (default `openai`, or `$CLERK_PROVIDER`).
+- `--model MODEL` — model to call (default: the provider's default; `gpt-4o-mini` or `$OPENAI_MODEL` for `openai`).
+- `--max-chars N` — character budget for the diff; a larger diff is trimmed per file so every changed file still reaches the model (default `60000`).
 - `--version` — print the version and exit.
 
-Exit codes: `0` committed (or dry-run printed), `1` nothing staged, `2` `OPENAI_API_KEY` not set,
+Exit codes: `0` committed (or dry-run printed), `1` nothing staged, `2` configuration problem
+(the provider's API key is not set, or the provider does not exist),
 anything else passed through from `git commit`.
 
 ## Requirements

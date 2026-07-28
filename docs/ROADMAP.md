@@ -60,9 +60,8 @@ source code to OpenAI. Local models are the single biggest unlock.* → [§A](IM
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T1 | 💭 | Extract a provider adapter table — `(endpoint, headers, payload builder, response extractor)` selected by `--provider` / `$CLERK_PROVIDER`, default `openai`. Still `urllib`, still one file. → §A.1 | — |
-| T2 | 💭 | `--base-url` / `$OPENAI_BASE_URL`: any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, OpenRouter, Groq, Together, Azure) works with zero new code. The cheapest possible portability win. → §A.1 | T1 |
-| T3 | 💭 | Anthropic Messages adapter (`/v1/messages`, `x-api-key`, `anthropic-version`, `system` as a top-level field, `content` blocks in the response). → §A.2 | T1 |
+| T2 | 💭 | `--base-url` / `$OPENAI_BASE_URL`: any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, OpenRouter, Groq, Together, Azure) works with zero new code. The cheapest possible portability win. → §A.1 | — |
+| T3 | 💭 | Anthropic Messages adapter (`/v1/messages`, `x-api-key`, `anthropic-version`, `system` as a top-level field, `content` blocks in the response). → §A.2 | — |
 | T4 | 💭 | `--provider ollama` preset requiring no API key, documented as the "your diff never leaves this machine" path. → §A.3 | T2 |
 | T5 | 💭 | Retry with exponential backoff + jitter on 429/5xx, plus `--timeout`. One transient 429 currently loses the whole commit. → §A.4 | — |
 | T6 | 💭 | Capability fallback: if a model rejects `temperature` or the parameter name differs (reasoning models), retry once without it instead of dying with a raw API error. → §A.4 | T5 |
@@ -130,7 +129,7 @@ is `git commit --amend`.* → [§F](IMPROVEMENTS.md#f--interaction--ux)
 | --- | --- | --- | --- |
 | T30 | 💭 | Interactive confirm loop — `[a]ccept · [e]dit · [r]egenerate · [q]uit` — with `--yes` to keep the current non-interactive behaviour for scripts. → §F.1 | — |
 | T31 | 💭 | `--edit`: open the generated message in `$EDITOR` / `core.editor` before committing. → §F.1 | T30 |
-| T32 | 💭 | Stream the completion so a slow or local model shows progress instead of a frozen terminal for 30 seconds. → §F.2 | T1 |
+| T32 | 💭 | Stream the completion so a slow or local model shows progress instead of a frozen terminal for 30 seconds. → §F.2 | — |
 | T33 | 💭 | `--verbose`: model, prompt/completion tokens, estimated cost, elapsed time, prompt version. `--quiet` for hook use. Cost is currently invisible. → §F.3 | T52 |
 | T34 | 💭 | `--amend`: build the diff from `HEAD` plus the staged changes and pass the existing message as context, instead of describing only the fixup. → §F.4 | — |
 | T35 | 💭 | Colour output (respecting `NO_COLOR` and non-TTY) and a documented error taxonomy with distinct exit codes per failure class. Today an API failure and a git failure are indistinguishable to a script. → §F.5 | — |
@@ -179,7 +178,7 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 | T50 | 💭 | Golden fixture corpus: real diffs (doc-only, mixed, rename-heavy, lockfile-dominated, binary) with expected classification, asserted **offline** against the deterministic parts of the pipeline. → §J.1 | T14 |
 | T51 | 💭 | Prompt evaluation harness: run the corpus through a live model behind an opt-in env flag, score with a judge model, report regressions. The safety net that makes prompt changes reviewable. → §J.2 | T50 |
 | T52 | 💭 | `PROMPT_VERSION` constant, surfaced by `--verbose` and recorded in eval output, so a quality result is attributable to a specific prompt. → §J.2 | — |
-| T53 | 💭 | A fake-provider test double so end-to-end paths (commit, hook, split) are testable with no API key and no network. → §J.3 | T1 |
+| T53 | 💭 | A fake-provider test double so end-to-end paths (commit, hook, split) are testable with no API key and no network. → §J.3 | — |
 | T54 | 💭 | A `--help` snapshot test, so a CLI surface change is always a reviewed diff and never an accident. → §J.4 | — |
 | T55 | 💭 | Split `commitclerk.py` **only** if it passes ~800 lines, and then into a package that still builds a single-file artifact — the "read the whole thing before trusting it" promise survives the refactor. → §J.5 | — |
 

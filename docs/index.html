@@ -401,7 +401,7 @@
       <div class="card reveal">
         <div class="ico">🔧</div>
         <h3>Model agnostic</h3>
-        <p>Any OpenAI Chat Completions model via <code>--model</code> or <code>$OPENAI_MODEL</code>. Cheap by default, stronger when the change is subtle.</p>
+        <p>Any OpenAI Chat Completions model via <code>--model</code> or <code>$OPENAI_MODEL</code>. Cheap by default, stronger when the change is subtle — and <code>--provider</code> picks the API from a small adapter table.</p>
       </div>
     </div>
   </div>
@@ -464,7 +464,7 @@
       <p>Installing gives you three identical entry points: <code>clerk</code>, <code>commitclerk</code>, and <code>git clerk</code>.</p>
     </div>
 
-    <div class="codeblock reveal" style="max-width:760px;margin:0 auto 28px;text-align:center">clerk [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N] [--version]</div>
+    <div class="codeblock reveal" style="max-width:760px;margin:0 auto 28px;text-align:center">clerk [-m TITLE] [--dry-run] [--provider NAME] [--model MODEL] [--max-chars N] [--version]</div>
 
     <div class="tbl-wrap reveal">
       <table>
@@ -472,8 +472,9 @@
         <tbody>
           <tr><td><code>-m</code>, <code>--message TITLE</code></td><td>—</td><td>Use <b>TITLE</b> verbatim as the commit title; the AI writes only the body bullets.</td></tr>
           <tr><td><code>--dry-run</code></td><td>off</td><td>Print the generated message and exit without committing.</td></tr>
-          <tr><td><code>--model MODEL</code></td><td><code>gpt-4o-mini</code></td><td>Chat Completions model to call — or set <code>$OPENAI_MODEL</code>.</td></tr>
-          <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Truncate the diff to <b>N</b> characters before sending it to the API.</td></tr>
+          <tr><td><code>--provider NAME</code></td><td><code>openai</code></td><td>Which API provider to call — or set <code>$CLERK_PROVIDER</code>. Providers are entries in a small adapter table.</td></tr>
+          <tr><td><code>--model MODEL</code></td><td><code>gpt-4o-mini</code></td><td>Model to call — the provider's default, or set <code>$OPENAI_MODEL</code>.</td></tr>
+          <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Character budget for the diff. A larger diff is trimmed <b>per file</b>, so every changed file still reaches the model.</td></tr>
           <tr><td><code>--version</code></td><td>—</td><td>Print the version and exit.</td></tr>
         </tbody>
       </table>
@@ -501,7 +502,7 @@ clerk <span class="g">--model</span> gpt-4o</div>
             <tbody>
               <tr><td><code>0</code></td><td>Committed (or <code>--dry-run</code> printed the message).</td></tr>
               <tr><td><code>1</code></td><td>Nothing staged — run <code>git add</code> first.</td></tr>
-              <tr><td><code>2</code></td><td><code>OPENAI_API_KEY</code> is not set.</td></tr>
+              <tr><td><code>2</code></td><td>Configuration problem — the provider's API key is not set, or the provider does not exist.</td></tr>
               <tr><td>other</td><td>Passed through from <code>git commit</code>.</td></tr>
             </tbody>
           </table>

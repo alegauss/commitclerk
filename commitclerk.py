@@ -2,9 +2,10 @@
 """commitclerk - AI-powered git commit messages.
 
 Generates a commit message (short imperative title + bulleted summary body)
-from the staged diff using the OpenAI Chat Completions API.
+from the staged diff by calling an LLM provider.
 
-Reads the API key from OPENAI_API_KEY. No third-party dependencies.
+Reads the API key from the provider's key variable (OPENAI_API_KEY for the
+default provider). No third-party dependencies.
 
 Usage (installed as `clerk`, `commitclerk` or `git clerk`, or run the file
 directly with `python commitclerk.py`):
@@ -12,11 +13,13 @@ directly with `python commitclerk.py`):
     clerk -m "docs: fix X"      # use this exact title; AI writes only the body
     clerk --dry-run             # print message, do not commit
     clerk --model gpt-4o-mini
+    clerk --provider openai     # select the API provider
     git clerk                   # same tool, as a native git subcommand
 
 Environment:
-    OPENAI_API_KEY   required
-    OPENAI_MODEL     optional, overrides default model
+    OPENAI_API_KEY   required by the openai provider
+    OPENAI_MODEL     optional, overrides the openai provider's default model
+    CLERK_PROVIDER   optional, selects the provider (default: openai)
 
 Why the doc-only handling: this script only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
@@ -37,9 +40,10 @@ import urllib.request
 
 __version__ = "0.2.1"
 
-API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_PROVIDER = "openai"
 MAX_DIFF_CHARS = 60_000
+REQUEST_TIMEOUT = 60
 
 # A commit touching ONLY these counts as documentation-only: it gets a docs:
 # prefix and a framing that describes the doc change itself.
@@ -224,50 +228,129 @@ def budget_diff(diff: str, limit: int) -> str:
     return result if len(result) <= limit else truncate(result, limit)
 
 
-def call_openai(
-    api_key: str,
-    model: str,
+def _openai_payload(model: str, system: str, user: str) -> dict:
+    return {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.2,
+    }
+
+
+def _openai_extract(data: dict) -> str:
+    return data["choices"][0]["message"]["content"]
+
+
+# A provider is four small slots — url, headers, payload, extract — in a table,
+# not a class hierarchy: this file is meant to be read in one sitting, and those
+# four slots are exactly what differs between vendors.
+PROVIDERS: dict[str, dict] = {
+    "openai": {
+        "label": "OpenAI",
+        "default_base": "https://api.openai.com/v1",
+        "path": "/chat/completions",
+        "key_env": "OPENAI_API_KEY",
+        "key_required": True,
+        "model_env": "OPENAI_MODEL",
+        "default_model": DEFAULT_MODEL,
+        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+        "payload": _openai_payload,
+        "extract": _openai_extract,
+    },
+}
+
+
+def resolve_provider(name: str) -> dict | None:
+    """The adapter for `name`, or None when no such provider is registered.
+
+    argparse validates `--provider`, but $CLERK_PROVIDER arrives as a default
+    and defaults skip `choices` — so this lookup has to be able to fail.
+    """
+    return PROVIDERS.get(name)
+
+
+def resolve_model(spec: dict, cli_model: str | None = None) -> str:
+    """Model to call: CLI flag > provider's env var > provider default."""
+    if cli_model:
+        return cli_model
+    env = spec.get("model_env")
+    return (os.environ.get(env) if env else None) or spec["default_model"]
+
+
+def api_key_for(spec: dict) -> str | None:
+    env = spec.get("key_env")
+    return os.environ.get(env) if env else None
+
+
+def missing_key_env(spec: dict) -> str | None:
+    """Env var the user must set, when this provider needs a key and has none.
+
+    A provider that needs no key at all (a local model) must not be blocked by
+    a key check, so the check belongs to the provider, not to main().
+    """
+    env = spec.get("key_env")
+    if env and spec.get("key_required", True) and not os.environ.get(env):
+        return env
+    return None
+
+
+def provider_url(spec: dict) -> str:
+    return spec["default_base"].rstrip("/") + spec["path"]
+
+
+def build_user_prompt(
     diff: str,
     files: list[str],
     *,
     title: str | None = None,
     doc_only: bool = False,
 ) -> str:
-    body_only = title is not None
     parts = ["Files changed:"] + [f"- {f}" for f in files]
     if doc_only:
         parts += ["", _DOC_ONLY_NOTE]
-    if body_only:
+    if title is not None:
         parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
     parts += ["", "Unified diff:", diff]
-    user_prompt = "\n".join(parts)
+    return "\n".join(parts)
 
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": _system_prompt(body_only=body_only)},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.2,
-    }
+
+def call_model(
+    spec: dict,
+    api_key: str | None,
+    model: str,
+    diff: str,
+    files: list[str],
+    *,
+    title: str | None = None,
+    doc_only: bool = False,
+    timeout: int = REQUEST_TIMEOUT,
+) -> str:
+    payload = spec["payload"](
+        model,
+        _system_prompt(body_only=title is not None),
+        build_user_prompt(diff, files, title=title, doc_only=doc_only),
+    )
+
+    headers = {"Content-Type": "application/json"}
+    headers.update(spec["headers"](api_key))
     req = urllib.request.Request(
-        API_URL,
+        provider_url(spec),
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
+        headers=headers,
         method="POST",
     )
+    label = spec["label"]
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="ignore")
-        raise SystemExit(f"OpenAI API error {exc.code}: {body}")
+        raise SystemExit(f"{label} API error {exc.code}: {body}")
     except urllib.error.URLError as exc:
-        raise SystemExit(f"OpenAI API request failed: {exc}")
-    return data["choices"][0]["message"]["content"].strip()
+        raise SystemExit(f"{label} API request failed: {exc}")
+    return spec["extract"](data).strip()
 
 
 def main() -> int:
@@ -289,9 +372,16 @@ def main() -> int:
              "writes only the body bullets (most reliable way to avoid a misread of intent).",
     )
     parser.add_argument(
+        "--provider",
+        default=os.environ.get("CLERK_PROVIDER", DEFAULT_PROVIDER),
+        choices=sorted(PROVIDERS),
+        help=f"API provider (default: {DEFAULT_PROVIDER} or $CLERK_PROVIDER).",
+    )
+    parser.add_argument(
         "--model",
-        default=os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
-        help=f"OpenAI model (default: {DEFAULT_MODEL} or $OPENAI_MODEL).",
+        default=None,
+        help="Model to call (default: the provider's default model, or its model "
+             f"environment variable; {DEFAULT_MODEL} / $OPENAI_MODEL for openai).",
     )
     parser.add_argument(
         "--max-chars",
@@ -302,10 +392,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        print("Error: OPENAI_API_KEY is not set.", file=sys.stderr)
+    spec = resolve_provider(args.provider)
+    if spec is None:
+        known = ", ".join(sorted(PROVIDERS))
+        print(
+            f"Error: unknown provider '{args.provider}'. Known providers: {known}.",
+            file=sys.stderr,
+        )
         return 2
+
+    missing = missing_key_env(spec)
+    if missing:
+        print(f"Error: {missing} is not set.", file=sys.stderr)
+        return 2
+    api_key = api_key_for(spec)
+    model = resolve_model(spec, args.model)
 
     diff = get_staged_diff()
     if not diff.strip():
@@ -317,10 +418,10 @@ def main() -> int:
     diff = budget_diff(diff, args.max_chars)
 
     if args.message:
-        body = call_openai(api_key, args.model, diff, files, title=args.message, doc_only=doc_only)
+        body = call_model(spec, api_key, model, diff, files, title=args.message, doc_only=doc_only)
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
-        message = call_openai(api_key, args.model, diff, files, doc_only=doc_only)
+        message = call_model(spec, api_key, model, diff, files, doc_only=doc_only)
 
     if args.dry_run:
         print(message)

@@ -6,6 +6,7 @@
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -180,6 +181,124 @@ class TestSystemPrompt(unittest.TestCase):
                 self.assertIn("imperative", prompt)
                 self.assertIn("Conventional Commits", prompt)
                 self.assertIn("docs:", prompt)
+
+
+class TestProviderTable(unittest.TestCase):
+    _SLOTS = ("label", "default_base", "path", "default_model", "headers", "payload", "extract")
+
+    def test_every_provider_fills_every_slot(self):
+        for name, spec in commitclerk.PROVIDERS.items():
+            for slot in self._SLOTS:
+                with self.subTest(provider=name, slot=slot):
+                    self.assertIn(slot, spec)
+
+    def test_the_four_adapter_slots_are_callable(self):
+        for name, spec in commitclerk.PROVIDERS.items():
+            for slot in ("headers", "payload", "extract"):
+                with self.subTest(provider=name, slot=slot):
+                    self.assertTrue(callable(spec[slot]))
+
+    def test_default_provider_is_registered(self):
+        self.assertIn(commitclerk.DEFAULT_PROVIDER, commitclerk.PROVIDERS)
+
+    def test_resolve_known_and_unknown(self):
+        self.assertIs(
+            commitclerk.resolve_provider("openai"), commitclerk.PROVIDERS["openai"]
+        )
+        # $CLERK_PROVIDER bypasses argparse's `choices`, so this must not raise.
+        self.assertIsNone(commitclerk.resolve_provider("nope"))
+
+    def test_url_joins_base_and_path_without_doubling_the_slash(self):
+        spec = {"default_base": "http://localhost:11434/v1/", "path": "/chat/completions"}
+        self.assertEqual(
+            commitclerk.provider_url(spec), "http://localhost:11434/v1/chat/completions"
+        )
+
+    def test_openai_url_is_unchanged(self):
+        self.assertEqual(
+            commitclerk.provider_url(commitclerk.PROVIDERS["openai"]),
+            "https://api.openai.com/v1/chat/completions",
+        )
+
+
+class TestResolveModel(unittest.TestCase):
+    def setUp(self):
+        self.spec = commitclerk.PROVIDERS["openai"]
+
+    def test_cli_flag_wins_over_environment(self):
+        with mock.patch.dict(os.environ, {"OPENAI_MODEL": "from-env"}):
+            self.assertEqual(commitclerk.resolve_model(self.spec, "from-cli"), "from-cli")
+
+    def test_environment_wins_over_provider_default(self):
+        with mock.patch.dict(os.environ, {"OPENAI_MODEL": "from-env"}):
+            self.assertEqual(commitclerk.resolve_model(self.spec), "from-env")
+
+    def test_falls_back_to_the_provider_default(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(commitclerk.resolve_model(self.spec), commitclerk.DEFAULT_MODEL)
+
+    def test_provider_without_a_model_env_uses_its_default(self):
+        spec = {"default_model": "local-model"}
+        self.assertEqual(commitclerk.resolve_model(spec), "local-model")
+
+
+class TestApiKeyResolution(unittest.TestCase):
+    def test_missing_required_key_names_the_variable(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            spec = commitclerk.PROVIDERS["openai"]
+            self.assertEqual(commitclerk.missing_key_env(spec), "OPENAI_API_KEY")
+            self.assertIsNone(commitclerk.api_key_for(spec))
+
+    def test_present_key_is_read_from_the_provider_variable(self):
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
+            spec = commitclerk.PROVIDERS["openai"]
+            self.assertIsNone(commitclerk.missing_key_env(spec))
+            self.assertEqual(commitclerk.api_key_for(spec), "sk-test")
+
+    def test_keyless_provider_is_never_blocked(self):
+        # A local model has no key at all; the guard must not fire for it.
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(commitclerk.missing_key_env({"default_model": "x"}))
+            self.assertIsNone(commitclerk.missing_key_env({"key_env": "K", "key_required": False}))
+
+
+class TestOpenAIAdapter(unittest.TestCase):
+    def test_payload_shape(self):
+        payload = commitclerk._openai_payload("gpt-4o-mini", "SYSTEM", "USER")
+        self.assertEqual(payload["model"], "gpt-4o-mini")
+        self.assertEqual(
+            [m["role"] for m in payload["messages"]], ["system", "user"]
+        )
+        self.assertEqual(payload["messages"][0]["content"], "SYSTEM")
+        self.assertEqual(payload["messages"][1]["content"], "USER")
+        self.assertEqual(payload["temperature"], 0.2)
+
+    def test_extract_reads_the_first_choice(self):
+        data = {"choices": [{"message": {"content": "feat: do a thing"}}]}
+        self.assertEqual(commitclerk._openai_extract(data), "feat: do a thing")
+
+    def test_headers_use_bearer_authorization(self):
+        headers = commitclerk.PROVIDERS["openai"]["headers"]("sk-test")
+        self.assertEqual(headers["Authorization"], "Bearer sk-test")
+
+
+class TestBuildUserPrompt(unittest.TestCase):
+    def test_lists_files_and_the_diff(self):
+        prompt = commitclerk.build_user_prompt("DIFFBODY", ["a.py", "b.py"])
+        self.assertIn("- a.py", prompt)
+        self.assertIn("- b.py", prompt)
+        self.assertIn("DIFFBODY", prompt)
+
+    def test_doc_only_note_is_opt_in(self):
+        self.assertNotIn("every file in this commit is documentation",
+                         commitclerk.build_user_prompt("d", ["README.md"]))
+        self.assertIn("every file in this commit is documentation",
+                      commitclerk.build_user_prompt("d", ["README.md"], doc_only=True))
+
+    def test_title_is_passed_as_already_chosen(self):
+        prompt = commitclerk.build_user_prompt("d", ["a.py"], title="fix: x")
+        self.assertIn("fix: x", prompt)
+        self.assertIn("do not repeat it", prompt)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--provider` / `$CLERK_PROVIDER`, and a provider adapter table.** The API
+  endpoint, headers, request payload and response extractor are no longer
+  hard-wired module constants: they are four slots in a small table, one entry per
+  provider, selected at run time. `openai` remains the default and the only entry,
+  so nothing changes for existing users — but the key check now belongs to the
+  provider rather than to `main()`, which is what a keyless local model needs, and
+  `--model` now falls back to the selected provider's default instead of assuming
+  OpenAI's. A new **Configuration** section in both READMEs documents the
+  environment variables and their precedence.
 - **A project website and a logo.** `docs/` now doubles as a self-contained
   GitHub Pages site — <https://alegauss.github.io/commitclerk/> — covering the
   pitch, the documentation-only blind spot, the flag reference, install paths and
