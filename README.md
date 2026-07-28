@@ -45,7 +45,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🪶 **Zero dependencies** | Standard library only (`urllib`, `subprocess`, `argparse`). Drop the file in and run it. |
 | 🔗 **Git-native** | Installs as `git clerk` too, so it lives where the rest of your git muscle memory already is. |
 | ✍️ **You can own the title** | `-m "feat: add X"` uses your title verbatim and lets the AI write only the body. |
-| 📄 **Doc-aware** | Detects documentation-only commits and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
+| 📄 **Doc-aware** | Detects documentation commits — pure *and* mixed with code — and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
@@ -193,7 +193,9 @@ feat: implement real-time collaboration
 
 `commitclerk` handles this in two ways:
 
-1. **Documentation-only detection.** If every staged file is documentation — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, anything under `docs/`, or a known name like `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — the prompt switches to a docs-only framing: use the `docs:` prefix and describe *the documentation change itself* ("record X in the changelog"), never "implement X".
+1. **Documentation detection, in two flavours.** If every staged file is documentation — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, anything under `docs/`, or a known name like `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — the prompt switches to a docs-only framing: use the `docs:` prefix and describe *the documentation change itself* ("record X in the changelog"), never "implement X".
+
+   The harder case is the **mixed** commit, which is also the common one: a big CHANGELOG entry *plus* a one-line fix. There, the prompt names the documentation files, states documentation's share of the changed lines, and instructs the model to take the type prefix only from the non-documentation diff lines — so a docstring tweak beside 48 lines of changelog prose comes back as `docs:`, not `feat:`. A commit that genuinely implements a feature *and* documents it still gets `feat:`; the guard checks the code, it does not just ban the word.
 
 2. **`-m` as an override.** You know what your change is. `-m "<title>"` pins the title and reduces the model's job to summarizing the diff underneath it. This is the recommended default for any commit whose intent isn't obvious from the diff alone.
 

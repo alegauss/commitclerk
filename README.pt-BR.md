@@ -43,7 +43,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🪶 **Zero dependências** | Só biblioteca padrão (`urllib`, `subprocess`, `argparse`). Copie o arquivo e use. |
 | 🔗 **Nativo do git** | Também instala como `git clerk`, então mora onde sua memória muscular de git já está. |
 | ✍️ **O título pode ser seu** | `-m "feat: add X"` usa seu título literalmente e deixa a IA escrever só o corpo. |
-| 📄 **Consciente de documentação** | Detecta commits só de documentação e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
+| 📄 **Consciente de documentação** | Detecta commits de documentação — puros *e* misturados com código — e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
@@ -190,7 +190,9 @@ feat: implement real-time collaboration
 
 O `commitclerk` trata isso de duas formas:
 
-1. **Detecção de commits só de documentação.** Se todo arquivo no stage é documentação — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, qualquer coisa em `docs/`, ou nomes conhecidos como `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — o prompt muda para um enquadramento de documentação: usa o prefixo `docs:` e descreve *a mudança na documentação em si* ("registrar X no changelog"), nunca "implementar X".
+1. **Detecção de documentação, em dois sabores.** Se todo arquivo no stage é documentação — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, qualquer coisa em `docs/`, ou nomes conhecidos como `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — o prompt muda para um enquadramento de documentação: usa o prefixo `docs:` e descreve *a mudança na documentação em si* ("registrar X no changelog"), nunca "implementar X".
+
+   O caso difícil é o commit **misto**, que também é o mais comum: uma entrada grande de CHANGELOG *mais* uma correção de uma linha. Nele, o prompt nomeia os arquivos de documentação, informa a fatia das linhas alteradas que é documentação, e instrui o modelo a tirar o prefixo do tipo apenas das linhas que não são documentação — então um ajuste de docstring ao lado de 48 linhas de changelog volta como `docs:`, não como `feat:`. Um commit que de fato implementa uma feature *e* a documenta continua recebendo `feat:`; a proteção confere o código, não apenas proíbe a palavra.
 
 2. **`-m` como override.** Você sabe qual é a sua mudança. O `-m "<título>"` fixa o título e reduz o trabalho do modelo a resumir o diff. É o padrão recomendado para qualquer commit cuja intenção não é óbvia só pelo diff.
 

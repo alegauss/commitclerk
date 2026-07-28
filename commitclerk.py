@@ -214,6 +214,20 @@ _DOC_ONLY_NOTE = (
     "described in the diff shipped in an earlier commit; this commit only writes it down."
 )
 
+# The same caution for the far more common mixed commit. It cannot simply say "do
+# not describe a feature as implemented" — sometimes the code really does implement
+# it — so it ties the claim to the non-documentation part of the diff.
+_MIXED_DOCS_NOTE = (
+    "IMPORTANT - how to read this commit: it changes documentation ({files}) alongside "
+    "non-documentation files.{share} Prose added to documentation usually describes work "
+    "that shipped in EARLIER commits, so it is NOT evidence that this commit implements "
+    "anything. Decide the type prefix ONLY from the non-documentation diff lines: use "
+    "feat: if they add behaviour, fix: if they fix behaviour, and if they are trivial "
+    "(a comment, a docstring, formatting, a rename) then this is a documentation commit - "
+    "use docs: and make the documentation change the subject. Never restate a feature "
+    "named in the prose as work done in this commit."
+)
+
 
 def _system_prompt(*, body_only: bool) -> str:
     if body_only:
@@ -338,6 +352,43 @@ def count_changes(chunk: str) -> tuple[int, int]:
         elif line.startswith("-") and not line.startswith("---"):
             removed += 1
     return added, removed
+
+
+def doc_line_share(diff: str) -> float | None:
+    """Fraction of the commit's changed lines that live in documentation files."""
+    doc_lines = total = 0
+    for chunk in split_diff(diff):
+        path = chunk_path(chunk)
+        changed = sum(count_changes(chunk))
+        total += changed
+        if path and _is_doc(path):
+            doc_lines += changed
+    return doc_lines / total if total else None
+
+
+def doc_guard_note(files: list[str], diff: str = "") -> str:
+    """The caution about documentation prose for this commit, or "" if none applies.
+
+    Three cases, not two. All documentation is the easy one. The dangerous one is
+    *mixed*: a 900-line CHANGELOG entry plus a one-line typo fix used to switch the
+    guard off entirely and come back as "feat: implement <the feature the changelog
+    describes>" — the exact failure this tool exists to prevent.
+    """
+    docs = [f for f in files if _is_doc(f)]
+    if not docs:
+        return ""
+    if len(docs) == len(files):
+        return _DOC_ONLY_NOTE
+    share = doc_line_share(diff)
+    share_text = ""
+    if share is not None and share >= 0.5:
+        # Capped at 99: code is present by definition here, so rounding 900/901 up
+        # to "100% of the changed lines" would contradict the sentence before it.
+        share_text = (
+            f" Documentation is {min(99, round(share * 100))}% of the changed lines, "
+            "so the commit is mostly a documentation edit."
+        )
+    return _MIXED_DOCS_NOTE.format(files=", ".join(docs), share=share_text)
 
 
 def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLASSES) -> str:
@@ -585,7 +636,7 @@ def build_user_prompt(
     files: list[str],
     *,
     title: str | None = None,
-    doc_only: bool = False,
+    guard: str = "",
     summary: str = "",
     classes: dict | None = None,
 ) -> str:
@@ -599,11 +650,15 @@ def build_user_prompt(
         # Before the diff, and outside its budget: when a large diff is trimmed
         # this is the part that still describes the whole change.
         parts += ["", "Change summary (git --stat --summary):", summary]
-    if doc_only:
-        parts += ["", _DOC_ONLY_NOTE]
     if title is not None:
         parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
     parts += ["", "Unified diff:", diff]
+    if guard:
+        # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
+        # before the diff, 48 lines of changelog prose came after it and won — the
+        # model still wrote "feat: implement real-time collaboration" for a commit
+        # whose only code change was a docstring. Read after the diff, it obeys.
+        parts += ["", guard]
     return "\n".join(parts)
 
 
@@ -775,7 +830,7 @@ def call_model(
     files: list[str],
     *,
     title: str | None = None,
-    doc_only: bool = False,
+    guard: str = "",
     summary: str = "",
     classes: dict | None = None,
     base: str | None = None,
@@ -785,7 +840,7 @@ def call_model(
         model,
         _system_prompt(body_only=title is not None),
         build_user_prompt(
-            diff, files, title=title, doc_only=doc_only, summary=summary, classes=classes
+            diff, files, title=title, guard=guard, summary=summary, classes=classes
         ),
     )
 
@@ -896,21 +951,22 @@ def main() -> int:
 
     files = get_staged_files()
     classes = classify_files(files, diff)
-    doc_only = is_doc_only(files)
     summary = get_staged_summary()
-    # Demote before budgeting, so the space a lockfile was using is handed to the
-    # files the commit is actually about.
+    # Both read the raw diff: the guard's proportion must be measured before any
+    # trimming, and demotion must happen before budgeting so the space a lockfile
+    # was using is handed to the files the commit is actually about.
+    guard = doc_guard_note(files, diff)
     diff = budget_diff(demote_diff(diff, classes), args.max_chars)
 
     if args.message:
         body = call_model(
-            spec, api_key, model, diff, files, title=args.message, doc_only=doc_only,
+            spec, api_key, model, diff, files, title=args.message, guard=guard,
             summary=summary, classes=classes, base=base, timeout=args.timeout,
         )
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
         message = call_model(
-            spec, api_key, model, diff, files, doc_only=doc_only,
+            spec, api_key, model, diff, files, guard=guard,
             summary=summary, classes=classes, base=base, timeout=args.timeout,
         )
 

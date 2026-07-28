@@ -76,19 +76,6 @@ excellent early tasks.
 
 ## C — Diff intelligence
 
-### C.3 — The doc guard has an all-or-nothing bug
-
-`is_doc_only()` requires **every** file to be documentation. So the very scenario
-the README leads with — a big CHANGELOG entry describing a shipped feature — comes
-back the moment a single code file joins the commit, and `feat: implement
-real-time collaboration` returns for a commit that only fixed a typo. The fix
-follows directly from §C.2: when documentation dominates by volume but code is
-present, keep the caution as a **per-file annotation** ("the prose in these files
-describes work that shipped earlier; do not restate it as implemented here") while
-letting the code files drive the type. Strictly better than the current cliff
-edge, and it protects the project's headline claim in the mixed case that is far
-more common in practice than the pure case.
-
 ### C.4 — Map-reduce for the diffs no budget can fit
 
 For a genuinely enormous change (a vendored upgrade, a formatter run, a large

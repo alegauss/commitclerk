@@ -130,6 +130,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A single code file no longer switches the documentation guard off.** This was a
+  hole in the project's headline claim: the guard required *every* staged file to be
+  documentation, so a 900-line CHANGELOG entry plus a one-line docstring fix went
+  back to being described as `feat: implement <the feature the changelog talks
+  about>` — the exact lie the tool exists to prevent, in the mixed commit that is far
+  more common than the pure one. The guard now has three states, and the mixed one
+  names the documentation files, reports documentation's share of the changed lines,
+  and tells the model to decide the type prefix **only** from the non-documentation
+  diff lines — using `docs:` when those are trivial. Verified against `gpt-4o-mini` on
+  exactly that commit: `feat: implement real-time collaboration sync functionality`
+  became `docs: update CHANGELOG to document real-time collaboration feature`, while a
+  commit that genuinely adds a feature *and* documents it still gets `feat:`. Two
+  details earned by that testing: the note is placed **after** the diff (before it,
+  48 lines of changelog prose came later and won), and the reported share is capped at
+  99%, since a note that says the commit mixes documentation with code should not then
+  claim documentation is 100% of it.
 - **The wrappers now stage with `git add -A` instead of `git add *`.** The glob
   skipped dot-prefixed paths (`.github/`, `.gitignore`) and never recorded
   deletions, so removing a file could silently be left out of the commit — and

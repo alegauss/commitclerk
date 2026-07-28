@@ -435,7 +435,7 @@
         <div class="eyebrow">Two safeguards</div>
         <h2>Detection, plus an override you control</h2>
         <ul class="feat-list">
-          <li><span class="chk">1</span><span><b>Documentation-only detection.</b> If every staged file is docs — <code>.md</code>, <code>.mdx</code>, <code>.rst</code>, <code>.txt</code>, <code>.adoc</code>, anything under <code>docs/</code>, or a known name like <code>CHANGELOG</code> / <code>README</code> / <code>ROADMAP</code> — the framing switches to <code>docs:</code>.</span></li>
+          <li><span class="chk">1</span><span><b>Documentation detection.</b> If every staged file is docs — <code>.md</code>, <code>.mdx</code>, <code>.rst</code>, <code>.txt</code>, <code>.adoc</code>, anything under <code>docs/</code>, or a known name like <code>CHANGELOG</code> / <code>README</code> / <code>ROADMAP</code> — the framing switches to <code>docs:</code>. When docs are <i>mixed</i> with code, the type comes only from the non-documentation lines, so a docstring tweak beside a big changelog entry is still <code>docs:</code>.</span></li>
           <li><span class="chk">2</span><span><b><code>-m</code> as an override.</b> You know what your change is. Pinning the title reduces the model's job to summarizing the diff underneath it — the recommended default for any commit whose intent isn't obvious from the diff alone.</span></li>
         </ul>
       </div>

@@ -72,6 +72,66 @@ class TestIsDocOnly(unittest.TestCase):
         self.assertFalse(commitclerk.is_doc_only([]))
 
 
+class TestDocGuardNote(unittest.TestCase):
+    """The three states of the documentation guard."""
+
+    def test_no_documentation_means_no_note(self):
+        self.assertEqual(commitclerk.doc_guard_note(["app.py", "tests/t.py"]), "")
+
+    def test_documentation_only_keeps_the_strong_note(self):
+        note = commitclerk.doc_guard_note(["README.md", "CHANGELOG.md"])
+        self.assertIn("every file in this commit is documentation", note)
+        self.assertIn("docs:", note)
+
+    def test_a_mixed_commit_now_gets_a_note_at_all(self):
+        # The bug this task fixes: one code file used to switch the guard off.
+        note = commitclerk.doc_guard_note(["CHANGELOG.md", "app.py"])
+        self.assertNotEqual(note, "")
+        self.assertIn("changes documentation", note)
+
+    def test_the_mixed_note_names_only_the_documentation_files(self):
+        note = commitclerk.doc_guard_note(["CHANGELOG.md", "app.py", "docs/guide.md"])
+        self.assertIn("CHANGELOG.md", note)
+        self.assertIn("docs/guide.md", note)
+        self.assertNotIn("app.py", note)
+
+    def test_the_mixed_note_ties_the_claim_to_the_code(self):
+        note = commitclerk.doc_guard_note(["CHANGELOG.md", "app.py"])
+        # It must not forbid `feat:` outright — sometimes the code really does
+        # implement what the changelog describes.
+        self.assertIn("use feat: if they add behaviour", note)
+        self.assertIn("ONLY from the non-documentation diff lines", note)
+
+    def test_a_documentation_heavy_commit_says_so(self):
+        # 900 lines of changelog, one line of code: the README's own example.
+        diff = _file_chunk("CHANGELOG.md", 900) + _file_chunk("app.py", 1)
+        note = commitclerk.doc_guard_note(["CHANGELOG.md", "app.py"], diff)
+        self.assertIn("99% of the changed lines", note)
+        self.assertIn("mostly a documentation edit", note)
+
+    def test_a_code_heavy_commit_does_not_claim_to_be_documentation(self):
+        diff = _file_chunk("README.md", 2) + _file_chunk("app.py", 400)
+        note = commitclerk.doc_guard_note(["README.md", "app.py"], diff)
+        self.assertIn("changes documentation", note)
+        self.assertNotIn("mostly a documentation edit", note)
+
+    def test_without_a_diff_the_proportion_is_simply_omitted(self):
+        note = commitclerk.doc_guard_note(["README.md", "app.py"])
+        self.assertNotIn("% of the changed lines", note)
+
+
+class TestDocLineShare(unittest.TestCase):
+    def test_documentation_share_of_changed_lines(self):
+        diff = _file_chunk("README.md", 3) + _file_chunk("app.py", 1)
+        self.assertAlmostEqual(commitclerk.doc_line_share(diff), 0.75)
+
+    def test_all_code(self):
+        self.assertEqual(commitclerk.doc_line_share(_file_chunk("app.py", 5)), 0.0)
+
+    def test_an_empty_diff_has_no_share(self):
+        self.assertIsNone(commitclerk.doc_line_share(""))
+
+
 class TestClassify(unittest.TestCase):
     def _check(self, cases):
         for path, expected in cases:
@@ -898,11 +958,11 @@ class TestBuildUserPrompt(unittest.TestCase):
         self.assertIn("- b.py", prompt)
         self.assertIn("DIFFBODY", prompt)
 
-    def test_doc_only_note_is_opt_in(self):
-        self.assertNotIn("every file in this commit is documentation",
-                         commitclerk.build_user_prompt("d", ["README.md"]))
-        self.assertIn("every file in this commit is documentation",
-                      commitclerk.build_user_prompt("d", ["README.md"], doc_only=True))
+    def test_the_guard_note_is_passed_through_verbatim(self):
+        self.assertNotIn("GUARD", commitclerk.build_user_prompt("d", ["README.md"]))
+        self.assertIn(
+            "GUARD", commitclerk.build_user_prompt("d", ["README.md"], guard="GUARD")
+        )
 
     def test_title_is_passed_as_already_chosen(self):
         prompt = commitclerk.build_user_prompt("d", ["a.py"], title="fix: x")
