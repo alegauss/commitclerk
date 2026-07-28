@@ -51,6 +51,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
 | 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
+| 🧭 **Sees what the diff hides** | Renames, mode changes, deletions and binary file *sizes* come from `git --stat --summary`, so a `git mv` is described as a move rather than a rewrite. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
@@ -195,12 +196,20 @@ feat: implement real-time collaboration
 
 2. **`-m` as an override.** You know what your change is. `-m "<title>"` pins the title and reduces the model's job to summarizing the diff underneath it. This is the recommended default for any commit whose intent isn't obvious from the diff alone.
 
+A third blind spot is structural: a unified diff does not say that a file was
+*renamed* (unless the repo has rename detection on), that its permissions changed,
+or how large a binary file became. `commitclerk` sends `git diff --staged
+--find-renames --stat --summary` alongside the diff, so those facts are stated
+rather than guessed — and because that summary is small, it survives intact even
+when a large diff has been trimmed.
+
 The same rule set also keeps titles imperative and under 72 characters, keeps bodies to 2–6 bullets about *why* rather than a file-by-file replay, and bans emojis, headers, and code fences.
 
 ## How it works
 
 ```
-git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──▶ build prompt
+git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──┐
+git diff --stat --summary ──▶ renames, modes, binary sizes ─────────┴──▶ prompt
                                                                           │
                                         provider API (--provider) ◀────────┘
                                                 │

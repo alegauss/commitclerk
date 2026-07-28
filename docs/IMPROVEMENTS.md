@@ -63,22 +63,6 @@ emit no scope or the shared root — never guess one package and hide the others
 Cross-check against the scope vocabulary discovered in §B.1 so inference and
 observation agree.
 
-### B.4 — What a unified diff hides
-
-`git diff --staged` alone loses several facts the message should reflect:
-
-- **Renames** appear as a delete plus an add unless rename detection is on, so a
-  pure `git mv` reads as "deleted 400 lines, added 400 lines" and the model
-  invents a rewrite that never happened.
-- **Mode changes** (a file becoming executable) are a real, describable change.
-- **Binary files** produce `Binary files differ` and no content at all.
-- **Submodule bumps** show as a one-line hash change with zero semantics.
-
-`git diff --staged --summary --find-renames` plus `--stat` yields all of it in a
-few lines. Prepend that structured summary to the prompt — it is higher
-information density per character than any equivalent slice of diff body, which
-also makes it the right thing to keep when the budget is tight.
-
 ### B.5 — Standing and one-off context
 
 `--context "this reverts the caching experiment"` handles the case that no amount

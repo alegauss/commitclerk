@@ -57,6 +57,9 @@ DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
 DEFAULT_OLLAMA_MODEL = "qwen2.5-coder"
 DEFAULT_PROVIDER = "openai"
 MAX_DIFF_CHARS = 60_000
+# The change summary is one line per file: dense enough to always send, but a
+# thousand-file commit still needs a ceiling.
+MAX_SUMMARY_CHARS = 2_000
 REQUEST_TIMEOUT = 60
 
 # Transient failures: rate limits, gateway hiccups, and Anthropic's 529 overload.
@@ -109,6 +112,7 @@ _RULES = """- Describe what THIS commit changes, not what the changed text says.
 - Use a Conventional Commits prefix when applicable (feat:, fix:, chore:, refactor:, docs:, test:, build:, perf:). Documentation-only changes use docs:.
 - Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
 - Bullets start with '- ' on their own line.
+- Read the change summary for facts the diff body cannot show. A rename is a move, never a rewrite; a mode change is a permission change; a binary file has a size change and no readable content, so never invent what is inside one.
 - No markdown headers, no code fences, no emojis."""
 
 _DOC_ONLY_NOTE = (
@@ -162,6 +166,24 @@ def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def get_staged_diff() -> str:
     return run(["git", "diff", "--staged"], check=False).stdout
+
+
+def get_staged_summary() -> str:
+    """Structural facts about the staged change, which the diff body omits.
+
+    `--stat` carries insertion/deletion counts and the *sizes* of binary files;
+    `--summary` names creations, deletions, renames and mode changes. `-M` is
+    passed explicitly rather than trusting `diff.renames`, so a repo that turned
+    rename detection off still gets "rename a => b" instead of a delete plus an
+    add that reads like a rewrite.
+    """
+    result = run(
+        ["git", "diff", "--staged", "--find-renames", "--stat=200,180", "--summary"],
+        check=False,
+    )
+    # strip("\n") only: git indents the stat table by one space, and keeping that
+    # indentation keeps the columns aligned for the model.
+    return truncate(result.stdout.strip("\n"), MAX_SUMMARY_CHARS)
 
 
 def get_staged_files() -> list[str]:
@@ -422,8 +444,13 @@ def build_user_prompt(
     *,
     title: str | None = None,
     doc_only: bool = False,
+    summary: str = "",
 ) -> str:
     parts = ["Files changed:"] + [f"- {f}" for f in files]
+    if summary:
+        # Before the diff, and outside its budget: when a large diff is trimmed
+        # this is the part that still describes the whole change.
+        parts += ["", "Change summary (git --stat --summary):", summary]
     if doc_only:
         parts += ["", _DOC_ONLY_NOTE]
     if title is not None:
@@ -601,13 +628,14 @@ def call_model(
     *,
     title: str | None = None,
     doc_only: bool = False,
+    summary: str = "",
     base: str | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> str:
     payload = spec["payload"](
         model,
         _system_prompt(body_only=title is not None),
-        build_user_prompt(diff, files, title=title, doc_only=doc_only),
+        build_user_prompt(diff, files, title=title, doc_only=doc_only, summary=summary),
     )
 
     headers = {"Content-Type": "application/json"}
@@ -716,18 +744,19 @@ def main() -> int:
 
     files = get_staged_files()
     doc_only = is_doc_only(files)
+    summary = get_staged_summary()
     diff = budget_diff(diff, args.max_chars)
 
     if args.message:
         body = call_model(
-            spec, api_key, model, diff, files,
-            title=args.message, doc_only=doc_only, base=base, timeout=args.timeout,
+            spec, api_key, model, diff, files, title=args.message,
+            doc_only=doc_only, summary=summary, base=base, timeout=args.timeout,
         )
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
         message = call_model(
             spec, api_key, model, diff, files,
-            doc_only=doc_only, base=base, timeout=args.timeout,
+            doc_only=doc_only, summary=summary, base=base, timeout=args.timeout,
         )
 
     if args.dry_run:

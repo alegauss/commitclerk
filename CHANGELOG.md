@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The prompt now includes the structural facts a unified diff leaves out.**
+  `git diff --staged --find-renames --stat --summary` goes to the model alongside
+  the diff, and the rules tell it what to do with them: a rename is a move and not
+  a rewrite, a mode change is a permission change, and a binary file has a size
+  change and no readable content to invent. `-M` is passed explicitly, so a repo
+  with `diff.renames=false` still gets "rename a => b" rather than a delete plus an
+  add. Two things only the summary knows: binary file **sizes**, and mode changes.
+  It is capped at 2 000 characters and sits *outside* the `--max-chars` diff budget,
+  which is deliberate — when a big commit's diff is trimmed, the summary is the part
+  that still describes the whole change.
 - **A rejected request parameter now heals itself instead of failing.** Reasoning
   models reject `temperature` outright, and some rename `max_tokens` to
   `max_completion_tokens`. Rather than carry a per-model capability table that rots

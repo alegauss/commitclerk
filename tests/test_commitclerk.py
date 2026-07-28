@@ -9,7 +9,11 @@ import email.message
 import io
 import json
 import os
+import pathlib
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 import urllib.error
 from unittest import mock
@@ -709,6 +713,81 @@ class TestBuildUserPrompt(unittest.TestCase):
         prompt = commitclerk.build_user_prompt("d", ["a.py"], title="fix: x")
         self.assertIn("fix: x", prompt)
         self.assertIn("do not repeat it", prompt)
+
+    def test_the_change_summary_is_included_before_the_diff(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFFBODY", ["a.py"], summary=" rename old.py => a.py (94%)"
+        )
+        self.assertIn("Change summary", prompt)
+        self.assertIn("rename old.py => a.py (94%)", prompt)
+        # It must survive a trimmed diff, so it goes first.
+        self.assertLess(prompt.index("Change summary"), prompt.index("DIFFBODY"))
+
+    def test_no_summary_means_no_empty_heading(self):
+        self.assertNotIn("Change summary", commitclerk.build_user_prompt("d", ["a.py"]))
+
+
+def _git(repo, *args):
+    subprocess.run(
+        ["git", "-c", "user.email=t@example.com", "-c", "user.name=Test", *args],
+        cwd=repo, check=True, capture_output=True, text=True,
+    )
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
+class TestStagedSummary(unittest.TestCase):
+    """What `get_staged_summary` recovers that the diff body cannot show."""
+
+    @classmethod
+    def setUpClass(cls):
+        repo = tempfile.mkdtemp()
+        # LIFO: chdir back first, then remove the tree — Windows will not delete a
+        # directory that is still the process's cwd. ignore_errors because git
+        # leaves read-only objects behind.
+        cls.addClassCleanup(shutil.rmtree, repo, True)
+        cls.addClassCleanup(os.chdir, os.getcwd())
+        _git(repo, "init", "-q", ".")
+        for name, content in (
+            ("old.py", b"".join(b"line %d\n" % i for i in range(10))),
+            ("dead.txt", b"gone\n"),
+            ("pic.bin", b"a\x00\x01\x02b"),
+        ):
+            pathlib.Path(repo, name).write_bytes(content)
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "init")
+
+        # One staged change containing every fact a unified diff hides.
+        _git(repo, "mv", "old.py", "new.py")
+        pathlib.Path(repo, "pic.bin").write_bytes(b"c\x00\x09\x0ad" * 3)
+        _git(repo, "rm", "-q", "dead.txt")
+        pathlib.Path(repo, "added.md").write_text("plain\n")
+        _git(repo, "add", "-A")
+
+        os.chdir(repo)
+        cls.summary = commitclerk.get_staged_summary()
+        cls.diff = commitclerk.get_staged_diff()
+
+    def test_a_rename_is_reported_as_a_rename(self):
+        self.assertIn("rename old.py => new.py", self.summary)
+
+    def test_a_creation_and_a_deletion_are_named(self):
+        self.assertIn("create mode", self.summary)
+        self.assertIn("added.md", self.summary)
+        self.assertIn("delete mode", self.summary)
+        self.assertIn("dead.txt", self.summary)
+
+    def test_binary_sizes_appear_only_in_the_summary(self):
+        # The diff says "Binary files ... differ" and nothing about size.
+        self.assertIn("Bin 5 -> 15 bytes", self.summary)
+        self.assertNotIn("15 bytes", self.diff)
+
+    def test_the_summary_is_small_enough_to_always_send(self):
+        self.assertLessEqual(len(self.summary), commitclerk.MAX_SUMMARY_CHARS)
+
+    def test_an_oversized_summary_is_capped(self):
+        capped = commitclerk.truncate("x" * 5_000, commitclerk.MAX_SUMMARY_CHARS)
+        self.assertLessEqual(len(capped), commitclerk.MAX_SUMMARY_CHARS + 60)
+        self.assertIn("truncated", capped)
 
 
 if __name__ == "__main__":

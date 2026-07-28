@@ -64,7 +64,6 @@ under-exploited: the repository is full of cheap, local, zero-cost context.* →
 | T8 | 💭 | **Few-shot from your own history** — pick the 2–3 past commits whose touched paths overlap the current diff most and include their title+body as examples. Local, free, no telemetry, and it improves with the repo's age. → §B.1 | T7 |
 | T9 | 💭 | Branch/ticket context: parse an issue key out of the branch name (`feat/PROJ-123-thing`) via a configurable regex and emit a `Refs: PROJ-123` trailer. → §B.2 | T25 |
 | T10 | 💭 | Monorepo scope inference: derive the Conventional Commits scope from the common path prefix or the nearest workspace manifest (`package.json`, `pyproject.toml`, `pom.xml`, `go.mod`). → §B.3 | — |
-| T11 | 💭 | Feed the facts a unified diff hides: renames, mode/permission changes, pure deletions, binary blobs, submodule bumps. Today a rename reads as a giant delete+add. → §B.4 | — |
 | T12 | 💭 | `--context "<note>"` for one-off intent, plus `.clerk/context.md` for standing repo facts ("this repo ships a CLI; `clerk` is the binary name"). → §B.5 | T25 |
 
 ## Block C — Diff intelligence
@@ -179,8 +178,8 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 If you want the highest value per unit of effort, roughly:
 
 1. **T49** — trivial, and it fixes the discovery problem.
-2. **T16, T11** — the diff pipeline's honesty gaps, in the tool's own core competence.
-3. **T11** — the facts a unified diff hides, for almost no code.
+2. **T16** — the last honesty gap in the diff pipeline, in the tool's own core competence.
+3. **T14** — the file taxonomy: one abstraction that pays for T15, T16, T21 and T50.
 4. **T25, T28** — config plus lint; together they unlock team adoption.
 5. **T19, T21** — the two blockers for corporate approval.
 6. **T7, T8** — the quality jump nobody else in this niche ships.
