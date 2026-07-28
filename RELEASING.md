@@ -46,7 +46,7 @@ at the cost of the automated path no longer being fully hands-off.
 ## Cutting a release
 
 Nobody types a version number. Every run of the *Publish* workflow computes the
-next one from `__version__` in [`commitclerk.py`](commitclerk.py), which is the
+next one from `__version__` in [`commitclerk/__init__.py`](commitclerk/__init__.py), which is the
 single source of truth — `pyproject.toml` reads it dynamically.
 
 **1. Write the changelog.** Add what changed under `## [Unreleased]` in

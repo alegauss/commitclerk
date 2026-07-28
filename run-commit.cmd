@@ -15,6 +15,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python "%SCRIPT_DIR%commitclerk.py" %*
+REM Works whether this wrapper sits next to the package (a repo checkout) or next
+REM to a downloaded single-file dist/commitclerk.py: -m finds either on the path.
+set PYTHONPATH=%SCRIPT_DIR%;%PYTHONPATH%
+python -m commitclerk %*
 
 endlocal

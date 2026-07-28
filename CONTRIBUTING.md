@@ -9,10 +9,14 @@ Please respect these — a PR that breaks one will be asked to change, no matter
 how good the feature is.
 
 1. **Zero third-party dependencies.** Standard library only. If a feature needs
-   `requests`, it needs `urllib` instead. No `requirements.txt`, no lockfile,
-   no build step.
-2. **One file.** `commitclerk.py` stays self-contained and copy-pasteable. Someone
-   should be able to `curl` it into a repo and have it work.
+   `requests`, it needs `urllib` instead. No `requirements.txt`, no lockfile.
+2. **One file, still.** The source is the `commitclerk/` package, but
+   `dist/commitclerk.py` is a build of that package into a single standalone script,
+   and someone must always be able to `curl` it into a repo and have it work. So:
+   standard-library imports only, no new top-level module outside the package, and
+   **run `python scripts/build_single_file.py` in the same commit as any source
+   change** — CI fails if the artifact is stale, and runs the whole test suite
+   against it as well as against the package.
 3. **Never surprise the user's history.** The tool prints the message before
    committing and never stages, amends, rebases, or pushes anything by itself.
 4. **Nothing leaves the machine except the staged diff.** No telemetry, no
@@ -38,7 +42,7 @@ There is nothing to install. Python 3.8+ and `git` are the only requirements.
 3. Make the change.
 4. Test it (see below).
 5. Commit — using `commitclerk` itself, ideally:
-   `python commitclerk.py -m "feat: your title"`.
+   `python -m commitclerk -m "feat: your title"`.
 6. Open a pull request and fill in the template.
 
 ## Testing your change
@@ -56,20 +60,27 @@ one of them.
 Then verify by hand before opening a PR:
 
 ```bash
-# The CLI still parses
-python commitclerk.py --help
+# Rebuild the single-file artifact (do this before committing)
+python scripts/build_single_file.py
+
+# The CLI still parses, both ways
+python -m commitclerk --help
+python dist/commitclerk.py --help
 
 # It still compiles on the versions CI checks
-python -m compileall -q commitclerk.py
+python -m compileall -q commitclerk dist/commitclerk.py
+
+# The suite passes against the artifact too, not just the package
+COMMITCLERK_SOURCE=dist python -m unittest discover -s tests
 
 # A real end-to-end run that commits nothing
 git add <some files>
-python commitclerk.py --dry-run
-python commitclerk.py --dry-run -m "chore: manual check"
+python -m commitclerk --dry-run
+python -m commitclerk --dry-run -m "chore: manual check"
 
 # Documentation-only detection still fires
 git add README.md
-python commitclerk.py --dry-run     # must produce a docs: title
+python -m commitclerk --dry-run     # must produce a docs: title
 ```
 
 If your change touches `_is_doc` / `is_doc_only`, exercise both branches: a

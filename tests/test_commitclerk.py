@@ -18,7 +18,11 @@ import unittest
 import urllib.error
 from unittest import mock
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Point $COMMITCLERK_SOURCE at `dist` to run this same suite against the built
+# single-file artifact instead of the package. CI does exactly that, which is what
+# makes the concatenation trustworthy rather than merely syntactically valid.
+sys.path.insert(0, os.path.join(_ROOT, os.environ.get("COMMITCLERK_SOURCE", "")))
 
 import commitclerk  # noqa: E402
 

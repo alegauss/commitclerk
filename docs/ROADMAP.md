@@ -15,8 +15,9 @@ Shipped tasks are *removed* from this file — they are not marked ✅ here.
 
 ## The thesis
 
-commitclerk today is a very good ~880-line script with one genuinely differentiated
-idea: **it refuses to describe documentation prose as work that was implemented.**
+commitclerk today is a six-module package, built into one ~1 100-line standalone file,
+with one genuinely differentiated idea: **it refuses to describe documentation prose as
+work that was implemented.**
 Everything below is an answer to one of three questions:
 
 1. **Will it scale technically?** Provider portability is done (Block **A** shipped
@@ -164,7 +165,6 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 | T52 | 💭 | `PROMPT_VERSION` constant, surfaced by `--verbose` and recorded in eval output, so a quality result is attributable to a specific prompt. → §J.2 | — |
 | T53 | 💭 | A fake-provider test double so end-to-end paths (commit, hook, split) are testable with no API key and no network. → §J.3 | — |
 | T54 | 💭 | A `--help` snapshot test, so a CLI surface change is always a reviewed diff and never an accident. → §J.4 | — |
-| T55 | 💭 | Split `commitclerk.py` **only** if it passes ~800 lines, and then into a package that still builds a single-file artifact — the "read the whole thing before trusting it" promise survives the refactor. → §J.5 | — |
 | T57 | 💭 | Assert every user-facing string is ASCII. Two em dashes shipped in `--help` and a retry notice rendered as `?` on a cp1252 Windows console before being caught by hand. → §J.6 | — |
 | T58 | 💭 | Docs-drift test: every flag in `argparse` and every provider in `PROVIDERS` must appear in both READMEs and `docs/llms.txt`. Six documentation surfaces are updated by hand per shipped flag. → §J.7 | T54 |
 

@@ -26,7 +26,7 @@ import re
 import sys
 
 REPO = "https://github.com/alegauss/commitclerk"
-MODULE = "commitclerk.py"
+MODULE = "commitclerk/__init__.py"
 CHANGELOG = "CHANGELOG.md"
 
 # The trailing [^"]* tolerates a rehearsal suffix such as .dev42: a TestPyPI run

@@ -20,7 +20,7 @@
 
 ---
 
-A *clerk* records what actually happened. `commitclerk` reads your staged diff, asks an LLM for a Conventional Commits message, shows it to you, and commits — in a single Python file with **zero dependencies**, small enough that you can read the whole thing before letting it near your source code.
+A *clerk* records what actually happened. `commitclerk` reads your staged diff, asks an LLM for a Conventional Commits message, shows it to you, and commits — with **zero dependencies** — and it still ships as [one readable file](dist/commitclerk.py) you can audit before letting it near your source code.
 
 ```console
 $ git add .
@@ -71,11 +71,11 @@ pipx install commitclerk    # recommended
 pip install commitclerk
 ```
 
-Or skip installing entirely — it is one file with no dependencies, so this works
-just as well:
+Or skip installing entirely. The source is a small package, and every change is
+rebuilt into one standalone file with no dependencies, so this works just as well:
 
 ```bash
-curl -O https://raw.githubusercontent.com/alegauss/commitclerk/main/commitclerk.py
+curl -O https://raw.githubusercontent.com/alegauss/commitclerk/main/dist/commitclerk.py
 python commitclerk.py --help
 ```
 
@@ -109,8 +109,9 @@ clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL]
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
 `git clerk` — git runs any `git-<name>` on your `PATH` as a subcommand, so
 `git add -A && git clerk` reads like git rather than like a bolt-on. If you run
-the file directly instead, replace `clerk` with `python commitclerk.py` in every
-example below.
+the tool from a repository checkout instead, replace `clerk` with
+`python -m commitclerk`; if you downloaded the single file, use
+`python commitclerk.py`.
 
 | Flag | Default | What it does |
 |---|---|---|
@@ -159,7 +160,7 @@ clerk --provider ollama --timeout 300
 
 ## Wrappers
 
-Two convenience wrappers do the same three things: check the API key, stage everything with `git add -A`, then call `commitclerk.py` with whatever arguments you pass through.
+Two convenience wrappers do the same three things: check the API key, stage everything with `git add -A`, then run `commitclerk` with whatever arguments you pass through.
 
 ```bat
 REM Windows
@@ -171,9 +172,9 @@ run-commit.cmd -m "feat: add CSV export to the reports page"
 ./run-commit.sh -m "feat: add CSV export to the reports page"
 ```
 
-Put the repo directory (or a copy of the wrapper plus `commitclerk.py`) on your `PATH` to call it from any repo.
+Put the repo directory (or a copy of the wrapper plus the downloaded `commitclerk.py`) on your `PATH` to call it from any repo — the wrappers add their own directory to `PYTHONPATH`, so either layout works.
 
-> **Heads up:** the wrappers stage everything, including new, deleted and dot-prefixed files. If you prefer to curate what goes into the commit, stage it yourself and call `python commitclerk.py` directly. The Python script never stages anything on its own.
+> **Heads up:** the wrappers stage everything, including new, deleted and dot-prefixed files. If you prefer to curate what goes into the commit, stage it yourself and call `python -m commitclerk` directly. The Python code never stages anything on its own.
 
 If you'd rather not use a wrapper at all, a shell alias does the same job:
 
@@ -232,7 +233,14 @@ git diff --stat --summary ──▶ renames, modes, binary sizes ─────
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The whole thing is ~440 lines in [`commitclerk.py`](commitclerk.py). It's meant to be read, forked, and adapted to your team's conventions — start with the `_RULES` string.
+The source is a six-module package under [`commitclerk/`](commitclerk/) — `diffing`,
+`files`, `gitio`, `prompt`, `providers`, `cli` — and
+[`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
+[`dist/commitclerk.py`](dist/commitclerk.py) (1097 lines, no imports beyond the
+standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
+if it is stale, and runs the whole test suite against it as well as against the
+package. It's meant to be read, forked, and adapted to your team's conventions — start
+with the `_RULES` string in [`commitclerk/prompt.py`](commitclerk/prompt.py).
 
 ## Configuration
 
@@ -251,7 +259,7 @@ variable, and **a flag always beats the environment**:
 | `OLLAMA_BASE_URL` | `ollama` | Default endpoint, when `--base-url` is not given. |
 | `CLERK_PROVIDER` | all | Default provider, when `--provider` is not given. |
 
-Providers are a table of four slots in [`commitclerk.py`](commitclerk.py) — URL,
+Providers are a table of four slots in [`commitclerk/providers.py`](commitclerk/providers.py) — URL,
 headers, request payload, response extractor. Adding one is a table entry, not a
 new abstraction layer.
 
@@ -314,7 +322,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 <details>
 <summary><strong>"No staged changes. Run <code>git add &lt;files&gt;</code> first."</strong></summary>
 
-Nothing is staged. `commitclerk.py` deliberately never stages for you — run `git add` (or use `run-commit.cmd` / `run-commit.sh`, which stage everything).
+Nothing is staged. `commitclerk` deliberately never stages for you — run `git add` (or use `run-commit.cmd` / `run-commit.sh`, which stage everything).
 </details>
 
 <details>
@@ -378,7 +386,7 @@ Grab one, or propose your own in an [issue](https://github.com/alegauss/commitcl
 
 ## Contributing
 
-Contributions are very welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules — the short version is: keep it dependency-free, keep it one file, and open an issue before a large change.
+Contributions are very welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules — the short version is: keep it dependency-free, keep the single-file build working, and open an issue before a large change.
 
 Also see the [Code of Conduct](CODE_OF_CONDUCT.md) and the [security policy](SECURITY.md).
 

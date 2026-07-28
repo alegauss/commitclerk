@@ -37,13 +37,24 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Byte-compile
-        run: python -m compileall -q commitclerk.py
+        run: python -m compileall -q commitclerk dist/commitclerk.py
 
       - name: Unit tests
         run: python -m unittest discover -s tests -v
 
+      - name: Single-file build is up to date
+        run: python scripts/build_single_file.py --check
+
+      - name: Unit tests against the single-file build
+        run: python -m unittest discover -s tests
+        env:
+          COMMITCLERK_SOURCE: dist
+
       - name: CLI smoke test
-        run: python commitclerk.py --help
+        run: python -m commitclerk --help
+
+      - name: CLI smoke test (single file)
+        run: python dist/commitclerk.py --help
 
   lint:
     name: lint

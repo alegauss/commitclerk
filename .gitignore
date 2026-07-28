@@ -1,6 +1,9 @@
 # Build artifacts
 build/
-dist/
+# dist/* not dist/: git cannot re-include a file whose parent directory is
+# excluded, and the single-file build is a published download path.
+dist/*
+!dist/commitclerk.py
 *.egg-info/
 
 # Byte-compiled / cache

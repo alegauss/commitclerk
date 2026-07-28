@@ -52,14 +52,16 @@ Issues = "https://github.com/alegauss/commitclerk/issues"
 Changelog = "https://github.com/alegauss/commitclerk/blob/main/CHANGELOG.md"
 
 [project.scripts]
-clerk = "commitclerk:main"
-commitclerk = "commitclerk:main"
+clerk = "commitclerk.cli:main"
+commitclerk = "commitclerk.cli:main"
 # git treats any `git-<name>` on PATH as a subcommand, so this one line is all
 # `git clerk` needs.
-git-clerk = "commitclerk:main"
+git-clerk = "commitclerk.cli:main"
 
 [tool.setuptools]
-py-modules = ["commitclerk"]
+# The wheel ships the package; dist/commitclerk.py is the standalone build for
+# people who would rather download one file than install anything.
+packages = ["commitclerk"]
 
 [tool.setuptools.dynamic]
 version = { attr = "commitclerk.__version__" }

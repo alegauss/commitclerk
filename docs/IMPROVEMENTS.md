@@ -438,20 +438,6 @@ all of them testable offline and is a prerequisite for the no-egress test (T22).
 A `--help` snapshot test keeps the CLI surface from drifting unreviewed, which
 matters more with every flag this roadmap adds.
 
-### J.5 — When to stop being one file
-
-"One file, zero dependencies, read it before you trust it" is the product's
-identity, and this roadmap adds a lot of surface. The honest threshold: **~800
-lines**. Past that, "read the whole thing" stops being true and the single file
-becomes theatre rather than transparency.
-
-The exit is designed, not improvised: split into a small package
-(`commitclerk/{cli,providers,diff,rules,scan}.py`) and add a build step that
-concatenates it back into a single distributable `commitclerk.py` published as a
-release asset. The `curl` path survives, the promise survives, and the code
-becomes maintainable. Do it once, deliberately, at the threshold — not gradually
-and not early.
-
 ### J.6 — ASCII is a portability constraint, not a style preference
 
 A Windows console running cp1252 cannot print an em dash: it becomes `?`. This has

@@ -1,6 +1,6 @@
 #!/bin/sh
 # POSIX counterpart of run-commit.cmd: check the API key, stage everything,
-# then hand every argument through to commitclerk.py.
+# then hand every argument through to the commitclerk package.
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -25,4 +25,7 @@ if ! git add -A; then
     exit 1
 fi
 
-exec "$PYTHON" "$SCRIPT_DIR/commitclerk.py" "$@"
+# Works whether this wrapper sits next to the package (a repo checkout) or next to
+# a downloaded single-file commitclerk.py: -m finds either on the path.
+export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+exec "$PYTHON" -m commitclerk "$@"

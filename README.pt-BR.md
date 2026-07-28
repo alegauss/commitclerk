@@ -19,7 +19,7 @@
 
 ---
 
-Um *clerk* (escrivão) registra o que de fato aconteceu. O `commitclerk` lê o seu diff staged, pede ao LLM uma mensagem no padrão Conventional Commits, mostra o resultado e faz o commit — em um único arquivo Python com **zero dependências**, pequeno o bastante para você ler inteiro antes de deixá-lo perto do seu código.
+Um *clerk* (escrivão) registra o que de fato aconteceu. O `commitclerk` lê o seu diff staged, pede ao LLM uma mensagem no padrão Conventional Commits, mostra o resultado e faz o commit — com **zero dependências** — e ainda distribuído como [um único arquivo legível](dist/commitclerk.py) que você pode auditar antes de deixá-lo perto do seu código.
 
 ```console
 $ git add .
@@ -69,10 +69,11 @@ pipx install commitclerk    # recomendado
 pip install commitclerk
 ```
 
-Ou nem instale — é um arquivo só, sem dependências, então isto também funciona:
+Ou nem instale. O código-fonte é um pacote pequeno, e toda mudança é reconstruída em
+um único arquivo autossuficiente, sem dependências, então isto também funciona:
 
 ```bash
-curl -O https://raw.githubusercontent.com/alegauss/commitclerk/main/commitclerk.py
+curl -O https://raw.githubusercontent.com/alegauss/commitclerk/main/dist/commitclerk.py
 python commitclerk.py --help
 ```
 
@@ -106,8 +107,8 @@ clerk [-m TÍTULO] [--dry-run] [--provider NOME] [--base-url URL] [--model MODEL
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
 `git clerk` — o git roda qualquer `git-<nome>` do seu `PATH` como subcomando,
 então `git add -A && git clerk` se lê como git, e não como um apêndice. Se
-preferir rodar o arquivo direto, troque `clerk` por `python commitclerk.py` em
-todos os exemplos abaixo.
+preferir rodar a partir de um clone do repositório, troque `clerk` por
+`python -m commitclerk`; se você baixou o arquivo único, use `python commitclerk.py`.
 
 | Flag | Padrão | O que faz |
 |---|---|---|
@@ -156,7 +157,7 @@ clerk --provider ollama --timeout 300
 
 ## Wrappers
 
-Dois atalhos fazem as mesmas três coisas: verificam a chave da API, adicionam tudo ao stage com `git add -A` e chamam o `commitclerk.py` repassando os argumentos.
+Dois atalhos fazem as mesmas três coisas: verificam a chave da API, adicionam tudo ao stage com `git add -A` e executam o `commitclerk` repassando os argumentos.
 
 ```bat
 REM Windows
@@ -168,9 +169,9 @@ run-commit.cmd -m "feat: add CSV export to the reports page"
 ./run-commit.sh -m "feat: add CSV export to the reports page"
 ```
 
-Coloque o diretório do repositório (ou uma cópia do wrapper e do `commitclerk.py`) no `PATH` para chamá-lo de qualquer repositório.
+Coloque o diretório do repositório (ou uma cópia do wrapper e do `commitclerk.py` baixado) no `PATH` para chamá-lo de qualquer repositório — os wrappers adicionam o próprio diretório ao `PYTHONPATH`, então os dois formatos funcionam.
 
-> **Atenção:** os wrappers adicionam tudo ao stage, inclusive arquivos novos, removidos e começados por ponto. Se você prefere escolher o que entra no commit, faça o stage manualmente e chame `python commitclerk.py` direto. O script Python nunca faz stage sozinho.
+> **Atenção:** os wrappers adicionam tudo ao stage, inclusive arquivos novos, removidos e começados por ponto. Se você prefere escolher o que entra no commit, faça o stage manualmente e chame `python -m commitclerk` direto. O código Python nunca faz stage sozinho.
 
 > **Stage parcial:** se um arquivo no stage também tiver alterações não staged (típico do `git add -p`), o `commitclerk` avisa em uma linha no stderr — a mensagem descreve a versão que está no stage, não o arquivo em disco. É só aviso: nunca bloqueia.
 
@@ -238,7 +239,7 @@ Ainda não existe arquivo de configuração. Tudo é flag ou variável de ambien
 | `OLLAMA_BASE_URL` | `ollama` | Endpoint padrão, quando `--base-url` não é passado. |
 | `CLERK_PROVIDER` | todos | Provedor padrão, quando `--provider` não é passado. |
 
-Os provedores são uma tabela de quatro campos no [`commitclerk.py`](commitclerk.py)
+Os provedores são uma tabela de quatro campos no [`commitclerk/providers.py`](commitclerk/providers.py)
 — URL, headers, payload da requisição e extrator da resposta. Adicionar um é
 acrescentar uma entrada na tabela, não criar uma camada de abstração.
 

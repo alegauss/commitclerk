@@ -112,6 +112,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The source is now a package, and `dist/commitclerk.py` is a build of it.** The
+  single file had grown past 1 000 lines, at which point "read the whole thing before
+  you trust it" stops being a promise and becomes theatre. The code is now six modules
+  with one direction of dependency — `diffing` (pure text shaping), `files`
+  (classification and the doc guard), `gitio` (the only module that runs git), `prompt`
+  (the rules), `providers` (adapters, retry, repair), `cli` — and
+  `scripts/build_single_file.py` concatenates them back into one standalone script with
+  no imports beyond the standard library.
+
+  Nothing about the promise changes: the download is still one dependency-free file you
+  can audit. What changes is where you get it — `curl` now fetches
+  `main/dist/commitclerk.py` — and how it is trusted: CI rebuilds the artifact, **fails
+  if it is stale**, and runs the entire test suite a second time against it, so the
+  concatenation is proven equivalent rather than assumed. Inside a checkout use
+  `python -m commitclerk`; the wrappers add their own directory to `PYTHONPATH`, so a
+  copy of `run-commit.sh` next to a downloaded `commitclerk.py` keeps working.
 - **Generated and vendored files no longer spend the diff budget.** Their contents
   are replaced by one line — `[... generated file, +300 -300, contents not shown ...]`
   — under the `diff --git` header, so the file is still named and counted but its

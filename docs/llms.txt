@@ -2,10 +2,12 @@
 
 > A command-line tool that writes your git commit messages. It reads the staged diff,
 > asks an LLM (OpenAI Chat Completions or the Anthropic Messages API) for a Conventional Commits message, prints it,
-> and commits. Implemented as a single Python file (~460 lines) with **zero third-party
-> dependencies** — standard library only (`urllib`, `subprocess`, `argparse`), Python 3.8+.
+> and commits. Implemented as a six-module package (`diffing`, `files`, `gitio`, `prompt`,
+> `providers`, `cli`) that is also built into a single standalone ~1 100-line script,
+> `dist/commitclerk.py`, with **zero third-party dependencies** — standard library only
+> (`urllib`, `subprocess`, `argparse`), Python 3.8+.
 > Installs three identical entry points: `clerk`, `commitclerk`, and `git clerk`.
-> Install with `pipx install commitclerk`, or download `commitclerk.py` and run it directly.
+> Install with `pipx install commitclerk`, or download `dist/commitclerk.py` and run it directly.
 
 MIT licensed community project. Not affiliated with, endorsed by, or sponsored by OpenAI,
 Anthropic or GitHub. By default it calls the OpenAI Chat Completions API using the key in

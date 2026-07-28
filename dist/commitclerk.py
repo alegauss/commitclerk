@@ -1,4 +1,18 @@
 #!/usr/bin/env python
+# ---------------------------------------------------------------------------
+# GENERATED FILE - do not edit.
+#
+# This is the `commitclerk` package concatenated into a single script by
+# `scripts/build_single_file.py`. Edit the package under `commitclerk/` and
+# rebuild; CI fails if this file is out of date.
+#
+# It exists so the tool stays one readable, dependency-free file you can audit
+# and copy:
+#
+#     curl -O https://raw.githubusercontent.com/alegauss/commitclerk/main/dist/commitclerk.py
+#     python commitclerk.py --help
+# ---------------------------------------------------------------------------
+
 """commitclerk - AI-powered git commit messages.
 
 Generates a commit message (short imperative title + bulleted summary body)
@@ -7,8 +21,8 @@ from the staged diff by calling an LLM provider.
 Reads the API key from the provider's key variable (OPENAI_API_KEY for the
 default provider). No third-party dependencies.
 
-Usage (installed as `clerk`, `commitclerk` or `git clerk`, or run the file
-directly with `python commitclerk.py`):
+Usage (installed as `clerk`, `commitclerk` or `git clerk`, or run the
+single-file build with `python commitclerk.py`):
     clerk                       # AI writes the whole message
     clerk -m "docs: fix X"      # use this exact title; AI writes only the body
     clerk --dry-run             # print message, do not commit
@@ -30,11 +44,15 @@ Environment:
     OLLAMA_BASE_URL     optional, overrides the ollama endpoint
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
-Why the doc-only handling: this script only sees the staged diff, so when a
+Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
 the model used to echo it as "feat: implement <feature>" even though the feature
-shipped in an earlier commit. The rules below (and the -m override) keep the
-message about what THIS commit actually changes.
+shipped in an earlier commit. The rules in `prompt.py` (and the -m override)
+keep the message about what THIS commit actually changes.
+
+The source is a package; `dist/commitclerk.py` is the same code concatenated into
+one file by `scripts/build_single_file.py`, for people who would rather read and
+copy a single script than install anything.
 """
 
 from __future__ import annotations
@@ -52,281 +70,15 @@ import urllib.request
 
 __version__ = "0.2.1"
 
-DEFAULT_MODEL = "gpt-4o-mini"
-DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
-DEFAULT_OLLAMA_MODEL = "qwen2.5-coder"
-DEFAULT_PROVIDER = "openai"
+
+# --- from commitclerk/diffing.py --------------------------------------
+
 MAX_DIFF_CHARS = 60_000
-# The change summary is one line per file: dense enough to always send, but a
-# thousand-file commit still needs a ceiling.
-MAX_SUMMARY_CHARS = 2_000
-# Classes whose diff body is never worth budget: the model is told not to narrate
 # them, so sending thousands of lines only crowds out the files that matter.
 DEMOTED_CLASSES = ("generated", "vendor")
 # ...but only once the body is big enough to be worth replacing. A two-line lockfile
 # bump costs nothing, and a placeholder would be longer than the content.
 DEMOTE_MIN_CHARS = 500
-REQUEST_TIMEOUT = 60
-
-# Transient failures: rate limits, gateway hiccups, and Anthropic's 529 overload.
-RETRY_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
-RETRY_ATTEMPTS = 3
-RETRY_BASE_DELAY = 1.0
-RETRY_MAX_DELAY = 30.0
-
-# Sampling knobs a model may reject and the request does not need: if a 400 names
-# one of these, drop it and ask again. Required fields are never dropped.
-DROPPABLE_PARAMS = frozenset({
-    "temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty",
-})
-# The request itself. Never repaired — and `model` in particular is a trap, because
-# almost every 400 says "with this model", which would match it by accident.
-PROTECTED_PARAMS = frozenset({"model", "messages", "system", "prompt", "input", "stream"})
-# "Use 'max_completion_tokens' instead" — a rename the provider spelled out for us.
-_INSTEAD_RE = re.compile(r"use\s+['\"]?([a-z]\w*)['\"]?\s+instead", re.IGNORECASE)
-
-# Anthropic requires max_tokens and pins the wire format with a version header.
-ANTHROPIC_VERSION = "2023-06-01"
-ANTHROPIC_MAX_TOKENS = 8192
-
-# A commit touching ONLY these counts as documentation-only: it gets a docs:
-# prefix and a framing that describes the doc change itself.
-_DOC_SUFFIXES = (".md", ".mdx", ".rst", ".txt", ".adoc")
-_DOC_BASENAMES = {
-    "changelog", "readme", "roadmap", "agents", "license",
-    "contributing", "authors", "notice", "codeowners",
-}
-
-
-def _is_doc(path: str) -> bool:
-    p = path.replace("\\", "/").lower()
-    base = p.rsplit("/", 1)[-1]
-    stem = base.split(".", 1)[0]
-    if p.endswith(_DOC_SUFFIXES):
-        return True
-    if p.startswith("docs/") or "/docs/" in p:
-        return True
-    return stem in _DOC_BASENAMES
-
-
-# The taxonomy that generalises _is_doc. Order matters: the first match wins, and
-# vendored or generated files are classified as such even when they look like code.
-_VENDOR_DIRS = ("vendor/", "third_party/", "third-party/", "node_modules/",
-                "site-packages/", ".venv/", "external/")
-_GENERATED_DIRS = ("dist/", "build/", "__snapshots__/", "migrations/", "generated/")
-_GENERATED_BASENAMES = {
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "uv.lock",
-    "cargo.lock", "gemfile.lock", "composer.lock", "go.sum", "flake.lock",
-}
-_GENERATED_SUFFIXES = (".lock", ".snap", ".map", ".po", ".mo", "_pb2.py", ".pb.go")
-_TEST_DIRS = ("tests/", "test/", "spec/", "__tests__/", "e2e/")
-_TEST_SUFFIXES = (".spec.js", ".spec.ts", ".spec.tsx", ".test.js", ".test.ts",
-                  ".test.tsx", "_test.py", "_test.go", "_test.rb", "test.java")
-_CONFIG_DIRS = (".github/", ".circleci/", ".vscode/", ".idea/")
-_CONFIG_BASENAMES = {
-    "pyproject.toml", "setup.py", "setup.cfg", "package.json", "tsconfig.json",
-    "makefile", "dockerfile", "docker-compose.yml", "docker-compose.yaml",
-    "requirements.txt", "gemfile", "cargo.toml", "go.mod", "pom.xml", "build.gradle",
-}
-_CONFIG_SUFFIXES = (".toml", ".ini", ".cfg", ".yml", ".yaml", ".editorconfig")
-
-FILE_CLASSES = ("vendor", "generated", "binary", "docs", "test", "config", "code")
-
-
-def _has_segment(path: str, prefixes: tuple) -> bool:
-    """Whether any path segment starts one of `prefixes` (e.g. 'tests/')."""
-    return any(path.startswith(p) or f"/{p}" in path for p in prefixes)
-
-
-def classify(path: str, binaries: set | None = None) -> str:
-    """The class of one staged file: vendor, generated, binary, docs, test, config, code.
-
-    A boolean "is this documentation?" was enough for one guard. A class per file
-    is what tells the model which files are the *point* of the commit and which are
-    noise it must not narrate. `binaries` comes from `binary_paths(diff)`, since a
-    path alone cannot tell you whether git could read the contents.
-    """
-    binary = bool(binaries) and path in binaries
-    p = path.replace("\\", "/").lower()
-    base = p.rsplit("/", 1)[-1]
-
-    if _has_segment(p, _VENDOR_DIRS):
-        return "vendor"
-    if base in _GENERATED_BASENAMES or p.endswith(_GENERATED_SUFFIXES) \
-            or _has_segment(p, _GENERATED_DIRS):
-        return "generated"
-    if binary:
-        return "binary"
-    if _is_doc(path):
-        return "docs"
-    if _has_segment(p, _TEST_DIRS) or base.startswith("test_") or p.endswith(_TEST_SUFFIXES):
-        return "test"
-    if _has_segment(p, _CONFIG_DIRS) or base in _CONFIG_BASENAMES \
-            or p.endswith(_CONFIG_SUFFIXES) or base.startswith("."):
-        return "config"
-    return "code"
-
-
-def binary_paths(diff: str) -> set:
-    """Paths git could not diff as text, read off the diff's own binary markers."""
-    found = set()
-    current = None
-    for line in diff.splitlines():
-        if line.startswith("diff --git a/"):
-            # "diff --git a/x b/x" — take the b-side, which is the new name.
-            parts = line.split(" b/", 1)
-            current = parts[1] if len(parts) == 2 else None
-        elif current and (line.startswith("Binary files ") or line == "GIT binary patch"):
-            found.add(current)
-    return found
-
-
-def classify_files(files: list[str], diff: str = "") -> dict:
-    """Every staged file mapped to its class, in the order git reported them."""
-    binaries = binary_paths(diff) if diff else set()
-    return {f: classify(f, binaries) for f in files}
-
-
-def class_mix(classes: dict) -> str:
-    """A compact count per class, most significant first: 'code 3, test 1'."""
-    counts = [(c, sum(1 for v in classes.values() if v == c)) for c in FILE_CLASSES]
-    return ", ".join(f"{name} {n}" for name, n in counts if n)
-
-
-def is_doc_only(files: list[str]) -> bool:
-    return bool(files) and all(classify(f) == "docs" for f in files)
-
-
-_RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
-- Title: imperative mood, max 72 chars, no trailing period.
-- Use a Conventional Commits prefix when applicable (feat:, fix:, chore:, refactor:, docs:, test:, build:, perf:). Documentation-only changes use docs:.
-- Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
-- Bullets start with '- ' on their own line.
-- Read the change summary for facts the diff body cannot show. A rename is a move, never a rewrite; a mode change is a permission change; a binary file has a size change and no readable content, so never invent what is inside one.
-- Each changed file is annotated with its class: code, test, docs, generated, config, vendor, binary. Pick the type prefix from the classes that are the point of the commit — only docs means docs:, only test means test:, only config or generated means chore: or build:. Never make a generated, vendored or binary file the subject of the message and never narrate its contents; when such files accompany a real change, mention them in at most one bullet as a consequence ("regenerated the lockfile").
-- No markdown headers, no code fences, no emojis."""
-
-_DOC_ONLY_NOTE = (
-    "IMPORTANT: every file in this commit is documentation (no code changed). "
-    "Use the docs: prefix and describe the documentation change itself "
-    "(e.g. 'document X', 'record X in the changelog', 'remove completed tasks from the roadmap', "
-    "'correct stale claims in README'). Do NOT say a feature was implemented or added: any feature "
-    "described in the diff shipped in an earlier commit; this commit only writes it down."
-)
-
-# The same caution for the far more common mixed commit. It cannot simply say "do
-# not describe a feature as implemented" — sometimes the code really does implement
-# it — so it ties the claim to the non-documentation part of the diff.
-_MIXED_DOCS_NOTE = (
-    "IMPORTANT - how to read this commit: it changes documentation ({files}) alongside "
-    "non-documentation files.{share} Prose added to documentation usually describes work "
-    "that shipped in EARLIER commits, so it is NOT evidence that this commit implements "
-    "anything. Decide the type prefix ONLY from the non-documentation diff lines: use "
-    "feat: if they add behaviour, fix: if they fix behaviour, and if they are trivial "
-    "(a comment, a docstring, formatting, a rename) then this is a documentation commit - "
-    "use docs: and make the documentation change the subject. Never restate a feature "
-    "named in the prose as work done in this commit."
-)
-
-
-def _system_prompt(*, body_only: bool) -> str:
-    if body_only:
-        return (
-            "You are a git commit message body generator. Given a unified diff and the commit "
-            "title the author already chose, produce ONLY the body: 2 to 6 bullets, each starting "
-            "with '- ' on its own line, summarizing the WHY and key changes. No title line, no "
-            "leading blank line, no markdown headers, no code fences, no emojis.\n\nRules:\n" + _RULES
-        )
-    return (
-        "You are a git commit message generator.\n"
-        "Given a unified diff, produce a commit message with this exact shape:\n\n"
-        "<title>\n<blank line>\n- <bullet>\n- <bullet>\n- <bullet>\n\nRules:\n"
-        + _RULES
-        + "\nReturn only the commit message text."
-    )
-
-
-def prog_name(argv0: str) -> str:
-    """Name to show in --help, derived from how the tool was actually invoked.
-
-    Installed as `git-clerk`, git runs us for `git clerk`, so printing
-    `usage: clerk` there would document a command the user did not type.
-    """
-    base = os.path.basename(argv0)
-    stem = os.path.splitext(base)[0]
-    if stem == "git-clerk":
-        return "git clerk"
-    return stem or "clerk"
-
-
-def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        cmd,
-        check=check,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-
-
-def get_staged_diff() -> str:
-    return run(["git", "diff", "--staged"], check=False).stdout
-
-
-def get_unstaged_files() -> list[str]:
-    """Files with changes in the working tree that are not staged."""
-    result = run(["git", "diff", "--name-only"], check=False)
-    return [line for line in result.stdout.splitlines() if line.strip()]
-
-
-def partially_staged(staged: list[str], unstaged: list[str]) -> list[str]:
-    """Staged files that also have further, unstaged edits on disk."""
-    pending = set(unstaged)
-    return [f for f in staged if f in pending]
-
-
-def unstaged_warning(mixed: list[str], limit: int = 5) -> str:
-    """One line naming partially staged files, or "" when there are none.
-
-    `git add -p` makes this routine, and the consequence is easy to miss: the
-    message describes the staged version of the code, which is not the version on
-    disk. Inform, never block — the staged diff is what is being committed, so the
-    message is correct; it is the user's mental model that may be wrong.
-    """
-    if not mixed:
-        return ""
-    shown = ", ".join(mixed[:limit])
-    if len(mixed) > limit:
-        shown += f", and {len(mixed) - limit} more"
-    noun = "file has" if len(mixed) == 1 else "files have"
-    return (
-        f"Note: {len(mixed)} staged {noun} unstaged changes too, so the message "
-        f"describes the staged version, not what is on disk: {shown}"
-    )
-
-
-def get_staged_summary() -> str:
-    """Structural facts about the staged change, which the diff body omits.
-
-    `--stat` carries insertion/deletion counts and the *sizes* of binary files;
-    `--summary` names creations, deletions, renames and mode changes. `-M` is
-    passed explicitly rather than trusting `diff.renames`, so a repo that turned
-    rename detection off still gets "rename a => b" instead of a delete plus an
-    add that reads like a rewrite.
-    """
-    result = run(
-        ["git", "diff", "--staged", "--find-renames", "--stat=200,180", "--summary"],
-        check=False,
-    )
-    # strip("\n") only: git indents the stat table by one space, and keeping that
-    # indentation keeps the columns aligned for the model.
-    return truncate(result.stdout.strip("\n"), MAX_SUMMARY_CHARS)
-
-
-def get_staged_files() -> list[str]:
-    result = run(["git", "diff", "--staged", "--name-only"], check=False)
-    return [line for line in result.stdout.splitlines() if line.strip()]
-
 
 def truncate(diff: str, limit: int) -> str:
     if len(diff) <= limit:
@@ -510,6 +262,337 @@ def budget_diff(diff: str, limit: int) -> str:
     return result if len(result) <= limit else truncate(result, limit)
 
 
+# --- from commitclerk/files.py ----------------------------------------
+
+# A commit touching ONLY these counts as documentation-only: it gets a docs:
+# prefix and a framing that describes the doc change itself.
+_DOC_SUFFIXES = (".md", ".mdx", ".rst", ".txt", ".adoc")
+_DOC_BASENAMES = {
+    "changelog", "readme", "roadmap", "agents", "license",
+    "contributing", "authors", "notice", "codeowners",
+}
+
+
+def _is_doc(path: str) -> bool:
+    p = path.replace("\\", "/").lower()
+    base = p.rsplit("/", 1)[-1]
+    stem = base.split(".", 1)[0]
+    if p.endswith(_DOC_SUFFIXES):
+        return True
+    if p.startswith("docs/") or "/docs/" in p:
+        return True
+    return stem in _DOC_BASENAMES
+
+
+# The taxonomy that generalises _is_doc. Order matters: the first match wins, and
+# vendored or generated files are classified as such even when they look like code.
+_VENDOR_DIRS = ("vendor/", "third_party/", "third-party/", "node_modules/",
+                "site-packages/", ".venv/", "external/")
+_GENERATED_DIRS = ("dist/", "build/", "__snapshots__/", "migrations/", "generated/")
+_GENERATED_BASENAMES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "uv.lock",
+    "cargo.lock", "gemfile.lock", "composer.lock", "go.sum", "flake.lock",
+}
+_GENERATED_SUFFIXES = (".lock", ".snap", ".map", ".po", ".mo", "_pb2.py", ".pb.go")
+_TEST_DIRS = ("tests/", "test/", "spec/", "__tests__/", "e2e/")
+_TEST_SUFFIXES = (".spec.js", ".spec.ts", ".spec.tsx", ".test.js", ".test.ts",
+                  ".test.tsx", "_test.py", "_test.go", "_test.rb", "test.java")
+_CONFIG_DIRS = (".github/", ".circleci/", ".vscode/", ".idea/")
+_CONFIG_BASENAMES = {
+    "pyproject.toml", "setup.py", "setup.cfg", "package.json", "tsconfig.json",
+    "makefile", "dockerfile", "docker-compose.yml", "docker-compose.yaml",
+    "requirements.txt", "gemfile", "cargo.toml", "go.mod", "pom.xml", "build.gradle",
+}
+_CONFIG_SUFFIXES = (".toml", ".ini", ".cfg", ".yml", ".yaml", ".editorconfig")
+
+FILE_CLASSES = ("vendor", "generated", "binary", "docs", "test", "config", "code")
+
+
+def _has_segment(path: str, prefixes: tuple) -> bool:
+    """Whether any path segment starts one of `prefixes` (e.g. 'tests/')."""
+    return any(path.startswith(p) or f"/{p}" in path for p in prefixes)
+
+
+def classify(path: str, binaries: set | None = None) -> str:
+    """The class of one staged file: vendor, generated, binary, docs, test, config, code.
+
+    A boolean "is this documentation?" was enough for one guard. A class per file
+    is what tells the model which files are the *point* of the commit and which are
+    noise it must not narrate. `binaries` comes from `binary_paths(diff)`, since a
+    path alone cannot tell you whether git could read the contents.
+    """
+    binary = bool(binaries) and path in binaries
+    p = path.replace("\\", "/").lower()
+    base = p.rsplit("/", 1)[-1]
+
+    if _has_segment(p, _VENDOR_DIRS):
+        return "vendor"
+    if base in _GENERATED_BASENAMES or p.endswith(_GENERATED_SUFFIXES) \
+            or _has_segment(p, _GENERATED_DIRS):
+        return "generated"
+    if binary:
+        return "binary"
+    if _is_doc(path):
+        return "docs"
+    if _has_segment(p, _TEST_DIRS) or base.startswith("test_") or p.endswith(_TEST_SUFFIXES):
+        return "test"
+    if _has_segment(p, _CONFIG_DIRS) or base in _CONFIG_BASENAMES \
+            or p.endswith(_CONFIG_SUFFIXES) or base.startswith("."):
+        return "config"
+    return "code"
+
+
+def binary_paths(diff: str) -> set:
+    """Paths git could not diff as text, read off the diff's own binary markers."""
+    found = set()
+    current = None
+    for line in diff.splitlines():
+        if line.startswith("diff --git a/"):
+            # "diff --git a/x b/x" — take the b-side, which is the new name.
+            parts = line.split(" b/", 1)
+            current = parts[1] if len(parts) == 2 else None
+        elif current and (line.startswith("Binary files ") or line == "GIT binary patch"):
+            found.add(current)
+    return found
+
+
+def classify_files(files: list[str], diff: str = "") -> dict:
+    """Every staged file mapped to its class, in the order git reported them."""
+    binaries = binary_paths(diff) if diff else set()
+    return {f: classify(f, binaries) for f in files}
+
+
+def class_mix(classes: dict) -> str:
+    """A compact count per class, most significant first: 'code 3, test 1'."""
+    counts = [(c, sum(1 for v in classes.values() if v == c)) for c in FILE_CLASSES]
+    return ", ".join(f"{name} {n}" for name, n in counts if n)
+
+
+def is_doc_only(files: list[str]) -> bool:
+    return bool(files) and all(classify(f) == "docs" for f in files)
+
+_DOC_ONLY_NOTE = (
+    "IMPORTANT: every file in this commit is documentation (no code changed). "
+    "Use the docs: prefix and describe the documentation change itself "
+    "(e.g. 'document X', 'record X in the changelog', 'remove completed tasks from the roadmap', "
+    "'correct stale claims in README'). Do NOT say a feature was implemented or added: any feature "
+    "described in the diff shipped in an earlier commit; this commit only writes it down."
+)
+
+# The same caution for the far more common mixed commit. It cannot simply say "do
+# not describe a feature as implemented" — sometimes the code really does implement
+# it — so it ties the claim to the non-documentation part of the diff.
+_MIXED_DOCS_NOTE = (
+    "IMPORTANT - how to read this commit: it changes documentation ({files}) alongside "
+    "non-documentation files.{share} Prose added to documentation usually describes work "
+    "that shipped in EARLIER commits, so it is NOT evidence that this commit implements "
+    "anything. Decide the type prefix ONLY from the non-documentation diff lines: use "
+    "feat: if they add behaviour, fix: if they fix behaviour, and if they are trivial "
+    "(a comment, a docstring, formatting, a rename) then this is a documentation commit - "
+    "use docs: and make the documentation change the subject. Never restate a feature "
+    "named in the prose as work done in this commit."
+)
+
+
+def doc_line_share(diff: str) -> float | None:
+    """Fraction of the commit's changed lines that live in documentation files."""
+    doc_lines = total = 0
+    for chunk in split_diff(diff):
+        path = chunk_path(chunk)
+        changed = sum(count_changes(chunk))
+        total += changed
+        if path and _is_doc(path):
+            doc_lines += changed
+    return doc_lines / total if total else None
+
+
+def doc_guard_note(files: list[str], diff: str = "") -> str:
+    """The caution about documentation prose for this commit, or "" if none applies.
+
+    Three cases, not two. All documentation is the easy one. The dangerous one is
+    *mixed*: a 900-line CHANGELOG entry plus a one-line typo fix used to switch the
+    guard off entirely and come back as "feat: implement <the feature the changelog
+    describes>" — the exact failure this tool exists to prevent.
+    """
+    docs = [f for f in files if _is_doc(f)]
+    if not docs:
+        return ""
+    if len(docs) == len(files):
+        return _DOC_ONLY_NOTE
+    share = doc_line_share(diff)
+    share_text = ""
+    if share is not None and share >= 0.5:
+        # Capped at 99: code is present by definition here, so rounding 900/901 up
+        # to "100% of the changed lines" would contradict the sentence before it.
+        share_text = (
+            f" Documentation is {min(99, round(share * 100))}% of the changed lines, "
+            "so the commit is mostly a documentation edit."
+        )
+    return _MIXED_DOCS_NOTE.format(files=", ".join(docs), share=share_text)
+
+
+# --- from commitclerk/gitio.py ----------------------------------------
+
+# thousand-file commit still needs a ceiling.
+MAX_SUMMARY_CHARS = 2_000
+
+def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd,
+        check=check,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+
+def get_staged_diff() -> str:
+    return run(["git", "diff", "--staged"], check=False).stdout
+
+
+def get_unstaged_files() -> list[str]:
+    """Files with changes in the working tree that are not staged."""
+    result = run(["git", "diff", "--name-only"], check=False)
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def partially_staged(staged: list[str], unstaged: list[str]) -> list[str]:
+    """Staged files that also have further, unstaged edits on disk."""
+    pending = set(unstaged)
+    return [f for f in staged if f in pending]
+
+
+def unstaged_warning(mixed: list[str], limit: int = 5) -> str:
+    """One line naming partially staged files, or "" when there are none.
+
+    `git add -p` makes this routine, and the consequence is easy to miss: the
+    message describes the staged version of the code, which is not the version on
+    disk. Inform, never block — the staged diff is what is being committed, so the
+    message is correct; it is the user's mental model that may be wrong.
+    """
+    if not mixed:
+        return ""
+    shown = ", ".join(mixed[:limit])
+    if len(mixed) > limit:
+        shown += f", and {len(mixed) - limit} more"
+    noun = "file has" if len(mixed) == 1 else "files have"
+    return (
+        f"Note: {len(mixed)} staged {noun} unstaged changes too, so the message "
+        f"describes the staged version, not what is on disk: {shown}"
+    )
+
+
+def get_staged_summary() -> str:
+    """Structural facts about the staged change, which the diff body omits.
+
+    `--stat` carries insertion/deletion counts and the *sizes* of binary files;
+    `--summary` names creations, deletions, renames and mode changes. `-M` is
+    passed explicitly rather than trusting `diff.renames`, so a repo that turned
+    rename detection off still gets "rename a => b" instead of a delete plus an
+    add that reads like a rewrite.
+    """
+    result = run(
+        ["git", "diff", "--staged", "--find-renames", "--stat=200,180", "--summary"],
+        check=False,
+    )
+    # strip("\n") only: git indents the stat table by one space, and keeping that
+    # indentation keeps the columns aligned for the model.
+    return truncate(result.stdout.strip("\n"), MAX_SUMMARY_CHARS)
+
+
+def get_staged_files() -> list[str]:
+    result = run(["git", "diff", "--staged", "--name-only"], check=False)
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+# --- from commitclerk/prompt.py ---------------------------------------
+
+_RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
+- Title: imperative mood, max 72 chars, no trailing period.
+- Use a Conventional Commits prefix when applicable (feat:, fix:, chore:, refactor:, docs:, test:, build:, perf:). Documentation-only changes use docs:.
+- Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
+- Bullets start with '- ' on their own line.
+- Read the change summary for facts the diff body cannot show. A rename is a move, never a rewrite; a mode change is a permission change; a binary file has a size change and no readable content, so never invent what is inside one.
+- Each changed file is annotated with its class: code, test, docs, generated, config, vendor, binary. Pick the type prefix from the classes that are the point of the commit — only docs means docs:, only test means test:, only config or generated means chore: or build:. Never make a generated, vendored or binary file the subject of the message and never narrate its contents; when such files accompany a real change, mention them in at most one bullet as a consequence ("regenerated the lockfile").
+- No markdown headers, no code fences, no emojis."""
+
+
+def _system_prompt(*, body_only: bool) -> str:
+    if body_only:
+        return (
+            "You are a git commit message body generator. Given a unified diff and the commit "
+            "title the author already chose, produce ONLY the body: 2 to 6 bullets, each starting "
+            "with '- ' on its own line, summarizing the WHY and key changes. No title line, no "
+            "leading blank line, no markdown headers, no code fences, no emojis.\n\nRules:\n" + _RULES
+        )
+    return (
+        "You are a git commit message generator.\n"
+        "Given a unified diff, produce a commit message with this exact shape:\n\n"
+        "<title>\n<blank line>\n- <bullet>\n- <bullet>\n- <bullet>\n\nRules:\n"
+        + _RULES
+        + "\nReturn only the commit message text."
+    )
+
+def build_user_prompt(
+    diff: str,
+    files: list[str],
+    *,
+    title: str | None = None,
+    guard: str = "",
+    summary: str = "",
+    classes: dict | None = None,
+) -> str:
+    classes = classes or {}
+    parts = ["Files changed:"] + [
+        f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
+    ]
+    if classes:
+        parts += [f"Class mix: {class_mix(classes)}"]
+    if summary:
+        # Before the diff, and outside its budget: when a large diff is trimmed
+        # this is the part that still describes the whole change.
+        parts += ["", "Change summary (git --stat --summary):", summary]
+    if title is not None:
+        parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
+    parts += ["", "Unified diff:", diff]
+    if guard:
+        # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
+        # before the diff, 48 lines of changelog prose came after it and won — the
+        # model still wrote "feat: implement real-time collaboration" for a commit
+        # whose only code change was a docstring. Read after the diff, it obeys.
+        parts += ["", guard]
+    return "\n".join(parts)
+
+
+# --- from commitclerk/providers.py ------------------------------------
+
+DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
+DEFAULT_OLLAMA_MODEL = "qwen2.5-coder"
+DEFAULT_PROVIDER = "openai"
+REQUEST_TIMEOUT = 60
+
+# Transient failures: rate limits, gateway hiccups, and Anthropic's 529 overload.
+RETRY_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
+RETRY_ATTEMPTS = 3
+RETRY_BASE_DELAY = 1.0
+RETRY_MAX_DELAY = 30.0
+
+# Sampling knobs a model may reject and the request does not need: if a 400 names
+# one of these, drop it and ask again. Required fields are never dropped.
+DROPPABLE_PARAMS = frozenset({
+    "temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty",
+})
+# The request itself. Never repaired — and `model` in particular is a trap, because
+# almost every 400 says "with this model", which would match it by accident.
+PROTECTED_PARAMS = frozenset({"model", "messages", "system", "prompt", "input", "stream"})
+# "Use 'max_completion_tokens' instead" — a rename the provider spelled out for us.
+_INSTEAD_RE = re.compile(r"use\s+['\"]?([a-z]\w*)['\"]?\s+instead", re.IGNORECASE)
+
+# Anthropic requires max_tokens and pins the wire format with a version header.
+ANTHROPIC_VERSION = "2023-06-01"
+ANTHROPIC_MAX_TOKENS = 8192
+
 def _openai_payload(model: str, system: str, user: str) -> dict:
     return {
         "model": model,
@@ -661,37 +744,6 @@ def base_url_error(base: str) -> str | None:
 
 def provider_url(spec: dict, base: str | None = None) -> str:
     return (base or spec["default_base"]).rstrip("/") + spec["path"]
-
-
-def build_user_prompt(
-    diff: str,
-    files: list[str],
-    *,
-    title: str | None = None,
-    guard: str = "",
-    summary: str = "",
-    classes: dict | None = None,
-) -> str:
-    classes = classes or {}
-    parts = ["Files changed:"] + [
-        f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
-    ]
-    if classes:
-        parts += [f"Class mix: {class_mix(classes)}"]
-    if summary:
-        # Before the diff, and outside its budget: when a large diff is trimmed
-        # this is the part that still describes the whole change.
-        parts += ["", "Change summary (git --stat --summary):", summary]
-    if title is not None:
-        parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
-    parts += ["", "Unified diff:", diff]
-    if guard:
-        # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
-        # before the diff, 48 lines of changelog prose came after it and won — the
-        # model still wrote "feat: implement real-time collaboration" for a commit
-        # whose only code change was a docstring. Read after the diff, it obeys.
-        parts += ["", guard]
-    return "\n".join(parts)
 
 
 def retry_after_seconds(value: str | None) -> float | None:
@@ -899,6 +951,20 @@ def call_model(
     return text
 
 
+# --- from commitclerk/cli.py ------------------------------------------
+
+def prog_name(argv0: str) -> str:
+    """Name to show in --help, derived from how the tool was actually invoked.
+
+    Installed as `git-clerk`, git runs us for `git clerk`, so printing
+    `usage: clerk` there would document a command the user did not type.
+    """
+    base = os.path.basename(argv0)
+    stem = os.path.splitext(base)[0]
+    if stem == "git-clerk":
+        return "git clerk"
+    return stem or "clerk"
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog=prog_name(sys.argv[0]),
@@ -1021,6 +1087,10 @@ def main() -> int:
         encoding="utf-8",
     )
     return proc.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 
 
 if __name__ == "__main__":
