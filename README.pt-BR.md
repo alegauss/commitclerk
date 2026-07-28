@@ -48,6 +48,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
+| 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit. |
 | 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
 
 ## Requisitos
@@ -97,7 +98,7 @@ clerk             # ou: git clerk
 
 ```
 clerk [-m TÍTULO] [--dry-run] [--provider NOME] [--base-url URL] [--model MODELO]
-      [--max-chars N] [--version]
+      [--timeout S] [--max-chars N] [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -113,6 +114,7 @@ todos os exemplos abaixo.
 | `--provider NOME` | `openai` (ou `$CLERK_PROVIDER`) | Qual provedor chamar: `openai`, `anthropic` ou `ollama` (local, sem chave). |
 | `--base-url URL` | `https://api.openai.com/v1` (ou `$OPENAI_BASE_URL`) | Aponta para qualquer endpoint **compatível com a OpenAI** — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODELO` | o padrão do provedor — `gpt-4o-mini` (ou `$OPENAI_MODEL`) no `openai` | Modelo a chamar. |
+| `--timeout S` | `60` | Segundos de espera por requisição à API. Aumente para um modelo local lento. |
 | `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo. |
 | `--version` | — | Mostra a versão e sai. |
 
@@ -136,6 +138,9 @@ clerk --max-chars 120000
 
 # Um modelo local, para o diff nunca sair da sua máquina — sem chave de API
 clerk --provider ollama
+
+# Um modelo local lento: espere mais por requisição
+clerk --provider ollama --timeout 300
 ```
 
 ### Códigos de saída

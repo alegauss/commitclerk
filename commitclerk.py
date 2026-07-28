@@ -15,6 +15,7 @@ directly with `python commitclerk.py`):
     clerk --model gpt-4o-mini
     clerk --provider anthropic  # select the API provider
     clerk --provider ollama     # local model, no API key, nothing leaves the box
+    clerk --timeout 180         # give a slow local model more room
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     git clerk                   # same tool, as a native git subcommand
 
@@ -41,8 +42,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -54,6 +57,12 @@ DEFAULT_OLLAMA_MODEL = "qwen2.5-coder"
 DEFAULT_PROVIDER = "openai"
 MAX_DIFF_CHARS = 60_000
 REQUEST_TIMEOUT = 60
+
+# Transient failures: rate limits, gateway hiccups, and Anthropic's 529 overload.
+RETRY_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
+RETRY_ATTEMPTS = 3
+RETRY_BASE_DELAY = 1.0
+RETRY_MAX_DELAY = 30.0
 
 # Anthropic requires max_tokens and pins the wire format with a version header.
 ANTHROPIC_VERSION = "2023-06-01"
@@ -411,6 +420,87 @@ def build_user_prompt(
     return "\n".join(parts)
 
 
+def retry_after_seconds(value: str | None) -> float | None:
+    """The `Retry-After` header as seconds, or None if it isn't a plain number.
+
+    The header may also carry an HTTP date; rather than parse dates, fall back to
+    the backoff schedule, which is never longer than RETRY_MAX_DELAY anyway.
+    """
+    if not value:
+        return None
+    try:
+        seconds = float(value.strip())
+    except ValueError:
+        return None
+    return seconds if seconds >= 0 else None
+
+
+def retry_delay(attempt: int, retry_after: str | None = None) -> float:
+    """Seconds to wait after a failed `attempt` (1-based).
+
+    Exponential (1s, 2s, 4s, ...) with jitter, so a rate-limited team does not
+    retry in lockstep. A server-supplied `Retry-After` wins — it knows better
+    than we do — but is still capped, so a hostile or confused header cannot
+    park a commit for an hour.
+    """
+    supplied = retry_after_seconds(retry_after)
+    if supplied is not None:
+        return min(supplied, RETRY_MAX_DELAY)
+    backoff = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
+    # Spread, not secrecy: `random` is the right tool for jitter.
+    return backoff * (0.5 + random.random() / 2)
+
+
+def _is_retryable_url_error(exc: urllib.error.URLError) -> bool:
+    # A refused connection is a wrong address or a server that is not running —
+    # common with --provider ollama, and never worth three attempts.
+    return not isinstance(getattr(exc, "reason", None), ConnectionRefusedError)
+
+
+def post_json(
+    url: str,
+    data: bytes,
+    headers: dict,
+    *,
+    label: str,
+    timeout: int = REQUEST_TIMEOUT,
+    attempts: int = RETRY_ATTEMPTS,
+) -> dict:
+    """POST `data` and decode the JSON reply, retrying transient failures.
+
+    Rate limits and 5xx blips are routine — on a free tier a single 429 used to
+    throw away the whole commit.
+    """
+    for attempt in range(1, attempts + 1):
+        last = attempt == attempts
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:  # a subclass of URLError: catch first
+            body = exc.read().decode("utf-8", errors="ignore")
+            if last or exc.code not in RETRY_STATUSES:
+                raise SystemExit(f"{label} API error {exc.code}: {body}")
+            header = exc.headers.get("Retry-After") if exc.headers else None
+            reason = f"{label} API error {exc.code}"
+            delay = retry_delay(attempt, header)
+        except urllib.error.URLError as exc:
+            if last or not _is_retryable_url_error(exc):
+                raise SystemExit(f"{label} API request failed: {exc}")
+            reason = f"{label} API request failed: {exc}"
+            delay = retry_delay(attempt)
+
+        # ASCII only: this goes to a terminal whose encoding we do not control.
+        print(
+            f"{reason} - retrying in {delay:.1f}s (retry {attempt} of {attempts - 1})",
+            file=sys.stderr,
+        )
+        time.sleep(delay)
+
+    # Unreachable: the last attempt either returns or raises.
+    raise SystemExit(f"{label} API request failed after {attempts} attempts")
+
+
 def call_model(
     spec: dict,
     api_key: str | None,
@@ -431,21 +521,14 @@ def call_model(
 
     headers = {"Content-Type": "application/json"}
     headers.update(spec["headers"](api_key))
-    req = urllib.request.Request(
-        provider_url(spec, base),
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
     label = spec["label"]
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="ignore")
-        raise SystemExit(f"{label} API error {exc.code}: {body}")
-    except urllib.error.URLError as exc:
-        raise SystemExit(f"{label} API request failed: {exc}")
+    data = post_json(
+        provider_url(spec, base),
+        json.dumps(payload).encode("utf-8"),
+        headers,
+        label=label,
+        timeout=timeout,
+    )
 
     text = spec["extract"](data).strip()
     if not text:
@@ -497,6 +580,14 @@ def main() -> int:
              f"environment variable; {DEFAULT_MODEL} / $OPENAI_MODEL for openai).",
     )
     parser.add_argument(
+        "--timeout",
+        type=int,
+        default=REQUEST_TIMEOUT,
+        help=f"Seconds to wait for each API request (default: {REQUEST_TIMEOUT}). A slow "
+             f"local model may need more. Transient failures are retried up to "
+             f"{RETRY_ATTEMPTS - 1} times.",
+    )
+    parser.add_argument(
         "--max-chars",
         type=int,
         default=MAX_DIFF_CHARS,
@@ -539,11 +630,14 @@ def main() -> int:
     if args.message:
         body = call_model(
             spec, api_key, model, diff, files,
-            title=args.message, doc_only=doc_only, base=base,
+            title=args.message, doc_only=doc_only, base=base, timeout=args.timeout,
         )
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
-        message = call_model(spec, api_key, model, diff, files, doc_only=doc_only, base=base)
+        message = call_model(
+            spec, api_key, model, diff, files,
+            doc_only=doc_only, base=base, timeout=args.timeout,
+        )
 
     if args.dry_run:
         print(message)

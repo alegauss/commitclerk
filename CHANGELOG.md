@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Transient API failures are retried instead of losing the commit.** A single
+  `429` — routine on a free tier — used to throw away the whole message. Rate
+  limits, gateway errors and Anthropic's `529` overload now get up to two retries
+  with exponential backoff and jitter (so a rate-limited team does not retry in
+  lockstep), honouring a numeric `Retry-After` when the server sends one, capped so
+  a confused header cannot park a commit for an hour. Every retry is announced on
+  stderr, so a slow run explains itself. Deliberately *not* retried: any 4xx that
+  is not a rate limit, and a refused connection — retrying a wrong address or a
+  local server that is not running just delays the error.
+- **`--timeout`**, seconds per API request (default 60). Local models are often
+  much slower than a hosted API, and 60 seconds is not always enough.
 - **`--provider ollama`: a local model, no API key, nothing over the network.**
   The README's privacy section used to end the conversation with *do not run this
   on repositories whose contents cannot leave your machine*; now it can offer a

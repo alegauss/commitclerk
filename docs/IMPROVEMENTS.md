@@ -11,27 +11,28 @@ Sections are numbered to match the roadmap's blocks (`§A.1`, `§B.2`, …).
 
 ## A — Provider portability
 
-Three providers — two hosted, one local and keyless — and any OpenAI-compatible
-endpoint are reachable, so one gap is left in this block: a single transient
-failure still throws away a commit (§A.4), which matters more, not less, now that a
-flaky local server can be in the loop.
+Three providers — two hosted, one local and keyless — any OpenAI-compatible
+endpoint, and retry on transient failures are all in place. One gap is left in this
+block: a model that rejects a parameter the payload builder sent (§A.4).
 
 Keep resisting the `Provider` base class as the table grows. Two payload builders
 and two extractors cover essentially the entire market, because most vendors clone
 the OpenAI shape; the table stays readable in one sitting, which a class hierarchy
 would not.
 
-### A.4 — Failure handling is currently all-or-nothing
+### A.4 — A rejected parameter should heal, not fail
 
-`call_model` raises `SystemExit` on the first `HTTPError`. A single 429 —
-routine on a free tier — throws away the commit. Exponential backoff with jitter
-on 429 and 5xx (3 attempts, ~1s/2s/4s, honouring `Retry-After` when present)
-costs about fifteen lines and removes the most common reason a user gives up.
+Retry now covers the transient failures, but not the *permanent* one a caller can
+actually fix: newer reasoning models reject `temperature`, or rename `max_tokens`
+to `max_completion_tokens`. A 400 for a parameter the payload builder chose is not
+the user's mistake, and `post_json` deliberately does not retry 4xx — so today it
+surfaces as a raw API error.
 
-Related and easy to miss: newer reasoning models reject `temperature`, or rename
-`max_tokens` to `max_completion_tokens`. Rather than encoding a model capability
-matrix that rots within a quarter, catch the 400, strip the offending parameter,
-and retry exactly once. Self-healing beats a table nobody updates.
+Rather than encoding a model capability matrix that rots within a quarter, catch
+the 400, strip or rename the offending parameter, and retry exactly once.
+Self-healing beats a table nobody updates. The Anthropic adapter already sidesteps
+half of this by sending no `temperature` at all; the OpenAI one still does, and any
+OpenAI-compatible endpoint behind `--base-url` may reject it.
 
 ---
 

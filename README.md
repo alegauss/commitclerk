@@ -50,6 +50,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
+| 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
@@ -100,7 +101,7 @@ clerk             # or: git clerk
 
 ```
 clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL]
-      [--max-chars N] [--version]
+      [--timeout S] [--max-chars N] [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -116,6 +117,7 @@ example below.
 | `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which provider to call: `openai`, `anthropic`, or `ollama` (local, no key). |
 | `--base-url URL` | `https://api.openai.com/v1` (or `$OPENAI_BASE_URL`) | Point at any **OpenAI-compatible** endpoint — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
 | `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
+| `--timeout S` | `60` | Seconds to wait for each API request. Raise it for a slow local model. |
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model. |
 | `--version` | — | Print the version and exit. |
 
@@ -139,6 +141,9 @@ clerk --max-chars 120000
 
 # A local model, so the diff never leaves your machine — no API key needed
 clerk --provider ollama
+
+# A slow local model: wait longer per request
+clerk --provider ollama --timeout 300
 ```
 
 ### Exit codes
@@ -296,7 +301,7 @@ Each provider reads its own key variable — see [Configuration](#configuration)
 <details>
 <summary><strong>"OpenAI API error 401 / 429" (or "Anthropic API error ...")</strong></summary>
 
-The message is prefixed with the provider that rejected the call. `401` means the key is invalid or revoked. `429` means rate-limited or out of quota — check your usage on that provider's dashboard, or retry with a smaller `--max-chars`.
+The message is prefixed with the provider that rejected the call. `401` means the key is invalid or revoked, and fails immediately. `429` and `5xx` are transient, so they are retried twice with backoff and jitter (honouring `Retry-After`) before giving up — if you still see the error, you are genuinely out of quota. Check your usage on that provider's dashboard, or retry with a smaller `--max-chars`.
 </details>
 
 <details>

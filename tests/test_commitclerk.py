@@ -3,9 +3,15 @@
     python -m unittest discover -s tests
 """
 
+from __future__ import annotations  # `str | None` in a signature, on Python 3.8
+
+import email.message
+import io
+import json
 import os
 import sys
 import unittest
+import urllib.error
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -426,6 +432,150 @@ class TestOllamaPreset(unittest.TestCase):
 
     def test_a_local_base_url_passes_validation(self):
         self.assertIsNone(commitclerk.base_url_error(self.spec["default_base"]))
+
+
+class TestRetryDelay(unittest.TestCase):
+    def test_backoff_grows_and_is_jittered(self):
+        with mock.patch.object(commitclerk.random, "random", return_value=1.0):
+            self.assertAlmostEqual(commitclerk.retry_delay(1), 1.0)
+            self.assertAlmostEqual(commitclerk.retry_delay(2), 2.0)
+            self.assertAlmostEqual(commitclerk.retry_delay(3), 4.0)
+        with mock.patch.object(commitclerk.random, "random", return_value=0.0):
+            # Jitter never drops below half the backoff, so a retry still waits.
+            self.assertAlmostEqual(commitclerk.retry_delay(2), 1.0)
+
+    def test_backoff_is_capped(self):
+        with mock.patch.object(commitclerk.random, "random", return_value=1.0):
+            self.assertLessEqual(commitclerk.retry_delay(20), commitclerk.RETRY_MAX_DELAY)
+
+    def test_retry_after_header_wins(self):
+        self.assertEqual(commitclerk.retry_delay(1, "7"), 7.0)
+        self.assertEqual(commitclerk.retry_delay(1, " 2.5 "), 2.5)
+
+    def test_retry_after_is_capped_too(self):
+        self.assertEqual(commitclerk.retry_delay(1, "99999"), commitclerk.RETRY_MAX_DELAY)
+
+    def test_a_date_or_garbage_retry_after_falls_back_to_backoff(self):
+        for value in (None, "", "Wed, 21 Oct 2026 07:28:00 GMT", "soon", "-5"):
+            with self.subTest(value=value):
+                self.assertIsNone(commitclerk.retry_after_seconds(value))
+                with mock.patch.object(commitclerk.random, "random", return_value=1.0):
+                    self.assertAlmostEqual(commitclerk.retry_delay(1, value), 1.0)
+
+
+class TestRetryStatuses(unittest.TestCase):
+    def test_transient_failures_are_retryable(self):
+        for code in (429, 500, 502, 503, 504, 529):
+            with self.subTest(code=code):
+                self.assertIn(code, commitclerk.RETRY_STATUSES)
+
+    def test_client_errors_are_not(self):
+        for code in (400, 401, 403, 404, 422):
+            with self.subTest(code=code):
+                self.assertNotIn(code, commitclerk.RETRY_STATUSES)
+
+
+def _http_error(code: int, body: str = "boom", retry_after: str | None = None):
+    headers = email.message.Message()
+    if retry_after is not None:
+        headers["Retry-After"] = retry_after
+    return urllib.error.HTTPError(
+        "https://example/api", code, "err", headers, io.BytesIO(body.encode("utf-8"))
+    )
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict):
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class TestPostJson(unittest.TestCase):
+    """The retry loop, with the network and the clock mocked out."""
+
+    def setUp(self):
+        self.slept = []
+        patcher = mock.patch.object(commitclerk.time, "sleep", self.slept.append)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        # The retry notice belongs on a user's terminal, not in the test log.
+        self.stderr = io.StringIO()
+        stderr_patcher = mock.patch.object(commitclerk.sys, "stderr", self.stderr)
+        stderr_patcher.start()
+        self.addCleanup(stderr_patcher.stop)
+
+    def _run(self, side_effect, **kwargs):
+        with mock.patch.object(
+            commitclerk.urllib.request, "urlopen", side_effect=side_effect
+        ) as urlopen:
+            result = commitclerk.post_json(
+                "https://example/api", b"{}", {}, label="Test", **kwargs
+            )
+        return result, urlopen
+
+    def test_a_successful_call_does_not_sleep(self):
+        result, urlopen = self._run([_FakeResponse({"ok": True})])
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertEqual(self.slept, [])
+
+    def test_a_rate_limit_is_retried_and_then_succeeds(self):
+        result, urlopen = self._run([_http_error(429), _FakeResponse({"ok": True})])
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(len(self.slept), 1)
+
+    def test_retry_after_header_drives_the_wait(self):
+        self._run([_http_error(429, retry_after="3"), _FakeResponse({"ok": True})])
+        self.assertEqual(self.slept, [3.0])
+
+    def test_the_retry_is_announced_on_stderr(self):
+        self._run([_http_error(429, retry_after="3"), _FakeResponse({"ok": True})])
+        notice = self.stderr.getvalue()
+        self.assertIn("429", notice)
+        self.assertIn("3.0s", notice)
+        self.assertIn("retry 1 of 2", notice)
+        self.assertTrue(notice.isascii(), notice)
+
+    def test_a_client_error_fails_immediately(self):
+        with self.assertRaises(SystemExit) as caught:
+            self._run([_http_error(401, body="bad key")])
+        self.assertIn("401", str(caught.exception))
+        self.assertIn("bad key", str(caught.exception))
+        self.assertEqual(self.slept, [])
+
+    def test_exhausting_the_retries_reports_the_last_error(self):
+        with self.assertRaises(SystemExit) as caught:
+            self._run([_http_error(503)] * 3)
+        self.assertIn("503", str(caught.exception))
+        # Three attempts means two waits, not three.
+        self.assertEqual(len(self.slept), 2)
+
+    def test_a_network_blip_is_retried(self):
+        result, urlopen = self._run(
+            [urllib.error.URLError("connection reset"), _FakeResponse({"ok": True})]
+        )
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(urlopen.call_count, 2)
+
+    def test_a_refused_connection_is_not_retried(self):
+        # `--provider ollama` with no server running: retrying cannot help.
+        with self.assertRaises(SystemExit):
+            self._run([urllib.error.URLError(ConnectionRefusedError(61, "refused"))])
+        self.assertEqual(self.slept, [])
+
+    def test_attempts_is_configurable(self):
+        with self.assertRaises(SystemExit):
+            self._run([_http_error(429)] * 5, attempts=5)
+        self.assertEqual(len(self.slept), 4)
 
 
 class TestBuildUserPrompt(unittest.TestCase):

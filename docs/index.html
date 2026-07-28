@@ -464,7 +464,7 @@
       <p>Installing gives you three identical entry points: <code>clerk</code>, <code>commitclerk</code>, and <code>git clerk</code>.</p>
     </div>
 
-    <div class="codeblock reveal" style="max-width:760px;margin:0 auto 28px;text-align:center">clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL] [--max-chars N] [--version]</div>
+    <div class="codeblock reveal" style="max-width:760px;margin:0 auto 28px;text-align:center">clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL] [--timeout S] [--max-chars N] [--version]</div>
 
     <div class="tbl-wrap reveal">
       <table>
@@ -475,6 +475,7 @@
           <tr><td><code>--provider NAME</code></td><td><code>openai</code></td><td><code>openai</code>, <code>anthropic</code>, or <code>ollama</code> (local, no key) — or set <code>$CLERK_PROVIDER</code>.</td></tr>
           <tr><td><code>--base-url URL</code></td><td><code>https://api.openai.com/v1</code></td><td>Any OpenAI-compatible endpoint — Ollama, LM Studio, vLLM, OpenRouter, Groq, Azure — or set <code>$OPENAI_BASE_URL</code>.</td></tr>
           <tr><td><code>--model MODEL</code></td><td><code>gpt-4o-mini</code></td><td>Model to call — the provider's default, or set <code>$OPENAI_MODEL</code>.</td></tr>
+          <tr><td><code>--timeout S</code></td><td><code>60</code></td><td>Seconds to wait for each API request. Raise it for a slow local model; transient failures are retried twice with backoff.</td></tr>
           <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Character budget for the diff. A larger diff is trimmed <b>per file</b>, so every changed file still reaches the model.</td></tr>
           <tr><td><code>--version</code></td><td>—</td><td>Print the version and exit.</td></tr>
         </tbody>

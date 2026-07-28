@@ -19,6 +19,7 @@ land.
 Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
+- **T5 SHIPPED** (Block A §A.4 — retry with backoff/jitter + `--timeout`) — 2026-07-27.
 - **T4 SHIPPED** (Block A §A.3 — keyless `--provider ollama` preset) — 2026-07-27.
 - **T3 SHIPPED** (Block A §A.2 — Anthropic Messages adapter) — 2026-07-27.
 - **T2 SHIPPED** (Block A §A.1 — `--base-url` / `$OPENAI_BASE_URL`) — 2026-07-27.
