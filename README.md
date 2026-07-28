@@ -50,7 +50,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
-| 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit. |
+| 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
 ## Requirements
@@ -302,6 +302,16 @@ Each provider reads its own key variable — see [Configuration](#configuration)
 <summary><strong>"OpenAI API error 401 / 429" (or "Anthropic API error ...")</strong></summary>
 
 The message is prefixed with the provider that rejected the call. `401` means the key is invalid or revoked, and fails immediately. `429` and `5xx` are transient, so they are retried twice with backoff and jitter (honouring `Retry-After`) before giving up — if you still see the error, you are genuinely out of quota. Check your usage on that provider's dashboard, or retry with a smaller `--max-chars`.
+</details>
+
+<details>
+<summary><strong>"Unsupported parameter" / "does not support temperature"</strong></summary>
+
+You should not see this: a `400` naming a parameter `commitclerk` sent is repaired
+automatically — the parameter is dropped, or renamed when the provider's message
+says which name to use — and the request is retried once. A line on stderr says what
+changed. If the error survives that, the model is rejecting something the request
+cannot do without; pick a different `--model`.
 </details>
 
 <details>

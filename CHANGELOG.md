@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A rejected request parameter now heals itself instead of failing.** Reasoning
+  models reject `temperature` outright, and some rename `max_tokens` to
+  `max_completion_tokens`. Rather than carry a per-model capability table that rots
+  within a quarter, a `400` that names a parameter this tool sent is repaired once —
+  the parameter is dropped (if it is an optional sampling knob) or renamed (when the
+  provider's own message says *"Use 'x' instead"*) — and the request goes out again.
+  This is separate from the transient-failure budget: a permanent error is repaired
+  immediately, with no backoff. Required fields are never touched, and `model` in
+  particular is protected, because almost every `400` says *"with this model"* and
+  would otherwise match it by accident.
 - **Transient API failures are retried instead of losing the commit.** A single
   `429` — routine on a free tier — used to throw away the whole message. Rate
   limits, gateway errors and Anthropic's `529` overload now get up to two retries

@@ -19,9 +19,9 @@ commitclerk today is a very good ~460-line script with one genuinely differentia
 idea: **it refuses to describe documentation prose as work that was implemented.**
 Everything below is an answer to one of three questions:
 
-1. **Will it scale technically?** The tool knows nothing about the repo beyond the
-   staged diff, and a large diff is still just trimmed. Blocks **A**, **B** and
-   **C** fix the ceiling.
+1. **Will it scale technically?** Provider portability is done (Block **A** shipped
+   in full). The tool still knows nothing about the repo beyond the staged diff, and
+   a large diff is only trimmed. Blocks **B** and **C** fix the rest of the ceiling.
 2. **Can a team actually adopt it?** A tool that ships a raw diff to a third party
    with no redaction, no config file, no offline path and no `commit-msg`
    validation cannot be mandated by anyone. Blocks **D**, **E**, **F** and **G**
@@ -52,15 +52,6 @@ Everything below is an answer to one of three questions:
   patches to `_RULES`.
 
 ---
-
-## Block A — Provider portability
-
-*Three providers, a keyless local preset, and retry on transient failures all
-work. What is left is not dying on a parameter a model happens to reject.* → [§A](IMPROVEMENTS.md#a--provider-portability)
-
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T6 | 💭 | Capability fallback: if a model rejects `temperature` or the parameter name differs (reasoning models), retry once without it instead of dying with a raw API error. → §A.4 | — |
 
 ## Block B — Context beyond the diff
 
@@ -186,7 +177,7 @@ If you want the highest value per unit of effort, roughly:
 
 1. **T49** — trivial, and it fixes the discovery problem.
 2. **T16, T11** — the diff pipeline's honesty gaps, in the tool's own core competence.
-3. **T6** — self-healing on a rejected parameter, for almost no code.
+3. **T11** — the facts a unified diff hides, for almost no code.
 4. **T25, T28** — config plus lint; together they unlock team adoption.
 5. **T19, T21** — the two blockers for corporate approval.
 6. **T7, T8** — the quality jump nobody else in this niche ships.

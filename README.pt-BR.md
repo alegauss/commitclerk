@@ -48,7 +48,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
-| 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit. |
+| 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit — e, se o modelo rejeitar um parâmetro, a requisição é corrigida e reenviada. |
 | 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
 
 ## Requisitos

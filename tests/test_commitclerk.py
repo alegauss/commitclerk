@@ -502,6 +502,7 @@ class TestPostJson(unittest.TestCase):
     """The retry loop, with the network and the clock mocked out."""
 
     def setUp(self):
+        self.payload = {"model": "m", "temperature": 0.2, "messages": []}
         self.slept = []
         patcher = mock.patch.object(commitclerk.time, "sleep", self.slept.append)
         patcher.start()
@@ -517,7 +518,7 @@ class TestPostJson(unittest.TestCase):
             commitclerk.urllib.request, "urlopen", side_effect=side_effect
         ) as urlopen:
             result = commitclerk.post_json(
-                "https://example/api", b"{}", {}, label="Test", **kwargs
+                "https://example/api", dict(self.payload), {}, label="Test", **kwargs
             )
         return result, urlopen
 
@@ -576,6 +577,119 @@ class TestPostJson(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self._run([_http_error(429)] * 5, attempts=5)
         self.assertEqual(len(self.slept), 4)
+
+
+class TestRepairPayload(unittest.TestCase):
+    """Self-healing on a 400 about a parameter we sent."""
+
+    def test_drops_a_rejected_temperature(self):
+        payload = {"model": "o3", "temperature": 0.2, "messages": []}
+        repaired, what = commitclerk.repair_payload(
+            payload,
+            "Unsupported value: 'temperature' does not support 0.2 with this model.",
+        )
+        self.assertNotIn("temperature", repaired)
+        self.assertIn("temperature", what)
+        # The original is left alone — the caller decides what to send next.
+        self.assertIn("temperature", payload)
+
+    def test_renames_a_parameter_when_the_provider_names_the_replacement(self):
+        payload = {"model": "o3", "max_tokens": 8192, "messages": []}
+        repaired, what = commitclerk.repair_payload(
+            payload,
+            "Unsupported parameter: 'max_tokens' is not supported with this model. "
+            "Use 'max_completion_tokens' instead.",
+        )
+        self.assertNotIn("max_tokens", repaired)
+        self.assertEqual(repaired["max_completion_tokens"], 8192)
+        self.assertIn("renamed", what)
+
+    def test_a_required_parameter_is_never_dropped(self):
+        # Dropping max_tokens would trade this 400 for "max_tokens: field required".
+        payload = {"model": "m", "max_tokens": 8192, "messages": []}
+        self.assertIsNone(
+            commitclerk.repair_payload(payload, "max_tokens: 8192 > 4096, the maximum allowed")
+        )
+
+    def test_the_model_field_is_never_dropped(self):
+        payload = {"model": "typo-4o", "messages": []}
+        self.assertIsNone(commitclerk.repair_payload(payload, "The model `typo-4o` does not exist"))
+
+    def test_an_unrelated_400_is_not_repairable(self):
+        payload = {"model": "m", "temperature": 0.2, "messages": []}
+        for body in ("invalid api key", "context_length_exceeded", ""):
+            with self.subTest(body=body):
+                self.assertIsNone(commitclerk.repair_payload(payload, body))
+
+    def test_a_self_referential_suggestion_is_ignored(self):
+        self.assertIsNone(commitclerk.suggested_replacement("use 'temperature' instead", "temperature"))
+
+
+class TestPostJsonRepair(unittest.TestCase):
+    def setUp(self):
+        self.slept = []
+        patcher = mock.patch.object(commitclerk.time, "sleep", self.slept.append)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        stderr_patcher = mock.patch.object(commitclerk.sys, "stderr", io.StringIO())
+        stderr_patcher.start()
+        self.addCleanup(stderr_patcher.stop)
+
+    def _run(self, side_effect, payload=None):
+        payload = payload if payload is not None else {"model": "o3", "temperature": 0.2}
+        with mock.patch.object(
+            commitclerk.urllib.request, "urlopen", side_effect=side_effect
+        ) as urlopen:
+            result = commitclerk.post_json(
+                "https://example/api", payload, {}, label="Test"
+            )
+        return result, urlopen
+
+    def test_a_rejected_parameter_is_repaired_and_the_call_succeeds(self):
+        rejection = _http_error(400, "Unsupported parameter: 'temperature' is not supported")
+        result, urlopen = self._run([rejection, _FakeResponse({"ok": True})])
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(urlopen.call_count, 2)
+        # A permanent error is not a rate limit: repair immediately, do not back off.
+        self.assertEqual(self.slept, [])
+
+    def test_the_repaired_request_no_longer_carries_the_parameter(self):
+        rejection = _http_error(400, "Unsupported parameter: 'temperature' is not supported")
+        sent = []
+
+        def record(req, timeout=None):
+            sent.append(json.loads(req.data.decode("utf-8")))
+            if len(sent) == 1:
+                raise rejection
+            return _FakeResponse({"ok": True})
+
+        with mock.patch.object(commitclerk.urllib.request, "urlopen", record):
+            commitclerk.post_json(
+                "https://example/api", {"model": "o3", "temperature": 0.2}, {}, label="Test"
+            )
+        self.assertIn("temperature", sent[0])
+        self.assertNotIn("temperature", sent[1])
+
+    def test_repair_happens_at_most_once(self):
+        body = "Unsupported parameter: 'temperature' is not supported"
+        with self.assertRaises(SystemExit) as caught:
+            self._run([_http_error(400, body), _http_error(400, body)])
+        self.assertIn("400", str(caught.exception))
+        self.assertEqual(self.slept, [])
+
+    def test_an_unrepairable_400_still_fails_immediately(self):
+        with self.assertRaises(SystemExit) as caught:
+            self._run([_http_error(400, "context_length_exceeded")])
+        self.assertIn("context_length_exceeded", str(caught.exception))
+
+    def test_a_repair_does_not_consume_the_transient_retry_budget(self):
+        rejection = _http_error(400, "Unsupported parameter: 'temperature' is not supported")
+        result, urlopen = self._run(
+            [rejection, _http_error(429), _http_error(503), _FakeResponse({"ok": True})]
+        )
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(urlopen.call_count, 4)
+        self.assertEqual(len(self.slept), 2)
 
 
 class TestBuildUserPrompt(unittest.TestCase):

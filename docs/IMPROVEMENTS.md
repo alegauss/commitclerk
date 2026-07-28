@@ -5,34 +5,8 @@ No status markers live here — the roadmap owns status. When a task ships, its
 subsection is **deleted** from this file; `git log` and
 [`CHANGELOG.md`](../CHANGELOG.md) are the history.
 
-Sections are numbered to match the roadmap's blocks (`§A.1`, `§B.2`, …).
-
----
-
-## A — Provider portability
-
-Three providers — two hosted, one local and keyless — any OpenAI-compatible
-endpoint, and retry on transient failures are all in place. One gap is left in this
-block: a model that rejects a parameter the payload builder sent (§A.4).
-
-Keep resisting the `Provider` base class as the table grows. Two payload builders
-and two extractors cover essentially the entire market, because most vendors clone
-the OpenAI shape; the table stays readable in one sitting, which a class hierarchy
-would not.
-
-### A.4 — A rejected parameter should heal, not fail
-
-Retry now covers the transient failures, but not the *permanent* one a caller can
-actually fix: newer reasoning models reject `temperature`, or rename `max_tokens`
-to `max_completion_tokens`. A 400 for a parameter the payload builder chose is not
-the user's mistake, and `post_json` deliberately does not retry 4xx — so today it
-surfaces as a raw API error.
-
-Rather than encoding a model capability matrix that rots within a quarter, catch
-the 400, strip or rename the offending parameter, and retry exactly once.
-Self-healing beats a table nobody updates. The Anthropic adapter already sidesteps
-half of this by sending no `temperature` at all; the OpenAI one still does, and any
-OpenAI-compatible endpoint behind `--base-url` may reject it.
+Sections are numbered to match the roadmap's blocks (`§B.2`, `§C.4`, …). Block **A**
+shipped in full and its section is gone; letters are never reused.
 
 ---
 
