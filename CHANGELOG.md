@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-28
+
 ### Added
 
 - The *Publish* workflow now picks the next version by itself: a run bumps
@@ -67,6 +69,7 @@ Initial public release.
 - `run-commit.cmd`: Windows wrapper that verifies `OPENAI_API_KEY`, stages
   everything, and forwards its arguments to `commitclerk.py`.
 
-[Unreleased]: https://github.com/alegauss/commitclerk/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/alegauss/commitclerk/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/alegauss/commitclerk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/alegauss/commitclerk/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alegauss/commitclerk/releases/tag/v0.1.0

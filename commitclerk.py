@@ -33,7 +33,7 @@ import sys
 import urllib.error
 import urllib.request
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-4o-mini"
