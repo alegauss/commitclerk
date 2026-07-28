@@ -311,6 +311,22 @@ detected, `5` validation failed, `6` config invalid — makes the tool composabl
 and the README already has an exit-code table to extend. Combine with `NO_COLOR`
 support and non-TTY detection for output that behaves in a pipe.
 
+### F.6 — The reply needs a budget too
+
+`--max-chars` budgets the *input*. Nothing budgets the output: the Anthropic
+adapter sends a hard-coded `max_tokens` of 8 192 because the Messages API requires
+one, and the OpenAI adapter sends nothing at all. Both are wrong in opposite
+directions. A model that reasons before answering can spend the whole budget and
+return no text — which now fails cleanly ("returned no message text") instead of
+committing an empty body, but leaves the user with no knob to turn.
+
+`--max-output-tokens` is that knob, resolved per provider like every other option:
+CLI flag > provider default. The right response to a truncated reply is a larger
+budget or a smaller diff, **not** switching the model's reasoning off — that flag
+differs per vendor, is rejected outright by some models, and would put a capability
+matrix back into the tool (see the §A.4 argument, which shipped as self-healing
+repair instead).
+
 ---
 
 ## G — Git-native integration
@@ -495,3 +511,32 @@ concatenates it back into a single distributable `commitclerk.py` published as a
 release asset. The `curl` path survives, the promise survives, and the code
 becomes maintainable. Do it once, deliberately, at the threshold — not gradually
 and not early.
+
+### J.6 — ASCII is a portability constraint, not a style preference
+
+A Windows console running cp1252 cannot print an em dash: it becomes `?`. This has
+already happened twice — once in `--help` text and once in a retry notice — and both
+times it was caught by eye rather than by a test. The tool's output is read on
+whatever terminal the user has, so every string that can reach stdout or stderr
+should be ASCII, and a test should say so: collect the `argparse` help, the error
+strings and the retry notices, and assert `.isascii()`.
+
+Note the deliberate asymmetry: **prose files may use typography freely.** The
+constraint applies to program output, not to the READMEs, the changelog, or this
+file. The prompt strings sent to the model are also exempt — they never reach a
+terminal.
+
+### J.7 — Documentation drift is a test, not a discipline
+
+A single new flag currently has to be written into six places: `argparse` help, the
+module docstring, `README.md`, `README.pt-BR.md`, `docs/index.html` and
+`docs/llms.txt`. That is done by hand today, which means the question is not
+*whether* one will be missed but *when* — and a flag documented in English only, or
+absent from the reference tables, is a bug the test suite cannot currently see.
+
+The cheap version is a test that parses the CLI's own surface — the flags `argparse`
+knows about, and the keys of `PROVIDERS` — and asserts each one appears in the two
+READMEs and `llms.txt`. It needs no HTML parsing and no network, it fails loudly the
+first time a flag lands undocumented, and it pairs naturally with the `--help`
+snapshot test (T54): that one catches an *unreviewed* CLI change, this one catches an
+*undocumented* one.

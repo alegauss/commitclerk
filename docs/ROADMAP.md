@@ -120,6 +120,7 @@ is `git commit --amend`.* → [§F](IMPROVEMENTS.md#f--interaction--ux)
 | T33 | 💭 | `--verbose`: model, prompt/completion tokens, estimated cost, elapsed time, prompt version. `--quiet` for hook use. Cost is currently invisible. → §F.3 | T52 |
 | T34 | 💭 | `--amend`: build the diff from `HEAD` plus the staged changes and pass the existing message as context, instead of describing only the fixup. → §F.4 | — |
 | T35 | 💭 | Colour output (respecting `NO_COLOR` and non-TTY) and a documented error taxonomy with distinct exit codes per failure class. Today an API failure and a git failure are indistinguishable to a script. → §F.5 | — |
+| T59 | 💭 | `--max-output-tokens`: a provider-agnostic budget for the *reply*. Anthropic's is a hard-coded 8 192 and OpenAI's is unset, so a verbose model can burn the budget before writing prose and the run fails with "returned no message text". → §F.6 | — |
 
 ## Block G — Git-native integration
 
@@ -168,6 +169,8 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 | T53 | 💭 | A fake-provider test double so end-to-end paths (commit, hook, split) are testable with no API key and no network. → §J.3 | — |
 | T54 | 💭 | A `--help` snapshot test, so a CLI surface change is always a reviewed diff and never an accident. → §J.4 | — |
 | T55 | 💭 | Split `commitclerk.py` **only** if it passes ~800 lines, and then into a package that still builds a single-file artifact — the "read the whole thing before trusting it" promise survives the refactor. → §J.5 | — |
+| T57 | 💭 | Assert every user-facing string is ASCII. Two em dashes shipped in `--help` and a retry notice rendered as `?` on a cp1252 Windows console before being caught by hand. → §J.6 | — |
+| T58 | 💭 | Docs-drift test: every flag in `argparse` and every provider in `PROVIDERS` must appear in both READMEs and `docs/llms.txt`. Six documentation surfaces are updated by hand per shipped flag. → §J.7 | T54 |
 
 ---
 

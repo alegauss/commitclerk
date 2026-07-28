@@ -6,7 +6,7 @@ task. Nothing else. The implementation story goes in the commit message and the
 
 See [`.claude/skills/commitclerk-roadmap-docs`](../.claude/skills/commitclerk-roadmap-docs/SKILL.md).
 
-- **Next free task number:** `T57`
+- **Next free task number:** `T60`
 - **Next free block letter:** `K` (A–J are in use)
 
 T-numbers are never reused and never renumbered, even when a task is dropped.
