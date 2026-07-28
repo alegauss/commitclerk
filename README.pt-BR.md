@@ -179,13 +179,19 @@ O mesmo conjunto de regras mantém títulos no imperativo e abaixo de 72 caracte
 
 ## Roadmap
 
+O backlog completo está em **[`docs/ROADMAP.md`](docs/ROADMAP.md)**, com a
+justificativa de projeto de cada item em [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md)
+e o posicionamento e os não-objetivos em [`docs/STRATEGY.md`](docs/STRATEGY.md).
+
 Ideias que dariam boas primeiras contribuições:
 
-- [ ] Um wrapper `run-commit.sh` para POSIX equivalente ao `run-commit.cmd`
-- [ ] Instalador de hook `prepare-commit-msg`
-- [ ] Suporte a outros provedores (Anthropic, Azure OpenAI, Ollama / modelos locais)
-- [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar
-- [ ] Arquivo de configuração com regras de commit por projeto
+- [ ] Um wrapper `run-commit.sh` para POSIX equivalente ao `run-commit.cmd` (T38)
+- [ ] Instalador de hook `prepare-commit-msg` (T36)
+- [ ] Suporte a outros provedores — Anthropic, Azure OpenAI, Ollama / modelos locais (T1–T4)
+- [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar (T31)
+- [ ] Arquivo de configuração com regras de commit por projeto (T25)
+- [ ] `clerk --lint`: validar uma mensagem existente sem chamar a API, como hook `commit-msg` (T28)
+- [ ] Um GIF ou asciinema de demonstração para o topo deste README (T49)
 
 Pegue uma delas ou proponha a sua em uma [issue](https://github.com/alegauss/commitclerk/issues).
 

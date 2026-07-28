@@ -230,13 +230,19 @@ Diffs are cut at 60 000 characters by default. Raise it with `--max-chars`, or �
 
 ## Roadmap
 
+The full backlog lives in **[`docs/ROADMAP.md`](docs/ROADMAP.md)**, with the design
+rationale behind each item in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md) and the
+project's positioning and non-goals in [`docs/STRATEGY.md`](docs/STRATEGY.md).
+
 Ideas that would make good first contributions:
 
-- [ ] A POSIX `run-commit.sh` wrapper to match `run-commit.cmd`
-- [ ] `prepare-commit-msg` git hook installer
-- [ ] Support for additional providers (Anthropic, Azure OpenAI, Ollama / local models)
-- [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing
-- [ ] A configuration file for project-specific commit rules
+- [ ] A POSIX `run-commit.sh` wrapper to match `run-commit.cmd` (T38)
+- [ ] `prepare-commit-msg` git hook installer (T36)
+- [ ] Support for additional providers — Anthropic, Azure OpenAI, Ollama / local models (T1–T4)
+- [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing (T31)
+- [ ] A configuration file for project-specific commit rules (T25)
+- [ ] `clerk --lint`: validate an existing message with no API call, as a `commit-msg` hook (T28)
+- [ ] A demo GIF or asciinema cast for the top of this README (T49)
 
 Grab one, or propose your own in an [issue](https://github.com/alegauss/commitclerk/issues).
 
