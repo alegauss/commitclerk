@@ -15,7 +15,7 @@ Shipped tasks are *removed* from this file — they are not marked ✅ here.
 
 ## The thesis
 
-commitclerk today is a very good ~460-line script with one genuinely differentiated
+commitclerk today is a very good ~880-line script with one genuinely differentiated
 idea: **it refuses to describe documentation prose as work that was implemented.**
 Everything below is an answer to one of three questions:
 
@@ -68,14 +68,13 @@ under-exploited: the repository is full of cheap, local, zero-cost context.* →
 
 ## Block C — Diff intelligence
 
-*A 60 000-character head-cut is the crudest possible answer to a large diff: the
-last file changed is simply invisible to the model.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
+*Every file now reaches the model and every file is classified. What is left is
+proportion: a lockfile still eats the budget, and the doc guard still has a cliff.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T14 | 💭 | **File-class taxonomy** — `code · test · docs · generated · config · vendor · binary` — replacing the boolean doc-only flag. The class mix is summarized in the prompt and drives the type prefix. → §C.2 | — |
-| T15 | 💭 | Demote generated files (lockfiles, snapshots, `dist/`, `*.min.*`, migrations, `.po`) to a one-line "N generated files changed" instead of thousands of diff lines competing for the budget. → §C.2 | T14 |
-| T16 | 💭 | **Mixed doc+code commits**: today one code file disables the doc guard entirely, so a 900-line CHANGELOG edit plus a typo fix can still produce `feat:`. Make the guard per-file rather than all-or-nothing. → §C.3 | T14 |
+| T15 | 💭 | Demote generated files (lockfiles, snapshots, `dist/`, `*.min.*`, migrations, `.po`) to a one-line "N generated files changed" instead of thousands of diff lines competing for the budget. → §C.2 | — |
+| T16 | 💭 | **Mixed doc+code commits**: today one code file disables the doc guard entirely, so a 900-line CHANGELOG edit plus a typo fix can still produce `feat:`. Make the guard per-file rather than all-or-nothing. → §C.3 | — |
 | T17 | 💭 | Map-reduce pass for very large diffs (opt-in): summarize each oversized file separately, then write the message from the summaries. Handles the commit that no budget can fit. → §C.4 | — |
 | T18 | 💭 | Warn when the same files have *unstaged* changes too — the message may describe a version of the code that is not the one being committed. → §C.5 | — |
 
@@ -87,7 +86,7 @@ last file changed is simply invisible to the model.* → [§C](IMPROVEMENTS.md#c
 | --- | --- | --- | --- |
 | T19 | 💭 | **Secret pre-flight** — scan the staged diff for known key shapes and high-entropy strings *before* the request leaves the machine; refuse by default, `--redact` to mask and continue, `--no-scan` to override. A committed secret sent to a third-party API is the worst thing this tool could do. → §D.1 | — |
 | T20 | 💭 | `.clerkignore`: paths whose contents are never transmitted, replaced by a filename-and-linecount placeholder. Lets a team allow the tool on a repo with a few sensitive files. → §D.2 | — |
-| T21 | 💭 | `--offline`: a deterministic, LLM-free message (type from file classes, scope from paths, bullets grouped by directory). No key, no network, no failure mode — so a hook or CI job can never hard-block a commit. → §D.3 | T14 |
+| T21 | 💭 | `--offline`: a deterministic, LLM-free message (type from file classes, scope from paths, bullets grouped by directory). No key, no network, no failure mode — so a hook or CI job can never hard-block a commit. → §D.3 | — |
 | T22 | 💭 | CI job that runs the suite with socket creation monkeypatched to raise, proving there is no accidental egress path outside the one documented call. → §D.4 | T53 |
 | T23 | 💭 | Opt-in `Assisted-by: commitclerk <version> (<model>)` trailer for teams that need AI-assistance provenance in history. Off by default. → §D.5 | T25 |
 | T24 | 💭 | A real data-flow / threat-model section in `SECURITY.md`: exactly what leaves the machine, what never does, what an attacker controlling the model output could attempt (prompt injection *from diff content* into the commit message is a genuine vector). → §D.1 | T19 |
@@ -137,7 +136,7 @@ write prose about it" is not specific to one commit.* → [§H](IMPROVEMENTS.md#
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T40 | 💭 | **`clerk --split`** — propose a set of logical commits from one mixed working tree (grouped by subsystem/intent), then stage and commit them in order, each with its own message. Directly attacks the reason bad commit messages exist: the commit itself was never coherent. The most ambitious task here. → §H.1 | T14, T30 |
+| T40 | 💭 | **`clerk --split`** — propose a set of logical commits from one mixed working tree (grouped by subsystem/intent), then stage and commit them in order, each with its own message. Directly attacks the reason bad commit messages exist: the commit itself was never coherent. The most ambitious task here. → §H.1 | T30 |
 | T41 | 💭 | `clerk changelog <range>`: generate or roll Keep a Changelog entries from the commits in a tag range. Dogfoods this repo's own release flow and closes the loop with `scripts/bump_version.py`. → §H.2 | — |
 | T42 | 💭 | `clerk release-notes <range>`: human-facing notes grouped by user benefit for the GitHub Release body — a different register from the changelog, not a rename of it. → §H.2 | T41 |
 | T43 | 💭 | `clerk bump --suggest`: read the commits since the last tag and recommend patch/minor/major, with the breaking-change detection the Conventional Commits spec already implies. Feeds the existing publish workflow. → §H.3 | T41 |
@@ -162,7 +161,7 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T50 | 💭 | Golden fixture corpus: real diffs (doc-only, mixed, rename-heavy, lockfile-dominated, binary) with expected classification, asserted **offline** against the deterministic parts of the pipeline. → §J.1 | T14 |
+| T50 | 💭 | Golden fixture corpus: real diffs (doc-only, mixed, rename-heavy, lockfile-dominated, binary) with expected classification, asserted **offline** against the deterministic parts of the pipeline. → §J.1 | — |
 | T51 | 💭 | Prompt evaluation harness: run the corpus through a live model behind an opt-in env flag, score with a judge model, report regressions. The safety net that makes prompt changes reviewable. → §J.2 | T50 |
 | T52 | 💭 | `PROMPT_VERSION` constant, surfaced by `--verbose` and recorded in eval output, so a quality result is attributable to a specific prompt. → §J.2 | — |
 | T53 | 💭 | A fake-provider test double so end-to-end paths (commit, hook, split) are testable with no API key and no network. → §J.3 | — |
@@ -179,7 +178,7 @@ If you want the highest value per unit of effort, roughly:
 
 1. **T49** — trivial, and it fixes the discovery problem.
 2. **T16** — the last honesty gap in the diff pipeline, in the tool's own core competence.
-3. **T14** — the file taxonomy: one abstraction that pays for T15, T16, T21 and T50.
+3. **T15, T16** — the taxonomy's two payoffs: stop letting lockfiles eat the budget, and close the doc-guard gap.
 4. **T25, T28** — config plus lint; together they unlock team adoption.
 5. **T19, T21** — the two blockers for corporate approval.
 6. **T7, T8** — the quality jump nobody else in this niche ships.

@@ -72,6 +72,128 @@ class TestIsDocOnly(unittest.TestCase):
         self.assertFalse(commitclerk.is_doc_only([]))
 
 
+class TestClassify(unittest.TestCase):
+    def _check(self, cases):
+        for path, expected in cases:
+            with self.subTest(path=path):
+                self.assertEqual(commitclerk.classify(path), expected)
+
+    def test_code_is_the_default(self):
+        self._check([
+            ("commitclerk.py", "code"),
+            ("src/main.go", "code"),
+            ("app/models/user.rb", "code"),
+        ])
+
+    def test_documentation(self):
+        self._check([("README.md", "docs"), ("docs/api/schema.json", "docs")])
+
+    def test_tests(self):
+        self._check([
+            ("tests/test_commitclerk.py", "test"),
+            ("src/user_test.go", "test"),
+            ("web/app.spec.ts", "test"),
+            ("__tests__/render.js", "test"),
+            ("test_helper.py", "test"),
+        ])
+
+    def test_generated_files_are_not_code(self):
+        self._check([
+            ("package-lock.json", "generated"),
+            ("poetry.lock", "generated"),
+            ("go.sum", "generated"),
+            ("dist/bundle.js", "generated"),
+            ("api/service_pb2.py", "generated"),
+            ("locale/pt_BR.po", "generated"),
+            ("src/__snapshots__/App.test.js.snap", "generated"),
+        ])
+
+    def test_config_and_build_files(self):
+        self._check([
+            (".github/workflows/ci.yml", "config"),
+            ("pyproject.toml", "config"),
+            ("Makefile", "config"),
+            ("Dockerfile", "config"),
+            (".gitignore", "config"),
+            ("tsconfig.json", "config"),
+        ])
+
+    def test_vendored_code_is_never_the_subject(self):
+        self._check([
+            ("vendor/github.com/pkg/errors/errors.go", "vendor"),
+            ("node_modules/left-pad/index.js", "vendor"),
+            ("third_party/zlib/zlib.c", "vendor"),
+        ])
+
+    def test_vendor_beats_every_other_signal(self):
+        # A lockfile or a test inside vendor/ is still just vendored noise.
+        self.assertEqual(commitclerk.classify("vendor/pkg/package-lock.json"), "vendor")
+        self.assertEqual(commitclerk.classify("node_modules/x/test/index_test.js"), "vendor")
+
+    def test_binary_needs_the_diff_to_say_so(self):
+        self.assertEqual(commitclerk.classify("docs/logo.png"), "docs")  # under docs/
+        self.assertEqual(commitclerk.classify("assets/logo.png"), "code")
+        self.assertEqual(
+            commitclerk.classify("assets/logo.png", {"assets/logo.png"}), "binary"
+        )
+
+    def test_windows_separators_are_normalised(self):
+        self.assertEqual(commitclerk.classify(r"tests\test_x.py"), "test")
+        self.assertEqual(commitclerk.classify(r"vendor\pkg\x.go"), "vendor")
+
+    def test_a_segment_match_is_not_a_substring_match(self):
+        # "spec/" is a test directory; "specs_loader.py" is not.
+        self.assertEqual(commitclerk.classify("src/specs_loader.py"), "code")
+        self.assertEqual(commitclerk.classify("src/distance.py"), "code")
+        self.assertEqual(commitclerk.classify("src/buildings.py"), "code")
+
+
+class TestBinaryPaths(unittest.TestCase):
+    def test_reads_the_binary_marker(self):
+        diff = (
+            "diff --git a/a.py b/a.py\n@@ -1 +1 @@\n-x\n+y\n"
+            "diff --git a/pic.png b/pic.png\nindex 1..2 100644\n"
+            "Binary files a/pic.png and b/pic.png differ\n"
+        )
+        self.assertEqual(commitclerk.binary_paths(diff), {"pic.png"})
+
+    def test_reads_a_binary_patch(self):
+        diff = "diff --git a/f.bin b/f.bin\nindex 1..2 100644\nGIT binary patch\nzzz\n"
+        self.assertEqual(commitclerk.binary_paths(diff), {"f.bin"})
+
+    def test_a_text_only_diff_has_none(self):
+        self.assertEqual(commitclerk.binary_paths(_file_chunk("a.py", 3)), set())
+
+
+class TestClassMix(unittest.TestCase):
+    def test_counts_are_ordered_by_significance(self):
+        classes = {
+            "a.py": "code", "b.py": "code",
+            "tests/t.py": "test", "package-lock.json": "generated",
+        }
+        self.assertEqual(commitclerk.class_mix(classes), "generated 1, test 1, code 2")
+
+    def test_absent_classes_are_omitted(self):
+        self.assertEqual(commitclerk.class_mix({"README.md": "docs"}), "docs 1")
+
+    def test_no_files_no_mix(self):
+        self.assertEqual(commitclerk.class_mix({}), "")
+
+
+class TestClassifyFiles(unittest.TestCase):
+    def test_maps_every_file_and_keeps_order(self):
+        files = ["commitclerk.py", "README.md", "tests/test_x.py"]
+        self.assertEqual(
+            list(commitclerk.classify_files(files)),
+            files,
+        )
+
+    def test_the_diff_supplies_the_binary_class(self):
+        diff = "diff --git a/pic.png b/pic.png\nBinary files a/pic.png and b/pic.png differ\n"
+        classes = commitclerk.classify_files(["pic.png", "app.py"], diff)
+        self.assertEqual(classes, {"pic.png": "binary", "app.py": "code"})
+
+
 class TestTruncate(unittest.TestCase):
     def test_short_diff_is_untouched(self):
         diff = "diff --git a/x b/x\n+hello\n"
@@ -725,6 +847,20 @@ class TestBuildUserPrompt(unittest.TestCase):
 
     def test_no_summary_means_no_empty_heading(self):
         self.assertNotIn("Change summary", commitclerk.build_user_prompt("d", ["a.py"]))
+
+    def test_each_file_is_annotated_with_its_class(self):
+        files = ["app.py", "package-lock.json"]
+        prompt = commitclerk.build_user_prompt(
+            "d", files, classes=commitclerk.classify_files(files)
+        )
+        self.assertIn("- app.py (code)", prompt)
+        self.assertIn("- package-lock.json (generated)", prompt)
+        self.assertIn("Class mix: generated 1, code 1", prompt)
+
+    def test_without_classes_the_file_list_is_plain(self):
+        prompt = commitclerk.build_user_prompt("d", ["app.py"])
+        self.assertIn("- app.py\n", prompt)
+        self.assertNotIn("Class mix", prompt)
 
 
 def _git(repo, *args):

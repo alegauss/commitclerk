@@ -19,6 +19,7 @@ land.
 Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
+- **T14 SHIPPED** (Block C §C.2 — file-class taxonomy) — 2026-07-27.
 - **T11 SHIPPED** (Block B §B.4 — change summary: renames, modes, binary sizes) — 2026-07-27.
 - **T6 SHIPPED** (Block A §A.4 — repair a rejected request parameter) — 2026-07-27.
 - **T5 SHIPPED** (Block A §A.4 — retry with backoff/jitter + `--timeout`) — 2026-07-27.

@@ -49,6 +49,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
 | 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit — e, se o modelo rejeitar um parâmetro, a requisição é corrigida e reenviada. |
+| 🗂️ **Classifica o que mudou** | Cada arquivo é tipado como `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, então um lockfile ou um bump de `vendor/` nunca vira o assunto da sua mensagem de commit. |
 | 🧭 **Vê o que o diff esconde** | Renomeações, mudanças de permissão, remoções e o *tamanho* de arquivos binários vêm do `git --stat --summary`, então um `git mv` é descrito como um move, não como uma reescrita. |
 | 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo. |
 
@@ -192,6 +193,13 @@ O `commitclerk` trata isso de duas formas:
 1. **Detecção de commits só de documentação.** Se todo arquivo no stage é documentação — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, qualquer coisa em `docs/`, ou nomes conhecidos como `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — o prompt muda para um enquadramento de documentação: usa o prefixo `docs:` e descreve *a mudança na documentação em si* ("registrar X no changelog"), nunca "implementar X".
 
 2. **`-m` como override.** Você sabe qual é a sua mudança. O `-m "<título>"` fixa o título e reduz o trabalho do modelo a resumir o diff. É o padrão recomendado para qualquer commit cuja intenção não é óbvia só pelo diff.
+
+Há um segundo ponto cego: *proporção*. Uma correção de três linhas que também
+regenera o `package-lock.json` é uma correção de bug, mas o lockfile é 12 000 linhas
+do diff. O `commitclerk` classifica cada arquivo no stage — `code`, `test`, `docs`,
+`generated`, `config`, `vendor`, `binary` —, anota a lista de arquivos com essas
+classes e instrui o modelo a tirar o tipo do commit dos arquivos que são o *ponto*
+da mudança, nunca fazendo de arquivos gerados, vendorizados ou binários o assunto.
 
 Há um terceiro ponto cego, estrutural: um diff unificado não diz que um arquivo foi
 *renomeado* (a menos que o repositório tenha detecção de rename ligada), que a

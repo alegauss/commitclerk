@@ -103,8 +103,92 @@ def _is_doc(path: str) -> bool:
     return stem in _DOC_BASENAMES
 
 
+# The taxonomy that generalises _is_doc. Order matters: the first match wins, and
+# vendored or generated files are classified as such even when they look like code.
+_VENDOR_DIRS = ("vendor/", "third_party/", "third-party/", "node_modules/",
+                "site-packages/", ".venv/", "external/")
+_GENERATED_DIRS = ("dist/", "build/", "__snapshots__/", "migrations/", "generated/")
+_GENERATED_BASENAMES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "uv.lock",
+    "cargo.lock", "gemfile.lock", "composer.lock", "go.sum", "flake.lock",
+}
+_GENERATED_SUFFIXES = (".lock", ".snap", ".map", ".po", ".mo", "_pb2.py", ".pb.go")
+_TEST_DIRS = ("tests/", "test/", "spec/", "__tests__/", "e2e/")
+_TEST_SUFFIXES = (".spec.js", ".spec.ts", ".spec.tsx", ".test.js", ".test.ts",
+                  ".test.tsx", "_test.py", "_test.go", "_test.rb", "test.java")
+_CONFIG_DIRS = (".github/", ".circleci/", ".vscode/", ".idea/")
+_CONFIG_BASENAMES = {
+    "pyproject.toml", "setup.py", "setup.cfg", "package.json", "tsconfig.json",
+    "makefile", "dockerfile", "docker-compose.yml", "docker-compose.yaml",
+    "requirements.txt", "gemfile", "cargo.toml", "go.mod", "pom.xml", "build.gradle",
+}
+_CONFIG_SUFFIXES = (".toml", ".ini", ".cfg", ".yml", ".yaml", ".editorconfig")
+
+FILE_CLASSES = ("vendor", "generated", "binary", "docs", "test", "config", "code")
+
+
+def _has_segment(path: str, prefixes: tuple) -> bool:
+    """Whether any path segment starts one of `prefixes` (e.g. 'tests/')."""
+    return any(path.startswith(p) or f"/{p}" in path for p in prefixes)
+
+
+def classify(path: str, binaries: set | None = None) -> str:
+    """The class of one staged file: vendor, generated, binary, docs, test, config, code.
+
+    A boolean "is this documentation?" was enough for one guard. A class per file
+    is what tells the model which files are the *point* of the commit and which are
+    noise it must not narrate. `binaries` comes from `binary_paths(diff)`, since a
+    path alone cannot tell you whether git could read the contents.
+    """
+    binary = bool(binaries) and path in binaries
+    p = path.replace("\\", "/").lower()
+    base = p.rsplit("/", 1)[-1]
+
+    if _has_segment(p, _VENDOR_DIRS):
+        return "vendor"
+    if base in _GENERATED_BASENAMES or p.endswith(_GENERATED_SUFFIXES) \
+            or _has_segment(p, _GENERATED_DIRS):
+        return "generated"
+    if binary:
+        return "binary"
+    if _is_doc(path):
+        return "docs"
+    if _has_segment(p, _TEST_DIRS) or base.startswith("test_") or p.endswith(_TEST_SUFFIXES):
+        return "test"
+    if _has_segment(p, _CONFIG_DIRS) or base in _CONFIG_BASENAMES \
+            or p.endswith(_CONFIG_SUFFIXES) or base.startswith("."):
+        return "config"
+    return "code"
+
+
+def binary_paths(diff: str) -> set:
+    """Paths git could not diff as text, read off the diff's own binary markers."""
+    found = set()
+    current = None
+    for line in diff.splitlines():
+        if line.startswith("diff --git a/"):
+            # "diff --git a/x b/x" — take the b-side, which is the new name.
+            parts = line.split(" b/", 1)
+            current = parts[1] if len(parts) == 2 else None
+        elif current and (line.startswith("Binary files ") or line == "GIT binary patch"):
+            found.add(current)
+    return found
+
+
+def classify_files(files: list[str], diff: str = "") -> dict:
+    """Every staged file mapped to its class, in the order git reported them."""
+    binaries = binary_paths(diff) if diff else set()
+    return {f: classify(f, binaries) for f in files}
+
+
+def class_mix(classes: dict) -> str:
+    """A compact count per class, most significant first: 'code 3, test 1'."""
+    counts = [(c, sum(1 for v in classes.values() if v == c)) for c in FILE_CLASSES]
+    return ", ".join(f"{name} {n}" for name, n in counts if n)
+
+
 def is_doc_only(files: list[str]) -> bool:
-    return bool(files) and all(_is_doc(f) for f in files)
+    return bool(files) and all(classify(f) == "docs" for f in files)
 
 
 _RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
@@ -113,6 +197,7 @@ _RULES = """- Describe what THIS commit changes, not what the changed text says.
 - Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
 - Bullets start with '- ' on their own line.
 - Read the change summary for facts the diff body cannot show. A rename is a move, never a rewrite; a mode change is a permission change; a binary file has a size change and no readable content, so never invent what is inside one.
+- Each changed file is annotated with its class: code, test, docs, generated, config, vendor, binary. Pick the type prefix from the classes that are the point of the commit — only docs means docs:, only test means test:, only config or generated means chore: or build:. Never make a generated, vendored or binary file the subject of the message and never narrate its contents; when such files accompany a real change, mention them in at most one bullet as a consequence ("regenerated the lockfile").
 - No markdown headers, no code fences, no emojis."""
 
 _DOC_ONLY_NOTE = (
@@ -445,8 +530,14 @@ def build_user_prompt(
     title: str | None = None,
     doc_only: bool = False,
     summary: str = "",
+    classes: dict | None = None,
 ) -> str:
-    parts = ["Files changed:"] + [f"- {f}" for f in files]
+    classes = classes or {}
+    parts = ["Files changed:"] + [
+        f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
+    ]
+    if classes:
+        parts += [f"Class mix: {class_mix(classes)}"]
     if summary:
         # Before the diff, and outside its budget: when a large diff is trimmed
         # this is the part that still describes the whole change.
@@ -629,13 +720,16 @@ def call_model(
     title: str | None = None,
     doc_only: bool = False,
     summary: str = "",
+    classes: dict | None = None,
     base: str | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> str:
     payload = spec["payload"](
         model,
         _system_prompt(body_only=title is not None),
-        build_user_prompt(diff, files, title=title, doc_only=doc_only, summary=summary),
+        build_user_prompt(
+            diff, files, title=title, doc_only=doc_only, summary=summary, classes=classes
+        ),
     )
 
     headers = {"Content-Type": "application/json"}
@@ -743,20 +837,21 @@ def main() -> int:
         return 1
 
     files = get_staged_files()
+    classes = classify_files(files, diff)
     doc_only = is_doc_only(files)
     summary = get_staged_summary()
     diff = budget_diff(diff, args.max_chars)
 
     if args.message:
         body = call_model(
-            spec, api_key, model, diff, files, title=args.message,
-            doc_only=doc_only, summary=summary, base=base, timeout=args.timeout,
+            spec, api_key, model, diff, files, title=args.message, doc_only=doc_only,
+            summary=summary, classes=classes, base=base, timeout=args.timeout,
         )
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
         message = call_model(
-            spec, api_key, model, diff, files,
-            doc_only=doc_only, summary=summary, base=base, timeout=args.timeout,
+            spec, api_key, model, diff, files, doc_only=doc_only,
+            summary=summary, classes=classes, base=base, timeout=args.timeout,
         )
 
     if args.dry_run:

@@ -76,28 +76,21 @@ excellent early tasks.
 
 ## C — Diff intelligence
 
-### C.2 — A file taxonomy generalises the founding idea
+### C.2 — Generated files are eating the budget
 
-`is_doc_only()` is a boolean, and the tool's best feature hangs off it. The
-generalisation is a **class per file**:
+The taxonomy that this section used to argue for now exists: every staged file is
+classified, the class rides along in the prompt, and the rules keep generated and
+vendored files from becoming the subject of the message. What has *not* changed is
+the budget: a `package-lock.json` change is still 12 000 lines of diff body
+competing for `--max-chars` with the three-line fix that is the real commit.
 
-| Class | Signal | Effect on the message |
-| --- | --- | --- |
-| `docs` | current `_is_doc` rules | `docs:`, describe the doc change itself |
-| `test` | `tests/`, `*_test.*`, `test_*`, `*.spec.*` | `test:` when alone; otherwise "with tests" |
-| `generated` | lockfiles, `dist/`, `*.min.*`, snapshots, `.po`, migrations | `chore:`/`build:`; body must not narrate it |
-| `config` | CI, dotfiles, `pyproject.toml`, manifests | `build:`/`ci:`/`chore:` |
-| `vendor` | `vendor/`, `third_party/`, `node_modules/` | never the subject of the message |
-| `binary` | `Binary files ... differ` | named, never described |
-| `code` | everything else | the actual subject |
-
-Two payoffs. First, **T15**: a `package-lock.json` change is 12 000 lines of noise
-that currently eats the entire budget and drowns the three-line fix that is the
-real commit. Collapsing generated files to `- package-lock.json (generated, +8412
--3110)` is both cheaper and *more* accurate. Second, the taxonomy is exactly the
-input `--offline` (T21) needs to pick a type with no model at all, and exactly
-what the golden corpus (T50) asserts against — so one abstraction pays for three
-tasks.
+**T15** spends the classification the tool already computes: replace a generated
+file's diff body with one line — `- package-lock.json (generated, +8412 -3110)`,
+the counts coming free from the change summary — and hand the reclaimed budget to
+the `code` files. Cheaper *and* more accurate, since the model can no longer be
+distracted by content it was told not to narrate. Keep the file listed: silently
+dropping a file from the prompt would be the head-truncation mistake again, in a
+new place.
 
 ### C.3 — The doc guard has an all-or-nothing bug
 

@@ -51,6 +51,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
 | 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
+| 🗂️ **Classifies what changed** | Each file is typed as `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, so a lockfile or a `vendor/` bump never becomes the subject of your commit message. |
 | 🧭 **Sees what the diff hides** | Renames, mode changes, deletions and binary file *sizes* come from `git --stat --summary`, so a `git mv` is described as a move rather than a rewrite. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model. |
 
@@ -195,6 +196,13 @@ feat: implement real-time collaboration
 1. **Documentation-only detection.** If every staged file is documentation — `.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, anything under `docs/`, or a known name like `CHANGELOG`/`README`/`ROADMAP`/`CONTRIBUTING` — the prompt switches to a docs-only framing: use the `docs:` prefix and describe *the documentation change itself* ("record X in the changelog"), never "implement X".
 
 2. **`-m` as an override.** You know what your change is. `-m "<title>"` pins the title and reduces the model's job to summarizing the diff underneath it. This is the recommended default for any commit whose intent isn't obvious from the diff alone.
+
+A second blind spot is *proportion*. A three-line bug fix that also regenerates
+`package-lock.json` is a bug fix, but the lockfile is 12 000 lines of the diff.
+`commitclerk` classifies every staged file — `code`, `test`, `docs`, `generated`,
+`config`, `vendor`, `binary` — annotates the file list with those classes, and
+instructs the model to take the commit type from the files that are the *point* of
+the change and never to make generated, vendored or binary files the subject.
 
 A third blind spot is structural: a unified diff does not say that a file was
 *renamed* (unless the repo has rename detection on), that its permissions changed,

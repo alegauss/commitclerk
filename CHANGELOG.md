@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Every staged file is now classified, and the class drives the message.** The
+  boolean "is this documentation?" became a taxonomy — `code`, `test`, `docs`,
+  `generated`, `config`, `vendor`, `binary` — computed from the path plus the diff's
+  own binary markers, sent to the model as an annotation on each filename plus a
+  one-line mix (`Class mix: generated 1, test 1, code 2`). The rules now say what to
+  do with it: take the type prefix from the classes that are the *point* of the
+  commit, and never make a generated, vendored or binary file the subject of the
+  message or narrate its contents. So a three-line fix that also regenerates
+  `package-lock.json` stops being described as a lockfile change, and a `vendor/`
+  bump can no longer masquerade as your own work. `vendor/` wins over every other
+  signal, and directory matching is by path segment, so `distance.py` is not mistaken
+  for `dist/`.
 - **The prompt now includes the structural facts a unified diff leaves out.**
   `git diff --staged --find-renames --stat --summary` goes to the model alongside
   the diff, and the rules tell it what to do with them: a rename is a move and not
