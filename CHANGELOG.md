@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A note when a staged file also has unstaged changes.** `git add -p` makes this
+  routine and the consequence is easy to miss: the message describes the staged
+  version of the code, which is not the version on disk. One line on stderr names the
+  files and says so. It informs and never blocks — the staged diff is what is being
+  committed, so the message is right; it is the mental model that may be wrong. On
+  stderr specifically, so `clerk --dry-run > msg.txt` stays clean.
 - **Every staged file is now classified, and the class drives the message.** The
   boolean "is this documentation?" became a taxonomy — `code`, `test`, `docs`,
   `generated`, `config`, `vendor`, `binary` — computed from the path plus the diff's

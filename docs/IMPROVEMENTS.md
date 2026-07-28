@@ -86,14 +86,6 @@ costs N+1 requests, so it must never be the default — but it is the only corre
 answer for the 5 000-line commit, and it composes cleanly with the per-file split
 that §C.1 already requires.
 
-### C.5 — Staged versus working tree
-
-The tool describes the *staged* diff, correctly. But when a file is partially
-staged, the message describes code that does not match the file on disk, and users
-routinely do not realise it. A one-line warning when
-`git diff --name-only` intersects `git diff --staged --name-only` is enough:
-inform, do not block.
-
 ---
 
 ## D — Trust & safety

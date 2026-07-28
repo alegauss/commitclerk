@@ -19,6 +19,7 @@ land.
 Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
+- **T18 SHIPPED** (Block C §C.5 — partial-staging note) — 2026-07-27.
 - **T16 SHIPPED** (Block C §C.3 — doc guard on mixed commits) — 2026-07-27.
 - **T15 SHIPPED** (Block C §C.2 — demote generated/vendored diff bodies) — 2026-07-27.
 - **T14 SHIPPED** (Block C §C.2 — file-class taxonomy) — 2026-07-27.

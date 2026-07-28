@@ -172,6 +172,8 @@ Coloque o diretório do repositório (ou uma cópia do wrapper e do `commitclerk
 
 > **Atenção:** os wrappers adicionam tudo ao stage, inclusive arquivos novos, removidos e começados por ponto. Se você prefere escolher o que entra no commit, faça o stage manualmente e chame `python commitclerk.py` direto. O script Python nunca faz stage sozinho.
 
+> **Stage parcial:** se um arquivo no stage também tiver alterações não staged (típico do `git add -p`), o `commitclerk` avisa em uma linha no stderr — a mensagem descreve a versão que está no stage, não o arquivo em disco. É só aviso: nunca bloqueia.
+
 Se você prefere não usar wrapper nenhum, um alias resolve:
 
 ```bash

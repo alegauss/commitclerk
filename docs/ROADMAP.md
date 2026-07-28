@@ -68,13 +68,13 @@ under-exploited: the repository is full of cheap, local, zero-cost context.* →
 
 ## Block C — Diff intelligence
 
-*Every file reaches the model, classified, with generated noise collapsed and the
-doc guard honest on mixed commits. What is left is the commit no budget can fit.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
+*Every file reaches the model, classified, with generated noise collapsed, the doc
+guard honest on mixed commits, and partial staging called out. What is left is the
+commit no budget can fit.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
 | T17 | 💭 | Map-reduce pass for very large diffs (opt-in): summarize each oversized file separately, then write the message from the summaries. Handles the commit that no budget can fit. → §C.4 | — |
-| T18 | 💭 | Warn when the same files have *unstaged* changes too — the message may describe a version of the code that is not the one being committed. → §C.5 | — |
 
 ## Block D — Trust & safety
 

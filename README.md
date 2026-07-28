@@ -340,6 +340,15 @@ cannot do without; pick a different `--model`.
 </details>
 
 <details>
+<summary><strong>"Note: 1 staged file has unstaged changes too"</strong></summary>
+
+You staged part of a file and then kept editing (or used `git add -p`). The message
+describes what you staged, which is correct — but it is not what is on disk right
+now. Stage the rest with `git add <file>` and re-run if you meant to include it. The
+note goes to stderr, so it never lands in a piped message.
+</details>
+
+<details>
 <summary><strong>The message describes the wrong thing</strong></summary>
 
 Use `-m "<your title>"`. The AI then writes only the body, and the framing of the commit is yours.

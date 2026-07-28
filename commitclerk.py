@@ -273,6 +273,38 @@ def get_staged_diff() -> str:
     return run(["git", "diff", "--staged"], check=False).stdout
 
 
+def get_unstaged_files() -> list[str]:
+    """Files with changes in the working tree that are not staged."""
+    result = run(["git", "diff", "--name-only"], check=False)
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def partially_staged(staged: list[str], unstaged: list[str]) -> list[str]:
+    """Staged files that also have further, unstaged edits on disk."""
+    pending = set(unstaged)
+    return [f for f in staged if f in pending]
+
+
+def unstaged_warning(mixed: list[str], limit: int = 5) -> str:
+    """One line naming partially staged files, or "" when there are none.
+
+    `git add -p` makes this routine, and the consequence is easy to miss: the
+    message describes the staged version of the code, which is not the version on
+    disk. Inform, never block — the staged diff is what is being committed, so the
+    message is correct; it is the user's mental model that may be wrong.
+    """
+    if not mixed:
+        return ""
+    shown = ", ".join(mixed[:limit])
+    if len(mixed) > limit:
+        shown += f", and {len(mixed) - limit} more"
+    noun = "file has" if len(mixed) == 1 else "files have"
+    return (
+        f"Note: {len(mixed)} staged {noun} unstaged changes too, so the message "
+        f"describes the staged version, not what is on disk: {shown}"
+    )
+
+
 def get_staged_summary() -> str:
     """Structural facts about the staged change, which the diff body omits.
 
@@ -950,6 +982,10 @@ def main() -> int:
         return 1
 
     files = get_staged_files()
+    warning = unstaged_warning(partially_staged(files, get_unstaged_files()))
+    if warning:
+        print(warning, file=sys.stderr)
+
     classes = classify_files(files, diff)
     summary = get_staged_summary()
     # Both read the raw diff: the guard's proportion must be measured before any

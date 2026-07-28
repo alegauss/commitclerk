@@ -341,6 +341,47 @@ class TestBudgetDiff(unittest.TestCase):
         self.assertLessEqual(len(result), 500 + len(_HEAD_CUT_NOTE))
 
 
+class TestPartiallyStaged(unittest.TestCase):
+    def test_finds_files_that_are_staged_and_also_dirty(self):
+        staged = ["app.py", "README.md", "tests/t.py"]
+        unstaged = ["app.py", "notes.txt"]
+        self.assertEqual(commitclerk.partially_staged(staged, unstaged), ["app.py"])
+
+    def test_a_clean_working_tree_has_none(self):
+        self.assertEqual(commitclerk.partially_staged(["app.py"], []), [])
+
+    def test_unstaged_files_that_are_not_staged_are_not_reported(self):
+        # Untouched-by-this-commit files are none of our business.
+        self.assertEqual(commitclerk.partially_staged(["app.py"], ["other.py"]), [])
+
+    def test_staged_order_is_preserved(self):
+        staged = ["z.py", "a.py"]
+        self.assertEqual(commitclerk.partially_staged(staged, ["a.py", "z.py"]), staged)
+
+
+class TestUnstagedWarning(unittest.TestCase):
+    def test_nothing_to_warn_about(self):
+        self.assertEqual(commitclerk.unstaged_warning([]), "")
+
+    def test_names_the_files_and_explains_the_consequence(self):
+        note = commitclerk.unstaged_warning(["app.py"])
+        self.assertIn("app.py", note)
+        self.assertIn("staged version", note)
+        self.assertIn("1 staged file has", note)
+
+    def test_plural_reads_correctly(self):
+        self.assertIn("2 staged files have", commitclerk.unstaged_warning(["a.py", "b.py"]))
+
+    def test_a_long_list_is_truncated(self):
+        note = commitclerk.unstaged_warning([f"f{i}.py" for i in range(9)], limit=3)
+        self.assertIn("f0.py, f1.py, f2.py, and 6 more", note)
+        self.assertNotIn("f8.py", note)
+
+    def test_the_warning_is_ascii(self):
+        # It goes to a terminal whose encoding we do not control.
+        self.assertTrue(commitclerk.unstaged_warning(["a.py", "b.py"]).isascii())
+
+
 class TestChunkPath(unittest.TestCase):
     def test_reads_the_b_side(self):
         self.assertEqual(commitclerk.chunk_path(_file_chunk("src/app.py", 1)), "src/app.py")
