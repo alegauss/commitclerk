@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.png" alt="logo do commitclerk" width="112" height="112">
+
 # commitclerk
 
 **Escreva mensagens de commit melhores com um comando — a partir do seu diff staged e de um LLM.**
@@ -11,7 +13,7 @@
 [![CI](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml/badge.svg)](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-fe5196.svg)](https://www.conventionalcommits.org/)
 
-[Início rápido](#início-rápido) · [Uso](#uso) · [Por que existe](#por-que-existe) · [Contribuindo](CONTRIBUTING.md) · [English](README.md)
+[Site](https://alegauss.github.io/commitclerk/) · [Início rápido](#início-rápido) · [Uso](#uso) · [Por que existe](#por-que-existe) · [Contribuindo](CONTRIBUTING.md) · [English](README.md)
 
 </div>
 

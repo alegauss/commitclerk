@@ -46,7 +46,7 @@ dependencies = []
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/alegauss/commitclerk"
+Homepage = "https://alegauss.github.io/commitclerk/"
 Repository = "https://github.com/alegauss/commitclerk"
 Issues = "https://github.com/alegauss/commitclerk/issues"
 Changelog = "https://github.com/alegauss/commitclerk/blob/main/CHANGELOG.md"

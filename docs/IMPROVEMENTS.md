@@ -504,8 +504,11 @@ release asset costs one workflow step and makes that path defensible.
 
 ### I.3 — Don't hollow out the README
 
-A docs site is worth it once configuration, providers, hooks and recipes make the
-README unscrollable. The rule when that happens: the README keeps the pitch, the
+The landing page at `docs/index.html` is a pitch, not documentation: it exists to
+convert a visitor, and it deliberately duplicates a little of the README rather
+than replacing any of it. The open question is *reference* docs — pages
+per provider, per hook, per recipe — and a docs site is worth it only once
+configuration, providers, hooks and recipes make the README unscrollable. The rule when that happens: the README keeps the pitch, the
 install, the quick start and the flag table. A README reduced to a link is a
 regression, and for a tool whose pitch is "small enough to read", an especially
 ironic one.

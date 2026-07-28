@@ -1,0 +1,60 @@
+# commitclerk
+
+> A command-line tool that writes your git commit messages. It reads the staged diff,
+> asks an LLM (OpenAI Chat Completions) for a Conventional Commits message, prints it,
+> and commits. Implemented as a single Python file (~230 lines) with **zero third-party
+> dependencies** — standard library only (`urllib`, `subprocess`, `argparse`), Python 3.8+.
+> Installs three identical entry points: `clerk`, `commitclerk`, and `git clerk`.
+> Install with `pipx install commitclerk`, or download `commitclerk.py` and run it directly.
+
+MIT licensed community project. Not affiliated with, endorsed by, or sponsored by OpenAI
+or GitHub. It calls the OpenAI Chat Completions API using the key in `OPENAI_API_KEY`.
+
+## Features
+
+- **Zero dependencies**: standard library only; a single readable file you can audit before running it on your source code.
+- **Git-native**: also installed as `git-clerk`, so `git add -A && git clerk` works as a git subcommand.
+- **Title override**: `-m "<title>"` uses your title verbatim and limits the model to writing the body bullets. The most reliable mode, and the recommended default when the intent isn't obvious from the diff alone.
+- **Documentation-only detection**: if every staged file is documentation (`.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, anything under `docs/`, or a known name like CHANGELOG / README / ROADMAP / CONTRIBUTING), the prompt switches to a docs-only framing — use the `docs:` prefix and describe the documentation change itself ("record X in the changelog"), never "implement X". This exists because a diff-only generator reading changelog prose about already-shipped work will mislabel a Markdown-only commit as `feat:`, and `git log --grep` plus release tooling then inherit the lie.
+- **Conventional Commits**: emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes; imperative titles under 72 characters; bodies of 2–6 bullets about *why*; no emojis, headers, or code fences.
+- **Dry run**: `--dry-run` prints the message and commits nothing.
+- **Model agnostic**: any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL` (default `gpt-4o-mini`).
+- **Wrappers**: `run-commit.cmd` (Windows) and `run-commit.sh` (POSIX) check the API key, stage everything with `git add -A`, then pass arguments through. The Python script itself never stages anything.
+
+## Usage
+
+`clerk [-m TITLE] [--dry-run] [--model MODEL] [--max-chars N] [--version]`
+
+- `-m`, `--message TITLE` — use TITLE verbatim as the commit title; the AI writes only the body.
+- `--dry-run` — print the message and exit without committing.
+- `--model MODEL` — Chat Completions model (default `gpt-4o-mini`, or `$OPENAI_MODEL`).
+- `--max-chars N` — truncate the diff before sending it to the API (default `60000`).
+- `--version` — print the version and exit.
+
+Exit codes: `0` committed (or dry-run printed), `1` nothing staged, `2` `OPENAI_API_KEY` not set,
+anything else passed through from `git commit`.
+
+## Requirements
+
+- Python 3.8+ (no third-party packages)
+- `git` on the `PATH`
+- An OpenAI API key in `OPENAI_API_KEY`
+
+## Privacy and cost
+
+- The staged diff is sent to the OpenAI API — do not run it on repositories whose contents cannot leave the machine.
+- Nothing else is transmitted, stored, or logged: no telemetry, no analytics, no remote config.
+- The API key is read from the environment and never written to disk.
+- One Chat Completions call per commit; a fraction of a cent with the default model.
+
+## Links
+
+- [Website](https://alegauss.github.io/commitclerk/): project landing page
+- [GitHub repository](https://github.com/alegauss/commitclerk): source code
+- [README / documentation](https://github.com/alegauss/commitclerk/blob/main/README.md): full setup, usage, and troubleshooting guide
+- [README (Português)](https://github.com/alegauss/commitclerk/blob/main/README.pt-BR.md): Brazilian Portuguese translation
+- [PyPI package](https://pypi.org/project/commitclerk/): `pipx install commitclerk`
+- [Roadmap](https://github.com/alegauss/commitclerk/blob/main/docs/ROADMAP.md): active backlog and non-goals
+- [Changelog](https://github.com/alegauss/commitclerk/blob/main/CHANGELOG.md): what has shipped
+- [Contributing](https://github.com/alegauss/commitclerk/blob/main/CONTRIBUTING.md): ground rules for pull requests
+- [License](https://github.com/alegauss/commitclerk/blob/main/LICENSE): MIT

@@ -165,7 +165,7 @@ write prose about it" is not specific to one commit.* → [§H](IMPROVEMENTS.md#
 | --- | --- | --- | --- |
 | T45 | 💭 | A GitHub Action that posts a suggested commit message / PR title as a PR comment — the tool's own best advertisement, running where developers already are. → §I.1 | T44 |
 | T46 | 💭 | Packaging beyond PyPI: Homebrew tap, Scoop manifest, documented `uvx commitclerk`, and a single-file release asset with a published SHA-256 (the curl path is already advertised in the README but unsigned). → §I.2 | — |
-| T47 | 💭 | A small GitHub Pages docs site once the README outgrows itself — the README stays the canonical quick start and never becomes a stub. → §I.3 | — |
+| T47 | 💭 | Grow the landing page into a real docs site once the README outgrows itself — the README stays the canonical quick start and never becomes a stub. → §I.3 | — |
 | T48 | 💭 | A `recipes/` directory of ready-made rule packs: Angular convention, strict Conventional Commits, ticket-mandatory enterprise, pt-BR. Turns configuration into a shareable ecosystem. → §I.4 | T26 |
 | T49 | 💭 | A demo GIF / asciinema cast at the top of the README. For a CLI this is the single highest-leverage adoption change in the whole roadmap, and it costs an afternoon. → §I.5 | — |
 

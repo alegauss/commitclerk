@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.png" alt="commitclerk logo" width="112" height="112">
+
 # commitclerk
 
 **Write better git commit messages in one command — powered by your staged diff and an LLM.**
@@ -12,7 +14,7 @@
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-fe5196.svg)](https://www.conventionalcommits.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-[Quick start](#quick-start) · [Usage](#usage) · [Why it exists](#why-it-exists) · [Configuration](#configuration) · [Contributing](CONTRIBUTING.md) · [Português](README.pt-BR.md)
+[Website](https://alegauss.github.io/commitclerk/) · [Quick start](#quick-start) · [Usage](#usage) · [Why it exists](#why-it-exists) · [Configuration](#configuration) · [Contributing](CONTRIBUTING.md) · [Português](README.pt-BR.md)
 
 </div>
 

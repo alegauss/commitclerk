@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A project website and a logo.** `docs/` now doubles as a self-contained
+  GitHub Pages site — <https://alegauss.github.io/commitclerk/> — covering the
+  pitch, the documentation-only blind spot, the flag reference, install paths and
+  the privacy statement, plus `llms.txt`, `robots.txt` and a sitemap for machine
+  readers. The mark (a signed-off commit node beside the message it wrote) ships
+  as `docs/logo.svg` with rendered PNGs, and now heads both READMEs.
 - **`git clerk` works as a native git subcommand.** Installing now also provides
   a `git-clerk` entry point, which git picks up from `PATH` automatically —
   `git add -A && git clerk` needs no alias and no new command to remember.
