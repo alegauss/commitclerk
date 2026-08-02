@@ -1,0 +1,14 @@
+{
+  // Identify this project in the window title / taskbar
+  "window.title": "🟣 commitclerk ${separator} ${dirty}${activeEditorShort} ${separator} ${appName}",
+
+  // Purple status bar so this project is easy to spot
+  "workbench.colorCustomizations": {
+    "statusBar.background": "#8A2BE2",
+    "statusBar.foreground": "#FFFFFF",
+    "statusBar.border": "#5B1A9E",
+    "statusBarItem.hoverBackground": "#5B1A9E",
+    "statusBarItem.remoteBackground": "#5B1A9E",
+    "statusBarItem.remoteForeground": "#FFFFFF"
+  }
+}
