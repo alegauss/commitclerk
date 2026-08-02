@@ -51,6 +51,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📦 **Monorepo-aware scopes** | Staged files are walked up to the nearest workspace manifest, so a change confined to one package becomes `fix(billing-api): …`. Spread across packages, it refuses to name one and hide the rest. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
+| ⚙️ **Config file per project** | A committed `.clerk.json` picks the provider, model, endpoint and budgets for everyone on the team, so a convention stops being flags each person retypes. Flags and environment variables still win over it. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
 | 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
 | 🗂️ **Classifies what changed** | Each file is typed as `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, so a lockfile or a `vendor/` bump never becomes the subject of your commit message. |
@@ -127,6 +128,10 @@ the tool from a repository checkout instead, replace `clerk` with
 | `--no-house-style` | off | Skip the `git log` behind both the house-style fingerprint and the worked examples. Use it when the history is imported or machine-generated, or to keep past commit message text off the wire. |
 | `--version` | — | Print the version and exit. |
 
+Every default in that table can also come from a [config file](#configuration) —
+`.clerk.json` in the repository, or `~/.config/clerk/config.json` for your own
+machine. A flag always wins over both.
+
 ### Examples
 
 ```bash
@@ -153,6 +158,9 @@ clerk --provider ollama --timeout 300
 
 # Fresh fork with an imported history you do not want copied
 clerk --no-house-style
+
+# Set the team's choice once, in the repository, instead of on every commit
+echo '{"provider": "anthropic", "timeout": 120}' > .clerk.json
 ```
 
 ### Exit codes
@@ -161,7 +169,7 @@ clerk --no-house-style
 |---|---|
 | `0` | Committed (or `--dry-run` printed the message). |
 | `1` | Nothing staged — run `git add` first. |
-| `2` | Configuration problem — the provider's API key is not set, or `--provider` names a provider that does not exist. |
+| `2` | Configuration problem — the provider's API key is not set, `--provider` names a provider that does not exist, or a config file cannot be read as written. |
 | other | Passed through from `git commit`. |
 
 ## Wrappers
@@ -242,10 +250,10 @@ nearest workspace manifest ──▶ inferred scope ─────────�
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The source is a seven-module package under [`commitclerk/`](commitclerk/) — `diffing`,
-`files`, `history`, `gitio`, `prompt`, `providers`, `cli` — and
+The source is an eight-module package under [`commitclerk/`](commitclerk/) — `config`,
+`diffing`, `files`, `history`, `gitio`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (1648 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (1831 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -253,8 +261,50 @@ with the `_RULES` string in [`commitclerk/prompt.py`](commitclerk/prompt.py).
 
 ## Configuration
 
-There is no configuration file (yet). Everything is a flag or an environment
-variable, and **a flag always beats the environment**:
+A setting can come from five places. They are consulted in one fixed order, and
+the first one that has an answer wins:
+
+**command-line flag → environment variable → `.clerk.json` in the repository →
+`~/.config/clerk/config.json` → built-in default**
+
+### The config file
+
+`.clerk.json` sits at the **root of the repository** and is meant to be committed:
+it is how a team's convention stops being flags each person retypes. The same
+file at `~/.config/clerk/config.json` sets your own defaults across every
+repository, and any project that disagrees overrides it.
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-haiku-4-5",
+  "timeout": 120,
+  "max_chars": 90000,
+  "house_style": true
+}
+```
+
+| Key | Type | Equivalent flag |
+|---|---|---|
+| `provider` | string | `--provider` |
+| `model` | string | `--model` |
+| `base_url` | string | `--base-url` |
+| `timeout` | number | `--timeout` |
+| `max_chars` | number | `--max-chars` |
+| `house_style` | boolean | `false` is `--no-house-style` |
+
+The file is found from the repository root, not the directory you are standing
+in, so the tool behaves the same three levels down. API keys are **not** settings:
+they are read from the environment only, never from a file. A key the tool does
+not recognise is reported on stderr and ignored, so a config written for a newer
+version still works; a file that is not valid JSON, or a value of the wrong type,
+is an error (exit `2`) rather than a setting silently dropped.
+
+> A committed `.clerk.json` can set `base_url`, which is **where your diff is
+> sent**. Read it as you would any other file you run code from — see
+> [SECURITY.md](SECURITY.md).
+
+### Environment variables
 
 | Variable | Used by | What it sets |
 |---|---|---|
@@ -321,7 +371,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 
 ## Privacy and cost
 
-- **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.
+- **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` or a `.clerk.json` in the repository names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.
 - **Some of your recent commit *messages* are sent too.** The house-style block carries counts and shapes measured from the last 200 subjects and bodies — types, scopes, body shape, median subject length, trailer keys, language — not the messages themselves, except scope names and trailer keys, which appear verbatim because counting them would be useless. Separately, the two or three past commits that touched the same files as your staged diff are sent **verbatim** as style examples, subject plus body clipped to 400 characters, with trailer blocks (and the email addresses in them) stripped first. No diff, author, email, date or SHA from history is read. `--no-house-style` skips the `git log` and both of these.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
@@ -388,7 +438,6 @@ Ideas that would make good first contributions:
 
 - [ ] `prepare-commit-msg` git hook installer (T36)
 - [ ] Interactive `--edit` mode that opens the message in `$EDITOR` before committing (T31)
-- [ ] A configuration file for project-specific commit rules (T25)
 - [ ] `clerk --lint`: validate an existing message with no API call, as a `commit-msg` hook (T28)
 - [ ] A demo GIF or asciinema cast for the top of this README (T49)
 

@@ -425,6 +425,11 @@
         <h3>Model agnostic</h3>
         <p>OpenAI, Anthropic or a local Ollama model via <code>--provider</code>, any model via <code>--model</code>, and any OpenAI-compatible endpoint via <code>--base-url</code> — LM Studio, vLLM, OpenRouter, Groq, Azure. Cheap by default, stronger when the change is subtle, local when the diff must stay put.</p>
       </div>
+      <div class="card reveal">
+        <div class="ico">⚙️</div>
+        <h3>Config file</h3>
+        <p>A committed <code>.clerk.json</code> carries the team's provider, model and budgets with the repo, so the convention stops being flags everyone retypes. Flag beats environment beats project file beats your own <code>~/.config</code> defaults — one order, written down, no surprises.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -662,11 +667,6 @@ alias ac='git add -A &amp;&amp; clerk'</div>
         <div class="ico">📝</div>
         <h3>Interactive <code>--edit</code></h3>
         <p>Open the generated message in <code>$EDITOR</code> before the commit lands.</p>
-      </div>
-      <div class="card">
-        <div class="ico">⚙️</div>
-        <h3>Config file</h3>
-        <p>Project-specific commit rules, so a team's conventions travel with the repo.</p>
       </div>
       <div class="card">
         <div class="ico">✅</div>

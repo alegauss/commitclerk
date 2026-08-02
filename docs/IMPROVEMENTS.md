@@ -148,21 +148,6 @@ trusting every developer to pass a flag.
 
 ## Block E — Configuration & conventions
 
-### §T25 Why JSON and not TOML
-
-`tomllib` landed in **3.11**; the project floor is **3.8** and the CI matrix
-proves it. Writing a TOML parser is out of the question, and adding `tomli` breaks
-the zero-dependency rule, which is the one rule that cannot bend. `json` is in the
-standard library everywhere, so `.clerk.json` it is — and the file is small enough
-that TOML's ergonomic advantage is marginal. If the floor ever rises to 3.11,
-accept `.clerk.toml` *in addition*, never instead.
-
-Precedence must be documented once, in the README, and implemented in exactly one
-place: **CLI > environment > `./.clerk.json` > `~/.config/clerk/config.json` >
-built-in defaults**. Config discovery walks up from `git rev-parse --show-toplevel`,
-not from the working directory, so behaviour does not change based on which
-subdirectory you happen to be standing in.
-
 ### §T26 Rule packs turn forks into configuration
 
 `_RULES` is a string constant, and the README already invites readers to "start

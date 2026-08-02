@@ -49,6 +49,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📦 **Escopo ciente de monorepo** | Cada arquivo no stage é rastreado até o manifesto de workspace mais próximo, então uma mudança contida em um pacote vira `fix(billing-api): …`. Espalhada por vários pacotes, ela se recusa a nomear um e esconder o resto. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
+| ⚙️ **Configuração por projeto** | Um `.clerk.json` commitado escolhe provedor, modelo, endpoint e orçamentos para o time inteiro, então a convenção deixa de ser flags que cada pessoa redigita. Flags e variáveis de ambiente continuam vencendo. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
 | 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit — e, se o modelo rejeitar um parâmetro, a requisição é corrigida e reenviada. |
 | 🗂️ **Classifica o que mudou** | Cada arquivo é tipado como `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, então um lockfile ou um bump de `vendor/` nunca vira o assunto da sua mensagem de commit. |
@@ -124,6 +125,10 @@ preferir rodar a partir de um clone do repositório, troque `clerk` por
 | `--no-house-style` | desligado | Pula o `git log` por trás tanto do fingerprint de house style quanto dos exemplos extraídos do histórico. Útil quando o histórico é importado ou gerado por máquina, ou para manter o texto de mensagens antigas fora da rede. |
 | `--version` | — | Mostra a versão e sai. |
 
+Todo padrão dessa tabela também pode vir de um [arquivo de
+configuração](#configuração) — `.clerk.json` no repositório, ou
+`~/.config/clerk/config.json` para a sua máquina. Uma flag sempre vence os dois.
+
 ### Exemplos
 
 ```bash
@@ -150,6 +155,9 @@ clerk --provider ollama --timeout 300
 
 # Fork recente, com um histórico importado que você não quer copiar
 clerk --no-house-style
+
+# Fixe a escolha do time uma vez, no repositório, em vez de a cada commit
+echo '{"provider": "anthropic", "timeout": 120}' > .clerk.json
 ```
 
 ### Códigos de saída
@@ -158,7 +166,7 @@ clerk --no-house-style
 |---|---|
 | `0` | Commit feito (ou `--dry-run` imprimiu a mensagem). |
 | `1` | Nada no stage — rode `git add` antes. |
-| `2` | Problema de configuração — a chave da API do provedor não está definida, ou `--provider` aponta para um provedor que não existe. |
+| `2` | Problema de configuração — a chave da API do provedor não está definida, `--provider` aponta para um provedor que não existe, ou um arquivo de configuração não pode ser lido como está escrito. |
 | outros | Repassados do `git commit`. |
 
 ## Wrappers
@@ -230,8 +238,51 @@ O mesmo conjunto de regras mantém títulos no imperativo e abaixo de 72 caracte
 
 ## Configuração
 
-Ainda não existe arquivo de configuração. Tudo é flag ou variável de ambiente, e
-**a flag sempre vence a variável**:
+Um ajuste pode vir de cinco lugares. Eles são consultados em uma ordem fixa, e o
+primeiro que tiver resposta vence:
+
+**flag de linha de comando → variável de ambiente → `.clerk.json` no repositório →
+`~/.config/clerk/config.json` → padrão embutido**
+
+### O arquivo de configuração
+
+O `.clerk.json` fica na **raiz do repositório** e existe para ser commitado: é
+assim que a convenção de um time deixa de ser flags que cada pessoa redigita. O
+mesmo arquivo em `~/.config/clerk/config.json` define os seus padrões pessoais em
+todos os repositórios, e qualquer projeto que discorde sobrescreve.
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-haiku-4-5",
+  "timeout": 120,
+  "max_chars": 90000,
+  "house_style": true
+}
+```
+
+| Chave | Tipo | Flag equivalente |
+|---|---|---|
+| `provider` | string | `--provider` |
+| `model` | string | `--model` |
+| `base_url` | string | `--base-url` |
+| `timeout` | número | `--timeout` |
+| `max_chars` | número | `--max-chars` |
+| `house_style` | booleano | `false` é `--no-house-style` |
+
+O arquivo é procurado a partir da raiz do repositório, não do diretório em que
+você está, então a ferramenta se comporta igual três níveis abaixo. Chaves de API
+**não** são ajustes: são lidas apenas do ambiente, nunca de um arquivo. Uma chave
+que a ferramenta não conhece é reportada no stderr e ignorada, para que uma
+configuração escrita para uma versão mais nova continue funcionando; um arquivo
+que não é JSON válido, ou um valor de tipo errado, é erro (saída `2`) em vez de um
+ajuste descartado em silêncio.
+
+> Um `.clerk.json` commitado pode definir `base_url`, que é **para onde o seu diff
+> é enviado**. Leia-o como leria qualquer outro arquivo de onde você executa
+> código — veja o [SECURITY.md](SECURITY.md).
+
+### Variáveis de ambiente
 
 | Variável | Usada por | O que define |
 |---|---|---|
@@ -299,7 +350,7 @@ aponte para algum lugar em que você confia.
 
 ## Privacidade e custo
 
-- **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou a API da Anthropic com `--provider anthropic`, ou o que `--base-url` apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, use `--provider ollama` (modelo local, sem chave, nada pela rede) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
+- **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou a API da Anthropic com `--provider anthropic`, ou o que `--base-url` ou um `.clerk.json` do repositório apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, use `--provider ollama` (modelo local, sem chave, nada pela rede) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
 - **Algumas das suas *mensagens* de commit recentes também são enviadas.** O bloco de house style leva contagens e formatos medidos a partir dos últimos 200 títulos e corpos — tipos, escopos, formato do corpo, tamanho mediano do título, chaves de trailer, idioma —, não as mensagens em si, exceto nomes de escopo e chaves de trailer, que aparecem literalmente porque contá-los não serviria de nada. Além disso, os dois ou três commits passados que mexeram nos mesmos arquivos do seu diff staged são enviados **literalmente** como exemplos de estilo: título mais corpo cortado em 400 caracteres, com os blocos de trailer (e os e-mails dentro deles) removidos antes. Nenhum diff, autor, e-mail, data ou SHA do histórico é lido. `--no-house-style` pula o `git log` e as duas coisas.
 - Nada além disso é transmitido, armazenado ou registrado pela ferramenta: sem telemetria, sem analytics, sem configuração remota.
 - A chave da API é lida do ambiente e nunca é gravada em disco.
@@ -315,7 +366,6 @@ Ideias que dariam boas primeiras contribuições:
 
 - [ ] Instalador de hook `prepare-commit-msg` (T36)
 - [ ] Modo `--edit` interativo, abrindo a mensagem no `$EDITOR` antes de commitar (T31)
-- [ ] Arquivo de configuração com regras de commit por projeto (T25)
 - [ ] `clerk --lint`: validar uma mensagem existente sem chamar a API, como hook `commit-msg` (T28)
 - [ ] Um GIF ou asciinema de demonstração para o topo deste README (T49)
 

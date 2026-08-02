@@ -24,6 +24,20 @@ def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     )
 
 
+def get_repo_root() -> str | None:
+    """The repository's top level, or None when we are not inside one.
+
+    This is where `.clerk.json` is looked for, so that the tool behaves the same
+    from the root and from three directories down.
+    """
+    try:
+        result = run(["git", "rev-parse", "--show-toplevel"], check=False)
+    except (OSError, UnicodeDecodeError):
+        return None
+    root = result.stdout.strip()
+    return root or None
+
+
 def get_staged_diff() -> str:
     return run(["git", "diff", "--staged"], check=False).stdout
 

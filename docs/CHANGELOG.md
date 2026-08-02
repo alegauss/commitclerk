@@ -25,6 +25,8 @@
 
 ## Block E — Configuration & conventions
 
+- ✅ **T25** **A team convention is retyped as flags on every commit** — a `.clerk.json` at the repository root and a `~/.config/clerk/config.json` are read through one precedence ladder, CLI > env > project > user > default, written in a single function.
+
 ## Block F — Interaction & UX
 
 ## Block G — Git-native integration

@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A config file, so a team convention stops being flags everyone retypes.**
+  `.clerk.json` at the root of the repository sets `provider`, `model`,
+  `base_url`, `timeout`, `max_chars` and `house_style` for everyone who clones it;
+  the same file at `~/.config/clerk/config.json` sets your own defaults across
+  every repository. A setting is taken from the first place that has it —
+  **flag, then environment variable, then the project file, then the user file,
+  then the built-in default** — and that order lives in exactly one function, so
+  it cannot drift from one setting to the next. The file is found from the
+  repository root rather than the directory you happen to be standing in, so the
+  tool behaves the same three levels down. JSON and not TOML because `tomllib`
+  arrived in Python 3.11, the floor here is 3.8, and a parser of our own would
+  have cost the zero-dependency rule. API keys are **not** settings: they are read
+  from the environment only, never from a file, so a committed config can never
+  carry or capture a credential. A key this version does not recognise is reported
+  on stderr and ignored, so a config written for a later release still works;
+  invalid JSON or a value of the wrong type exits `2` rather than being silently
+  dropped, because a setting quietly not taking effect is the failure this tool
+  exists to avoid. Note that a repository's `.clerk.json` can set `base_url`, and
+  therefore where your diff is sent — see [SECURITY.md](SECURITY.md).
 - **Worked examples drawn from your own history.** The same `git log` that measures
   house style now also reports which files each past commit touched, and the two or
   three whose paths overlap the staged diff most are included in the prompt as

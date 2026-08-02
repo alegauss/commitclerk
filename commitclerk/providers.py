@@ -15,6 +15,7 @@ import time
 import urllib.error
 import urllib.request
 
+from .config import env_value, layered
 from .prompt import _system_prompt, build_user_prompt
 
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -142,12 +143,24 @@ def resolve_provider(name: str) -> dict | None:
     return PROVIDERS.get(name)
 
 
-def resolve_model(spec: dict, cli_model: str | None = None) -> str:
-    """Model to call: CLI flag > provider's env var > provider default."""
-    if cli_model:
-        return cli_model
-    env = spec.get("model_env")
-    return (os.environ.get(env) if env else None) or spec["default_model"]
+def resolve_model(
+    spec: dict,
+    cli_model: str | None = None,
+    project: str | None = None,
+    user: str | None = None,
+) -> str:
+    """Model to call, through the one ladder in `config.py`.
+
+    The provider's own env var is this setting's environment layer: `OPENAI_MODEL`
+    for openai, `ANTHROPIC_MODEL` for anthropic.
+    """
+    return layered(
+        cli_model or None,
+        env_value(spec.get("model_env")),
+        project,
+        user,
+        spec["default_model"],
+    )
 
 
 def api_key_for(spec: dict) -> str | None:
@@ -167,16 +180,24 @@ def missing_key_env(spec: dict) -> str | None:
     return None
 
 
-def resolve_base(spec: dict, cli_base: str | None = None) -> str:
-    """Base URL to call: CLI flag > provider's env var > provider default.
+def resolve_base(
+    spec: dict,
+    cli_base: str | None = None,
+    project: str | None = None,
+    user: str | None = None,
+) -> str:
+    """Base URL to call, through the one ladder in `config.py`.
 
     Most vendors clone the OpenAI wire format, so pointing this at Ollama,
     LM Studio, vLLM, OpenRouter, Groq, Together or Azure needs no new adapter.
     """
-    if cli_base:
-        return cli_base
-    env = spec.get("base_env")
-    return (os.environ.get(env) if env else None) or spec["default_base"]
+    return layered(
+        cli_base or None,
+        env_value(spec.get("base_env")),
+        project,
+        user,
+        spec["default_base"],
+    )
 
 
 def base_url_error(base: str) -> str | None:

@@ -30,6 +30,14 @@ Environment:
     OLLAMA_BASE_URL     optional, overrides the ollama endpoint
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
+Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
+house_style). A setting is taken from the first place that has it:
+    a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
+    >  the built-in default
+`.clerk.json` is looked for at the repository root, so the tool behaves the same
+from any subdirectory, and is meant to be committed: it is how a team stops
+retyping its own convention. API keys are read from the environment only.
+
 Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
 the model used to echo it as "feat: implement <feature>" even though the feature
@@ -68,6 +76,18 @@ import unicodedata  # noqa: E402, F401
 import urllib.error  # noqa: E402, F401
 import urllib.request  # noqa: E402, F401
 
+from .config import (  # noqa: E402
+    PROJECT_CONFIG,
+    SETTINGS,
+    USER_CONFIG,
+    ConfigError,
+    env_value,
+    layered,
+    load_config,
+    project_config_path,
+    read_config,
+    user_config_path,
+)
 from .diffing import (  # noqa: E402
     DEMOTE_MIN_CHARS,
     DEMOTED_CLASSES,
@@ -122,6 +142,7 @@ from .history import (  # noqa: E402
 from .gitio import (  # noqa: E402
     MAX_SUMMARY_CHARS,
     get_recent_commits,
+    get_repo_root,
     get_staged_diff,
     get_staged_files,
     get_staged_summary,
@@ -172,6 +193,12 @@ __all__ = [
     "main",
     "prog_name",
     "PROVIDERS",
+    "PROJECT_CONFIG",
+    "ConfigError",
+    "layered",
+    "load_config",
+    "read_config",
+    "user_config_path",
     "call_model",
     "classify",
     "classify_files",

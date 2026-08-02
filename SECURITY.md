@@ -74,13 +74,34 @@ is under your control:
 | `--provider anthropic` | Anthropic's Messages API, `https://api.anthropic.com/v1/messages`, authenticated with `ANTHROPIC_API_KEY`. |
 | `--provider ollama` | A local server at `http://localhost:11434/v1`, with **no API key** and nothing sent over the network. |
 | `--base-url` / a provider's base-url variable | The diff goes to **that** host instead — including any other `http://localhost:...` server, in which case nothing leaves the machine. |
+| `provider` or `base_url` in a config file | The same effect, from `.clerk.json` at the repository root or `~/.config/clerk/config.json`. A flag and the environment both override it. |
 
-Two consequences worth being explicit about: a custom base URL is a deliberate
-change of destination for your source code, so point it only at a host you trust;
-and because a plain `http://` URL is accepted (local servers rarely have TLS), a
-non-loopback `http://` endpoint sends your diff over the network in the clear.
-Only `http://` and `https://` are accepted at all — anything else is rejected
-before the request is built.
+Three consequences worth being explicit about. A custom base URL is a deliberate
+change of destination for your source code, so point it only at a host you trust.
+Because a plain `http://` URL is accepted (local servers rarely have TLS), a
+non-loopback `http://` endpoint sends your diff over the network in the clear;
+only `http://` and `https://` are accepted at all — anything else is rejected
+before the request is built. And **`.clerk.json` is a file the repository can
+carry**: cloning a repository and running `commitclerk` in it lets that repository
+choose the endpoint your diff is sent to. It is plain JSON at the top level, meant
+to be reviewed like any other file you run code from, and `--base-url` or the
+environment overrides it — but read it first in a repository you did not write.
+
+## The config files
+
+`commitclerk` reads two files, both optional, both plain JSON, and neither ever
+written by the tool:
+
+- `.clerk.json` at the repository root (`git rev-parse --show-toplevel`)
+- `~/.config/clerk/config.json`
+
+Only six keys are recognised — `provider`, `model`, `base_url`, `timeout`,
+`max_chars`, `house_style` — and each is type-checked before it takes effect; a
+key that is not one of those is reported on stderr and ignored. **API keys are
+not settings and are never read from either file**, so a config file committed to
+a repository cannot carry, capture or redirect a credential. Nothing from these
+files is transmitted: they only choose what the tool does with the request it was
+already going to make.
 
 ## What is out of scope
 

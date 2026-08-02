@@ -8,10 +8,12 @@ import subprocess
 import sys
 
 from . import __version__
+from .config import PROJECT_CONFIG, ConfigError, env_value, layered, load_config
 from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff
 from .files import classify_files, doc_guard_note, scope_note
 from .gitio import (
     get_recent_commits,
+    get_repo_root,
     get_staged_diff,
     get_staged_files,
     get_staged_summary,
@@ -73,9 +75,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--provider",
-        default=os.environ.get("CLERK_PROVIDER", DEFAULT_PROVIDER),
+        default=None,
         choices=sorted(PROVIDERS),
-        help=f"API provider (default: {DEFAULT_PROVIDER} or $CLERK_PROVIDER).",
+        help=f"API provider (default: {DEFAULT_PROVIDER}, or $CLERK_PROVIDER, or "
+             f"\"provider\" in {PROJECT_CONFIG}).",
     )
     parser.add_argument(
         "--base-url",
@@ -93,7 +96,7 @@ def main() -> int:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=REQUEST_TIMEOUT,
+        default=None,
         help=f"Seconds to wait for each API request (default: {REQUEST_TIMEOUT}). A slow "
              f"local model may need more. Transient failures are retried up to "
              f"{RETRY_ATTEMPTS - 1} times.",
@@ -101,7 +104,7 @@ def main() -> int:
     parser.add_argument(
         "--max-chars",
         type=int,
-        default=MAX_DIFF_CHARS,
+        default=None,
         help="Budget for the diff, in characters. Oversized diffs are trimmed per file "
              "so every changed file stays visible to the model, and the contents of "
              "generated or vendored files are replaced by a one-line placeholder.",
@@ -109,6 +112,7 @@ def main() -> int:
     parser.add_argument(
         "--no-house-style",
         action="store_true",
+        default=None,
         help=f"Do not read the last {HISTORY_DEPTH} commits. Turns off both the "
              "house-style fingerprint (the types, scopes, body shape and language "
              "this repo uses) and the worked examples drawn from past commits that "
@@ -117,11 +121,39 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    spec = resolve_provider(args.provider)
+    root = get_repo_root()
+    try:
+        project, user, notices = load_config(root)
+    except ConfigError as exc:
+        print(f"Error: {exc}.", file=sys.stderr)
+        return 2
+    for notice in notices:
+        print(notice, file=sys.stderr)
+
+    # Every setting below is resolved by the same five-rung ladder, in the order
+    # `layered` documents: CLI > environment > project file > user file > default.
+    provider = layered(
+        args.provider, env_value("CLERK_PROVIDER"),
+        project.get("provider"), user.get("provider"), DEFAULT_PROVIDER,
+    )
+    timeout = layered(
+        args.timeout, None, project.get("timeout"), user.get("timeout"), REQUEST_TIMEOUT,
+    )
+    max_chars = layered(
+        args.max_chars, None, project.get("max_chars"), user.get("max_chars"), MAX_DIFF_CHARS,
+    )
+    # The flag is negative and the setting is positive: passing --no-house-style
+    # is the CLI saying `false`, and not passing it says nothing at all.
+    house_style_on = layered(
+        False if args.no_house_style else None, None,
+        project.get("house_style"), user.get("house_style"), True,
+    )
+
+    spec = resolve_provider(provider)
     if spec is None:
         known = ", ".join(sorted(PROVIDERS))
         print(
-            f"Error: unknown provider '{args.provider}'. Known providers: {known}.",
+            f"Error: unknown provider '{provider}'. Known providers: {known}.",
             file=sys.stderr,
         )
         return 2
@@ -131,9 +163,9 @@ def main() -> int:
         print(f"Error: {missing} is not set.", file=sys.stderr)
         return 2
     api_key = api_key_for(spec)
-    model = resolve_model(spec, args.model)
+    model = resolve_model(spec, args.model, project.get("model"), user.get("model"))
 
-    base = resolve_base(spec, args.base_url)
+    base = resolve_base(spec, args.base_url, project.get("base_url"), user.get("base_url"))
     problem = base_url_error(base)
     if problem:
         print(f"Error: {problem}.", file=sys.stderr)
@@ -155,7 +187,7 @@ def main() -> int:
     # trimming, and demotion must happen before budgeting so the space a lockfile
     # was using is handed to the files the commit is actually about.
     guard = doc_guard_note(files, diff)
-    records = [] if args.no_house_style else get_recent_commits()
+    records = get_recent_commits() if house_style_on else []
     house = house_style(records)
     # None means no history was read, which is not the same as a history that shows
     # no scopes -- only the second is a reason for scope inference to stay quiet.
@@ -178,11 +210,11 @@ def main() -> int:
     # worth a couple of thousand characters of diff, but it must not silently raise
     # what the user asked to send.
     spent = len(house) + len(scope) + len(examples)
-    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - spent))
+    diff = budget_diff(demote_diff(diff, classes), max(0, max_chars - spent))
 
     message = call_model(
         spec, api_key, model, diff, files,
-        context=context, base=base, timeout=args.timeout,
+        context=context, base=base, timeout=timeout,
     )
     if args.message:
         # The model was asked for the body only, so the author's title leads.

@@ -2,8 +2,8 @@
 
 > A command-line tool that writes your git commit messages. It reads the staged diff,
 > asks an LLM (OpenAI Chat Completions or the Anthropic Messages API) for a Conventional Commits message, prints it,
-> and commits. Implemented as a seven-module package (`diffing`, `files`, `history`, `gitio`,
-> `prompt`, `providers`, `cli`) that is also built into a single standalone ~1 650-line script,
+> and commits. Implemented as an eight-module package (`config`, `diffing`, `files`, `history`,
+> `gitio`, `prompt`, `providers`, `cli`) that is also built into a single standalone ~1 830-line script,
 > `dist/commitclerk.py`, with **zero third-party dependencies** — standard library only
 > (`urllib`, `subprocess`, `argparse`), Python 3.8+.
 > Installs three identical entry points: `clerk`, `commitclerk`, and `git clerk`.
@@ -33,6 +33,7 @@ Anthropic or GitHub. By default it calls the OpenAI Chat Completions API using t
 - **Resilient**: transient failures (`408`, `409`, `429`, `5xx`, `529`) are retried up to twice with exponential backoff and jitter, honouring a numeric `Retry-After`. A refused connection fails immediately. A `400` naming a parameter the tool sent is repaired once (the optional sampling knob is dropped, or renamed when the provider says *"Use 'x' instead"*) and resent; required fields and `model` are never touched. `--timeout` bounds each request.
 - **Model agnostic**: any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL` (default `gpt-4o-mini`). The provider is chosen with `--provider` / `$CLERK_PROVIDER` from an adapter table (URL, headers, payload, response extractor). Three entries: `openai` (Chat Completions, `OPENAI_API_KEY`, default `gpt-4o-mini`), `anthropic` (Messages API, `ANTHROPIC_API_KEY`, default `claude-haiku-4-5`), and `ollama` (local Chat Completions at `http://localhost:11434/v1`, no API key, default `qwen2.5-coder`).
 - **Any OpenAI-compatible endpoint**: `--base-url` / `$OPENAI_BASE_URL` points the same adapter at Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together or Azure. With a local server the staged diff never leaves the machine.
+- **Config file with documented precedence**: every setting resolves through one fixed ladder — command-line flag, then environment variable, then `.clerk.json` at the repository root, then `~/.config/clerk/config.json`, then the built-in default. The project file is meant to be committed, so a team convention stops being flags each person retypes; the user file sets personal defaults across every repository. JSON rather than TOML because `tomllib` needs Python 3.11 and the floor here is 3.8, and a parser of its own would cost the zero-dependency rule. Recognised keys: `provider`, `model`, `base_url`, `timeout`, `max_chars`, `house_style` (`false` is `--no-house-style`). Discovery starts at `git rev-parse --show-toplevel`, not the working directory, so behaviour does not change with the subdirectory you are standing in. API keys are never read from a file. An unknown key is reported on stderr and ignored so a config written for a newer version still works; invalid JSON or a wrongly typed value exits `2` rather than being silently dropped.
 - **Wrappers**: `run-commit.cmd` (Windows) and `run-commit.sh` (POSIX) check the API key, stage everything with `git add -A`, then pass arguments through. The Python script itself never stages anything.
 
 ## Usage
@@ -49,9 +50,13 @@ Anthropic or GitHub. By default it calls the OpenAI Chat Completions API using t
 - `--no-house-style` — skip the `git log` behind both the house-style fingerprint and the worked examples.
 - `--version` — print the version and exit.
 
+Every default above can also come from `.clerk.json` at the repository root or
+`~/.config/clerk/config.json`; a flag beats an environment variable, which beats the project
+file, which beats the user file.
+
 Exit codes: `0` committed (or dry-run printed), `1` nothing staged, `2` configuration problem
-(the provider's API key is not set, or the provider does not exist),
-anything else passed through from `git commit`.
+(the provider's API key is not set, the provider does not exist, or a config file cannot be
+read as written), anything else passed through from `git commit`.
 
 ## Requirements
 
@@ -61,7 +66,7 @@ anything else passed through from `git commit`.
 
 ## Privacy and cost
 
-- The staged diff is sent to the configured endpoint (the OpenAI API by default; the Anthropic API with `--provider anthropic`) — on a repository whose contents cannot leave the machine, use `--provider ollama`, which calls a local model and sends nothing over the network, or do not run the tool there.
+- The staged diff is sent to the configured endpoint (the OpenAI API by default; the Anthropic API with `--provider anthropic`) — on a repository whose contents cannot leave the machine, use `--provider ollama`, which calls a local model and sends nothing over the network, or do not run the tool there. A committed `.clerk.json` can set `base_url` and therefore the destination, so it is a file to read before running the tool in a repository you did not write.
 - Nothing else is transmitted, stored, or logged: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
 - One API call per commit; a fraction of a cent with either provider's default model.

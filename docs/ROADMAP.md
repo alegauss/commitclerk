@@ -30,8 +30,8 @@
 repo write commits" and the tree answers "which package is this". What is left is intent,
 which lives in the branch name and in the author's head.*
 
-- 💭 **T9** (deps: T25) **The issue key is in the branch name and never reaches the message** — a configurable regex over `feat/PROJ-123-thing` emits a `Refs: PROJ-123` trailer, so the link between a commit and its ticket stops being retyped. → §T9
-- 💭 **T12** (deps: T25) **Intent lives in the author's head and the tool has nowhere to read it** — a one-off `--context "<note>"` and a standing `.clerk/context.md` are the two shapes intent arrives in, and neither is derivable from a diff. → §T12
+- 💭 **T9** (deps: T25 ✅) **The issue key is in the branch name and never reaches the message** — a configurable regex over `feat/PROJ-123-thing` emits a `Refs: PROJ-123` trailer, so the link between a commit and its ticket stops being retyped. → §T9
+- 💭 **T12** (deps: T25 ✅) **Intent lives in the author's head and the tool has nowhere to read it** — a one-off `--context "<note>"` and a standing `.clerk/context.md` are the two shapes intent arrives in, and neither is derivable from a diff. → §T12
 
 ## Block C — Diff intelligence
 
@@ -49,7 +49,7 @@ budget can fit.*
 - 💭 **T20** (deps: —) **A repository with three sensitive files cannot allow the tool at all** — paths whose contents are never transmitted, replaced by a filename-and-linecount placeholder, make the allow decision per file instead of per repository. → §T20
 - 💭 **T21** (deps: —) **A hook that calls an API hard-blocks the commit when the network is down** — a deterministic LLM-free message, type from file classes and bullets grouped by directory, has no key, no network and no failure mode. → §T21
 - 💭 **T22** (deps: T53) **The no-egress claim is documented and never tested** — running the suite with socket creation monkeypatched to raise turns the claim into a build failure the moment it stops being true. → §T22
-- 💭 **T23** (deps: T25) **History cannot say which commits were AI-assisted** — an opt-in `Assisted-by: commitclerk <version> (<model>)` trailer is what a team needing provenance adds by hand today, and it stays off by default. → §T23
+- 💭 **T23** (deps: T25 ✅) **History cannot say which commits were AI-assisted** — an opt-in `Assisted-by: commitclerk <version> (<model>)` trailer is what a team needing provenance adds by hand today, and it stays off by default. → §T23
 - 💭 **T24** (deps: T19) **`SECURITY.md` does not say what leaves the machine** — the data flow now has two injection vectors, diff content and past commit messages replayed verbatim as worked examples, and a reader can audit neither. → §T24
 - 📋 **T61** (deps: —) **One switch hides two very different data flows** — `--no-house-style` disables the fingerprint (counts and shapes) and the worked examples (past message text, verbatim) together, and a team can want the first without the second. → §T61
 
@@ -59,10 +59,9 @@ budget can fit.*
 today is to fork `_RULES` — which is how a tool acquires a thousand incompatible forks
 and no ecosystem.*
 
-- 💭 **T25** (deps: —) **A team convention is retyped as flags on every commit** — a project config file with documented precedence, CLI > env > project > user > default, is what every other task in this block waits on. → §T25
-- 💭 **T26** (deps: T25) **Encoding a team's convention means forking `_RULES`** — replacing or appending to the rules from a file named by flag or environment variable is how the tool gets an ecosystem instead of a thousand private patches. → §T26
-- 💭 **T27** (deps: T25) **The message is English whatever language the team works in** — a language flag matches the register the repository is already written in, and this one ships a pt-BR README against an English-only generator. → §T27
-- 💭 **T28** (deps: T25) **An existing message cannot be checked without generating a new one** — validating a file or `HEAD` against the same rules with zero API calls makes the tool usable as a `commit-msg` hook and in CI by people who never generate. → §T28
+- 💭 **T26** (deps: T25 ✅) **Encoding a team's convention means forking `_RULES`** — replacing or appending to the rules from a file named by flag or environment variable is how the tool gets an ecosystem instead of a thousand private patches. → §T26
+- 💭 **T27** (deps: T25 ✅) **The message is English whatever language the team works in** — a language flag matches the register the repository is already written in, and this one ships a pt-BR README against an English-only generator. → §T27
+- 💭 **T28** (deps: T25 ✅) **An existing message cannot be checked without generating a new one** — validating a file or `HEAD` against the same rules with zero API calls makes the tool usable as a `commit-msg` hook and in CI by people who never generate. → §T28
 - 💭 **T29** (deps: T28) **The model's type and scope are trusted without being checked** — one repair retry and then a loud failure is the only outcome that keeps an off-convention message out of history. → §T29
 
 ## Block F — Interaction & UX

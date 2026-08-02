@@ -540,6 +540,159 @@ class TestProviderTable(unittest.TestCase):
         )
 
 
+class TestLayered(unittest.TestCase):
+    """The one precedence rule: CLI > env > project > user > default."""
+
+    def test_every_rung_beats_the_ones_below_it(self):
+        rungs = ["cli", "env", "project", "user", "default"]
+        for i, expected in enumerate(rungs):
+            # everything above `i` unset, everything from `i` down set
+            candidates = [None] * i + rungs[i:]
+            with self.subTest(winner=expected):
+                self.assertEqual(commitclerk.layered(*candidates), expected)
+
+    def test_nothing_set_anywhere_is_none(self):
+        self.assertIsNone(commitclerk.layered(None, None, None, None, None))
+
+    def test_a_falsey_value_written_on_purpose_still_wins(self):
+        # `or` would skip past these to the default, which is the bug this
+        # function exists to not have: `"house_style": false` means false.
+        self.assertIs(commitclerk.layered(None, None, False, None, True), False)
+        self.assertEqual(commitclerk.layered(None, None, 0, None, 4000), 0)
+        self.assertEqual(commitclerk.layered("", None, None, None, "x"), "")
+
+
+class TestEnvValue(unittest.TestCase):
+    def test_unset_and_empty_both_read_as_not_set(self):
+        with mock.patch.dict(os.environ, {"CLERK_EMPTY": ""}, clear=True):
+            self.assertIsNone(commitclerk.env_value("CLERK_EMPTY"))
+            self.assertIsNone(commitclerk.env_value("CLERK_ABSENT"))
+            self.assertIsNone(commitclerk.env_value(None))
+
+    def test_a_set_variable_is_returned(self):
+        with mock.patch.dict(os.environ, {"CLERK_SET": "value"}):
+            self.assertEqual(commitclerk.env_value("CLERK_SET"), "value")
+
+
+class TestReadConfig(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.path = os.path.join(self.dir, commitclerk.PROJECT_CONFIG)
+
+    def write(self, text):
+        with open(self.path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return self.path
+
+    def test_a_missing_file_is_not_an_error(self):
+        self.assertEqual(commitclerk.read_config(self.path), ({}, []))
+        self.assertEqual(commitclerk.read_config(None), ({}, []))
+
+    def test_known_settings_are_read(self):
+        self.write(json.dumps({
+            "provider": "ollama",
+            "model": "qwen2.5-coder",
+            "base_url": "http://localhost:11434/v1",
+            "timeout": 180,
+            "max_chars": 8000,
+            "house_style": False,
+        }))
+        values, notices = commitclerk.read_config(self.path)
+        self.assertEqual(values["provider"], "ollama")
+        self.assertEqual(values["timeout"], 180)
+        self.assertIs(values["house_style"], False)
+        self.assertEqual(notices, [])
+
+    def test_an_unknown_setting_is_reported_and_ignored(self):
+        # A config written for a later release must not stop this one committing.
+        self.write(json.dumps({"provider": "ollama", "future_knob": 1}))
+        values, notices = commitclerk.read_config(self.path)
+        self.assertEqual(values, {"provider": "ollama"})
+        self.assertEqual(len(notices), 1)
+        self.assertIn("future_knob", notices[0])
+
+    def test_a_syntax_error_names_the_file(self):
+        self.write("{not json")
+        with self.assertRaises(commitclerk.ConfigError) as caught:
+            commitclerk.read_config(self.path)
+        self.assertIn(self.path, str(caught.exception))
+
+    def test_a_json_value_that_is_not_an_object_is_refused(self):
+        self.write("[1, 2, 3]")
+        with self.assertRaises(commitclerk.ConfigError):
+            commitclerk.read_config(self.path)
+
+    def test_a_wrongly_typed_value_is_refused_rather_than_ignored(self):
+        for payload in ('{"timeout": "sixty"}', '{"provider": 7}', '{"house_style": "yes"}'):
+            self.write(payload)
+            with self.subTest(payload=payload):
+                with self.assertRaises(commitclerk.ConfigError):
+                    commitclerk.read_config(self.path)
+
+    def test_a_boolean_is_not_accepted_as_a_number(self):
+        # `bool` subclasses `int`, so without an explicit check `true` would
+        # resolve to a one-second timeout.
+        self.write('{"timeout": true}')
+        with self.assertRaises(commitclerk.ConfigError):
+            commitclerk.read_config(self.path)
+
+    def test_every_message_is_ascii(self):
+        self.write('{"timeout": "sixty", "unknown": 1}')
+        try:
+            commitclerk.read_config(self.path)
+        except commitclerk.ConfigError as exc:
+            str(exc).encode("ascii")
+
+
+class TestConfigPaths(unittest.TestCase):
+    def test_the_project_file_sits_at_the_repository_root(self):
+        self.assertEqual(
+            commitclerk.project_config_path(os.path.join("some", "repo")),
+            os.path.join("some", "repo", commitclerk.PROJECT_CONFIG),
+        )
+
+    def test_outside_a_repository_there_is_no_project_file(self):
+        self.assertIsNone(commitclerk.project_config_path(None))
+
+    def test_the_user_file_lives_under_dot_config(self):
+        self.assertEqual(
+            commitclerk.user_config_path("/home/x"),
+            os.path.join("/home/x", ".config", "clerk", "config.json"),
+        )
+
+
+class TestLoadConfig(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.root = os.path.join(self.dir, "repo")
+        self.home = os.path.join(self.dir, "home")
+        os.makedirs(os.path.join(self.home, ".config", "clerk"))
+        os.makedirs(self.root)
+
+    def write(self, path, payload):
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+
+    def test_the_two_files_are_returned_apart(self):
+        self.write(os.path.join(self.root, commitclerk.PROJECT_CONFIG), {"model": "from-project"})
+        self.write(commitclerk.user_config_path(self.home), {"model": "from-user"})
+        project, user, notices = commitclerk.load_config(self.root, self.home)
+        self.assertEqual(project["model"], "from-project")
+        self.assertEqual(user["model"], "from-user")
+        self.assertEqual(notices, [])
+
+    def test_neither_file_present_is_the_ordinary_case(self):
+        self.assertEqual(commitclerk.load_config(self.root, self.home), ({}, {}, []))
+
+    def test_outside_a_repository_only_the_user_file_is_read(self):
+        self.write(commitclerk.user_config_path(self.home), {"timeout": 90})
+        project, user, _ = commitclerk.load_config(None, self.home)
+        self.assertEqual(project, {})
+        self.assertEqual(user["timeout"], 90)
+
+
 class TestResolveBase(unittest.TestCase):
     def setUp(self):
         self.spec = commitclerk.PROVIDERS["openai"]
@@ -563,6 +716,36 @@ class TestResolveBase(unittest.TestCase):
             commitclerk.resolve_base({"default_base": "http://localhost:1234/v1"}),
             "http://localhost:1234/v1",
         )
+
+    def test_environment_wins_over_the_project_file(self):
+        with mock.patch.dict(os.environ, {"OPENAI_BASE_URL": "http://from-env/v1"}):
+            self.assertEqual(
+                commitclerk.resolve_base(self.spec, None, "http://from-project/v1"),
+                "http://from-env/v1",
+            )
+
+    def test_the_project_file_wins_over_the_user_file(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                commitclerk.resolve_base(
+                    self.spec, None, "http://from-project/v1", "http://from-user/v1"
+                ),
+                "http://from-project/v1",
+            )
+
+    def test_the_user_file_wins_over_the_provider_default(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                commitclerk.resolve_base(self.spec, None, None, "http://from-user/v1"),
+                "http://from-user/v1",
+            )
+
+    def test_an_exported_but_empty_variable_does_not_win(self):
+        with mock.patch.dict(os.environ, {"OPENAI_BASE_URL": ""}):
+            self.assertEqual(
+                commitclerk.resolve_base(self.spec, None, "http://from-project/v1"),
+                "http://from-project/v1",
+            )
 
 
 class TestBaseUrlValidation(unittest.TestCase):
@@ -604,6 +787,25 @@ class TestResolveModel(unittest.TestCase):
     def test_provider_without_a_model_env_uses_its_default(self):
         spec = {"default_model": "local-model"}
         self.assertEqual(commitclerk.resolve_model(spec), "local-model")
+
+    def test_environment_wins_over_the_project_file(self):
+        with mock.patch.dict(os.environ, {"OPENAI_MODEL": "from-env"}):
+            self.assertEqual(
+                commitclerk.resolve_model(self.spec, None, "from-project"), "from-env"
+            )
+
+    def test_the_project_file_wins_over_the_user_file(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                commitclerk.resolve_model(self.spec, None, "from-project", "from-user"),
+                "from-project",
+            )
+
+    def test_the_user_file_wins_over_the_provider_default(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                commitclerk.resolve_model(self.spec, None, None, "from-user"), "from-user"
+            )
 
 
 class TestApiKeyResolution(unittest.TestCase):
@@ -1640,6 +1842,30 @@ class TestRecentCommits(unittest.TestCase):
         self.addCleanup(os.chdir, here)
         os.chdir(outside)
         self.assertEqual(commitclerk.get_recent_commits(), [])
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
+class TestRepoRoot(unittest.TestCase):
+    """Where `.clerk.json` is looked for."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.addCleanup(os.chdir, os.getcwd())
+
+    def test_the_answer_is_the_same_from_a_subdirectory(self):
+        _git(self.dir, "init", "-q", ".")
+        os.chdir(self.dir)
+        top = commitclerk.get_repo_root()
+        self.assertIsNotNone(top)
+        nested = os.path.join(self.dir, "a", "b")
+        os.makedirs(nested)
+        os.chdir(nested)
+        self.assertEqual(commitclerk.get_repo_root(), top)
+
+    def test_outside_a_repository_there_is_no_root(self):
+        os.chdir(self.dir)
+        self.assertIsNone(commitclerk.get_repo_root())
 
 
 if __name__ == "__main__":

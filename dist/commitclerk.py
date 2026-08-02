@@ -45,6 +45,14 @@ Environment:
     OLLAMA_BASE_URL     optional, overrides the ollama endpoint
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
+Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
+house_style). A setting is taken from the first place that has it:
+    a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
+    >  the built-in default
+`.clerk.json` is looked for at the repository root, so the tool behaves the same
+from any subdirectory, and is meant to be committed: it is how a team stops
+retyping its own convention. API keys are read from the environment only.
+
 Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
 the model used to echo it as "feat: implement <feature>" even though the feature
@@ -79,6 +87,117 @@ import urllib.error
 import urllib.request
 
 __version__ = "0.2.1"
+
+
+# --- from commitclerk/config.py ---------------------------------------
+
+PROJECT_CONFIG = ".clerk.json"
+# under the user's `~/.config`, which is where the second half of the path lives.
+USER_CONFIG = ("clerk", "config.json")
+
+# name -> the type the value must have. A key absent from this table is a key
+# this version does not know: it is reported and ignored, so a config written
+# for a later release does not stop an earlier one from committing.
+SETTINGS = {
+    "provider": str,
+    "model": str,
+    "base_url": str,
+    "timeout": int,
+    "max_chars": int,
+    "house_style": bool,
+}
+
+_TYPE_NAMES = {str: "a string", int: "a whole number", bool: "true or false"}
+
+
+class ConfigError(Exception):
+    """A file the user wrote that cannot be honoured exactly as written."""
+
+
+def user_config_path(home: str | None = None) -> str:
+    return os.path.join(home if home is not None else os.path.expanduser("~"),
+                        ".config", *USER_CONFIG)
+
+
+def project_config_path(root: str | None) -> str | None:
+    """`<repo root>/.clerk.json`, or None outside a repository.
+
+    The root, not the working directory: which subdirectory you happen to be
+    standing in must not change what the tool does. Normalised because git
+    reports the root with forward slashes even on Windows, and the path is shown
+    to the user in every message about this file.
+    """
+    return os.path.normpath(os.path.join(root, PROJECT_CONFIG)) if root else None
+
+
+def env_value(name: str | None) -> str | None:
+    """An environment variable, or None when it is unset *or* empty.
+
+    An exported-but-empty variable is how a shell says "not set". Letting "" win
+    the ladder would call the API with an empty model name.
+    """
+    return (os.environ.get(name) if name else None) or None
+
+
+def read_config(path: str | None) -> tuple[dict, list[str]]:
+    """(values, notices) for `path`, or ({}, []) when there is no such file.
+
+    Raises ConfigError for a file that exists and cannot be honoured. A syntax
+    error or a wrongly typed value is not something to route around: the user
+    wrote the file to change the tool's behaviour, and quietly doing something
+    else is the failure this project exists to avoid.
+    """
+    if not path or not os.path.isfile(path):
+        return {}, []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    # ValueError covers both JSONDecodeError and the UnicodeDecodeError a file
+    # that is not really UTF-8 raises on read.
+    except (OSError, ValueError) as exc:
+        raise ConfigError("cannot read {}: {}".format(path, exc))
+    if not isinstance(data, dict):
+        raise ConfigError("{} must contain a JSON object".format(path))
+
+    values: dict = {}
+    notices: list[str] = []
+    for key in sorted(data):
+        expected = SETTINGS.get(key)
+        if expected is None:
+            notices.append("Note: unknown setting '{}' in {}, ignored.".format(key, path))
+            continue
+        value = data[key]
+        # `bool` is a subclass of `int` in Python, so an int setting has to turn
+        # `true` away by hand or `"timeout": true` would mean a one-second timeout.
+        if not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
+            raise ConfigError("{}: '{}' must be {}".format(path, key, _TYPE_NAMES[expected]))
+        values[key] = value
+    return values, notices
+
+
+def load_config(root: str | None, home: str | None = None) -> tuple[dict, dict, list[str]]:
+    """(project, user, notices) - both files, read and kept apart.
+
+    Unmerged on purpose: the ladder puts the environment above one of them and
+    nothing above the other, so merging here would be a second precedence rule.
+    """
+    project, project_notices = read_config(project_config_path(root))
+    user, user_notices = read_config(user_config_path(home))
+    return project, user, project_notices + user_notices
+
+
+def layered(cli, env, project, user, default):
+    """CLI > environment > project file > user file > built-in default.
+
+    The only place that order exists. Every setting hands over its five
+    candidates in it, so a new setting cannot quietly invent a different one.
+    `None` alone means "not set at this layer" - a `false` or `0` written on
+    purpose is honoured, which is why this is not a chain of `or`.
+    """
+    for value in (cli, env, project, user, default):
+        if value is not None:
+            return value
+    return None
 
 
 # --- from commitclerk/diffing.py --------------------------------------
@@ -925,6 +1044,20 @@ def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     )
 
 
+def get_repo_root() -> str | None:
+    """The repository's top level, or None when we are not inside one.
+
+    This is where `.clerk.json` is looked for, so that the tool behaves the same
+    from the root and from three directories down.
+    """
+    try:
+        result = run(["git", "rev-parse", "--show-toplevel"], check=False)
+    except (OSError, UnicodeDecodeError):
+        return None
+    root = result.stdout.strip()
+    return root or None
+
+
 def get_staged_diff() -> str:
     return run(["git", "diff", "--staged"], check=False).stdout
 
@@ -1214,12 +1347,24 @@ def resolve_provider(name: str) -> dict | None:
     return PROVIDERS.get(name)
 
 
-def resolve_model(spec: dict, cli_model: str | None = None) -> str:
-    """Model to call: CLI flag > provider's env var > provider default."""
-    if cli_model:
-        return cli_model
-    env = spec.get("model_env")
-    return (os.environ.get(env) if env else None) or spec["default_model"]
+def resolve_model(
+    spec: dict,
+    cli_model: str | None = None,
+    project: str | None = None,
+    user: str | None = None,
+) -> str:
+    """Model to call, through the one ladder in `config.py`.
+
+    The provider's own env var is this setting's environment layer: `OPENAI_MODEL`
+    for openai, `ANTHROPIC_MODEL` for anthropic.
+    """
+    return layered(
+        cli_model or None,
+        env_value(spec.get("model_env")),
+        project,
+        user,
+        spec["default_model"],
+    )
 
 
 def api_key_for(spec: dict) -> str | None:
@@ -1239,16 +1384,24 @@ def missing_key_env(spec: dict) -> str | None:
     return None
 
 
-def resolve_base(spec: dict, cli_base: str | None = None) -> str:
-    """Base URL to call: CLI flag > provider's env var > provider default.
+def resolve_base(
+    spec: dict,
+    cli_base: str | None = None,
+    project: str | None = None,
+    user: str | None = None,
+) -> str:
+    """Base URL to call, through the one ladder in `config.py`.
 
     Most vendors clone the OpenAI wire format, so pointing this at Ollama,
     LM Studio, vLLM, OpenRouter, Groq, Together or Azure needs no new adapter.
     """
-    if cli_base:
-        return cli_base
-    env = spec.get("base_env")
-    return (os.environ.get(env) if env else None) or spec["default_base"]
+    return layered(
+        cli_base or None,
+        env_value(spec.get("base_env")),
+        project,
+        user,
+        spec["default_base"],
+    )
 
 
 def base_url_error(base: str) -> str | None:
@@ -1508,9 +1661,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--provider",
-        default=os.environ.get("CLERK_PROVIDER", DEFAULT_PROVIDER),
+        default=None,
         choices=sorted(PROVIDERS),
-        help=f"API provider (default: {DEFAULT_PROVIDER} or $CLERK_PROVIDER).",
+        help=f"API provider (default: {DEFAULT_PROVIDER}, or $CLERK_PROVIDER, or "
+             f"\"provider\" in {PROJECT_CONFIG}).",
     )
     parser.add_argument(
         "--base-url",
@@ -1528,7 +1682,7 @@ def main() -> int:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=REQUEST_TIMEOUT,
+        default=None,
         help=f"Seconds to wait for each API request (default: {REQUEST_TIMEOUT}). A slow "
              f"local model may need more. Transient failures are retried up to "
              f"{RETRY_ATTEMPTS - 1} times.",
@@ -1536,7 +1690,7 @@ def main() -> int:
     parser.add_argument(
         "--max-chars",
         type=int,
-        default=MAX_DIFF_CHARS,
+        default=None,
         help="Budget for the diff, in characters. Oversized diffs are trimmed per file "
              "so every changed file stays visible to the model, and the contents of "
              "generated or vendored files are replaced by a one-line placeholder.",
@@ -1544,6 +1698,7 @@ def main() -> int:
     parser.add_argument(
         "--no-house-style",
         action="store_true",
+        default=None,
         help=f"Do not read the last {HISTORY_DEPTH} commits. Turns off both the "
              "house-style fingerprint (the types, scopes, body shape and language "
              "this repo uses) and the worked examples drawn from past commits that "
@@ -1552,11 +1707,39 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    spec = resolve_provider(args.provider)
+    root = get_repo_root()
+    try:
+        project, user, notices = load_config(root)
+    except ConfigError as exc:
+        print(f"Error: {exc}.", file=sys.stderr)
+        return 2
+    for notice in notices:
+        print(notice, file=sys.stderr)
+
+    # Every setting below is resolved by the same five-rung ladder, in the order
+    # `layered` documents: CLI > environment > project file > user file > default.
+    provider = layered(
+        args.provider, env_value("CLERK_PROVIDER"),
+        project.get("provider"), user.get("provider"), DEFAULT_PROVIDER,
+    )
+    timeout = layered(
+        args.timeout, None, project.get("timeout"), user.get("timeout"), REQUEST_TIMEOUT,
+    )
+    max_chars = layered(
+        args.max_chars, None, project.get("max_chars"), user.get("max_chars"), MAX_DIFF_CHARS,
+    )
+    # The flag is negative and the setting is positive: passing --no-house-style
+    # is the CLI saying `false`, and not passing it says nothing at all.
+    house_style_on = layered(
+        False if args.no_house_style else None, None,
+        project.get("house_style"), user.get("house_style"), True,
+    )
+
+    spec = resolve_provider(provider)
     if spec is None:
         known = ", ".join(sorted(PROVIDERS))
         print(
-            f"Error: unknown provider '{args.provider}'. Known providers: {known}.",
+            f"Error: unknown provider '{provider}'. Known providers: {known}.",
             file=sys.stderr,
         )
         return 2
@@ -1566,9 +1749,9 @@ def main() -> int:
         print(f"Error: {missing} is not set.", file=sys.stderr)
         return 2
     api_key = api_key_for(spec)
-    model = resolve_model(spec, args.model)
+    model = resolve_model(spec, args.model, project.get("model"), user.get("model"))
 
-    base = resolve_base(spec, args.base_url)
+    base = resolve_base(spec, args.base_url, project.get("base_url"), user.get("base_url"))
     problem = base_url_error(base)
     if problem:
         print(f"Error: {problem}.", file=sys.stderr)
@@ -1590,7 +1773,7 @@ def main() -> int:
     # trimming, and demotion must happen before budgeting so the space a lockfile
     # was using is handed to the files the commit is actually about.
     guard = doc_guard_note(files, diff)
-    records = [] if args.no_house_style else get_recent_commits()
+    records = get_recent_commits() if house_style_on else []
     house = house_style(records)
     # None means no history was read, which is not the same as a history that shows
     # no scopes -- only the second is a reason for scope inference to stay quiet.
@@ -1613,11 +1796,11 @@ def main() -> int:
     # worth a couple of thousand characters of diff, but it must not silently raise
     # what the user asked to send.
     spent = len(house) + len(scope) + len(examples)
-    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - spent))
+    diff = budget_diff(demote_diff(diff, classes), max(0, max_chars - spent))
 
     message = call_model(
         spec, api_key, model, diff, files,
-        context=context, base=base, timeout=args.timeout,
+        context=context, base=base, timeout=timeout,
     )
     if args.message:
         # The model was asked for the body only, so the author's title leads.
