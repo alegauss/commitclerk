@@ -1050,6 +1050,171 @@ class TestBuildUserPrompt(unittest.TestCase):
     def test_no_history_means_no_house_style_heading(self):
         self.assertNotIn("House style", commitclerk.build_user_prompt("d", ["a.py"]))
 
+    def test_the_scope_note_sits_beside_the_file_list(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFFBODY", ["a.py"], scope="Scope: 'api' - blah."
+        )
+        self.assertIn("Scope: 'api'", prompt)
+        self.assertLess(prompt.index("Scope:"), prompt.index("DIFFBODY"))
+
+    def test_no_scope_means_no_scope_line(self):
+        self.assertNotIn("Scope:", commitclerk.build_user_prompt("d", ["a.py"]))
+
+
+def _fake_tree(*paths: str):
+    """An `isfile` that answers for a made-up checkout, so no tempdir is needed."""
+    present = set(paths)
+    return lambda path: path in present
+
+
+class TestPackageRoot(unittest.TestCase):
+    isfile = staticmethod(_fake_tree(
+        "package.json",                        # the monorepo's own root manifest
+        "packages/api/package.json",
+        "packages/api/plugins/auth/package.json",
+        "services/billing/pyproject.toml",
+    ))
+
+    def test_the_nearest_manifest_wins_not_the_outermost(self):
+        self.assertEqual(
+            commitclerk.package_root("packages/api/plugins/auth/index.ts", self.isfile),
+            "packages/api/plugins/auth",
+        )
+
+    def test_a_file_deep_inside_a_package_finds_it(self):
+        self.assertEqual(
+            commitclerk.package_root("packages/api/src/http/retry.ts", self.isfile),
+            "packages/api",
+        )
+
+    def test_any_supported_manifest_marks_a_package(self):
+        self.assertEqual(
+            commitclerk.package_root("services/billing/app.py", self.isfile),
+            "services/billing",
+        )
+
+    def test_the_repository_root_is_never_a_package(self):
+        # There is a root package.json, but "the checkout directory" is not a scope.
+        self.assertIsNone(commitclerk.package_root("README.md", self.isfile))
+
+    def test_a_file_outside_every_package_has_none(self):
+        self.assertIsNone(commitclerk.package_root("scripts/deploy.sh", self.isfile))
+
+    def test_windows_separators_are_understood(self):
+        self.assertEqual(
+            commitclerk.package_root("packages\\api\\src\\x.ts", self.isfile),
+            "packages/api",
+        )
+
+
+class TestPackageSpan(unittest.TestCase):
+    isfile = staticmethod(_fake_tree(
+        "packages/api/package.json",
+        "packages/api/plugins/auth/package.json",
+        "packages/web/package.json",
+    ))
+
+    def test_one_package_is_shared_when_every_file_is_inside_it(self):
+        shared, roots = commitclerk.package_span(
+            ["packages/api/a.ts", "packages/api/src/b.ts"], self.isfile
+        )
+        self.assertEqual(shared, "packages/api")
+        self.assertEqual(roots, ["packages/api"])
+
+    def test_a_nested_package_still_scopes_to_the_one_that_contains_it(self):
+        shared, roots = commitclerk.package_span(
+            ["packages/api/a.ts", "packages/api/plugins/auth/b.ts"], self.isfile
+        )
+        self.assertEqual(shared, "packages/api")
+        self.assertEqual(len(roots), 2)
+
+    def test_sibling_packages_share_nothing(self):
+        shared, roots = commitclerk.package_span(
+            ["packages/api/a.ts", "packages/web/b.ts"], self.isfile
+        )
+        self.assertIsNone(shared)
+        self.assertEqual(sorted(roots), ["packages/api", "packages/web"])
+
+    def test_root_level_files_do_not_veto_a_scope(self):
+        # A README beside a package change is not a second package.
+        shared, _ = commitclerk.package_span(
+            ["README.md", "packages/api/a.ts"], self.isfile
+        )
+        self.assertEqual(shared, "packages/api")
+
+    def test_a_repo_with_no_packages_yields_nothing(self):
+        self.assertEqual(commitclerk.package_span(["a.py"], _fake_tree()), (None, []))
+
+
+class TestScopeNote(unittest.TestCase):
+    isfile = staticmethod(_fake_tree(
+        "packages/api/package.json",
+        "packages/web/package.json",
+        "packages/shared/package.json",
+    ))
+
+    def test_a_single_package_becomes_a_scope(self):
+        note = commitclerk.scope_note(["packages/api/a.ts"], None, self.isfile)
+        self.assertIn("Scope: 'api'", note)
+        self.assertIn("packages/api", note)
+        self.assertIn("fix(api):", note)
+
+    def test_several_packages_refuse_to_pick_one(self):
+        note = commitclerk.scope_note(
+            ["packages/api/a.ts", "packages/web/b.ts", "packages/shared/c.ts"],
+            None,
+            self.isfile,
+        )
+        self.assertIn("span 3 workspace packages", note)
+        self.assertIn("api, shared, web", note)
+        self.assertIn("Do NOT scope the message to one of them", note)
+
+    def test_a_repo_with_no_packages_says_nothing(self):
+        self.assertEqual(commitclerk.scope_note(["a.py"], None, _fake_tree()), "")
+
+    def test_a_history_that_never_uses_scopes_silences_inference(self):
+        # Observation beats inference: this repo does not use scopes, so T10 must
+        # not be the reason it starts.
+        self.assertEqual(
+            commitclerk.scope_note(["packages/api/a.ts"], [], self.isfile), ""
+        )
+
+    def test_an_unread_history_does_not_silence_inference(self):
+        self.assertIn(
+            "Scope: 'api'", commitclerk.scope_note(["packages/api/a.ts"], None, self.isfile)
+        )
+
+    def test_a_scope_the_history_already_uses_is_not_second_guessed(self):
+        note = commitclerk.scope_note(["packages/api/a.ts"], ["api", "web"], self.isfile)
+        self.assertNotIn("has not used", note)
+
+    def test_a_scope_the_history_has_never_used_is_flagged(self):
+        note = commitclerk.scope_note(["packages/api/a.ts"], ["web"], self.isfile)
+        self.assertIn("has not used that scope before", note)
+
+    def test_it_reads_a_real_checkout_by_default(self):
+        # Every other test injects `isfile`; this one proves the default works,
+        # relative paths and all, against a directory that actually exists.
+        repo = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, repo, True)
+        self.addCleanup(os.chdir, os.getcwd())
+        pathlib.Path(repo, "packages", "api").mkdir(parents=True)
+        pathlib.Path(repo, "packages", "api", "package.json").write_text("{}")
+        os.chdir(repo)
+        self.assertIn("Scope: 'api'", commitclerk.scope_note(["packages/api/index.ts"]))
+
+
+class TestKnownScopes(unittest.TestCase):
+    def test_scopes_come_back_most_frequent_first(self):
+        records = [
+            _record("feat(api): one"), _record("fix(api): two"),
+            _record("feat(ui): three"), _record("chore: four"),
+        ]
+        self.assertEqual(commitclerk.known_scopes(records), ["api", "ui"])
+
+    def test_a_history_without_scopes_is_an_empty_list_not_a_failure(self):
+        self.assertEqual(commitclerk.known_scopes([_record("feat: one")]), [])
+
 
 def _record(subject: str, body: str = "") -> str:
     return f"{subject}\n{body}"

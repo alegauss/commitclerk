@@ -171,6 +171,21 @@ def dominant_language(subjects: list[str]) -> str | None:
     return best
 
 
+def known_scopes(records: list[str]) -> list[str]:
+    """The scopes this repo's recent commits actually use, most frequent first.
+
+    The same measurement the house-style block reports, handed to scope inference
+    (`files.scope_note`) so observation and inference cannot contradict each other.
+    An empty list is a finding, not a failure: this repo does not use scopes.
+    """
+    scopes = [
+        scope
+        for scope in (subject_type_scope(parse_commit(r)[0])[1] for r in records)
+        if scope
+    ]
+    return [name for name, _ in _ranked(scopes)]
+
+
 def _facts(commits: list) -> list[str]:
     """The house-style observations, most useful first."""
     subjects = [subject for subject, _ in commits]

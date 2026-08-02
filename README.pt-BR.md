@@ -46,6 +46,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Consciente de documentação** | Detecta commits de documentação — puros *e* misturados com código — e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
 | 🏠 **Escreve como o seu repositório** | Lê os seus últimos 200 commits para aprender os tipos, escopos, formato de corpo e idioma que o seu time realmente usa, de modo que a mensagem pertença ao *seu* histórico em vez de ser genericamente correta. Local, sem chamada extra à API. |
+| 📦 **Escopo ciente de monorepo** | Cada arquivo no stage é rastreado até o manifesto de workspace mais próximo, então uma mudança contida em um pacote vira `fix(billing-api): …`. Espalhada por vários pacotes, ela se recusa a nomear um e esconder o resto. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |

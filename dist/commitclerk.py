@@ -53,7 +53,9 @@ keep the message about what THIS commit actually changes.
 
 `history.py` reads the last 200 commit subjects and bodies and measures the types,
 scopes, body shape and language this repo actually uses, so the message written
-belongs in this history rather than being generically correct.
+belongs in this history rather than being generically correct. `files.py` walks
+each staged file up to its nearest workspace manifest, so a monorepo change
+confined to one package is scoped to it.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -400,6 +402,95 @@ _MIXED_DOCS_NOTE = (
 )
 
 
+# A directory holding one of these is a workspace package: the unit a monorepo's
+# Conventional Commits scope names. The list is deliberately short — a false
+# positive invents a scope, which is worse than emitting none.
+_MANIFESTS = (
+    "package.json", "pyproject.toml", "setup.py", "pom.xml", "go.mod", "Cargo.toml",
+    "build.gradle", "build.gradle.kts", "composer.json", "Gemfile", "mix.exs",
+)
+
+
+def package_root(path: str, isfile=os.path.isfile) -> str | None:
+    """The nearest ancestor directory of `path` holding a workspace manifest.
+
+    Nearest, not outermost, so a monorepo's root `package.json` (the one that only
+    declares `workspaces`) never wins over the package the file actually lives in.
+    The repository root can never be returned: a single-package repo would get its
+    own checkout directory as a scope, and `feat(commitclerk): ...` in commitclerk
+    is noise, not information.
+    """
+    parts = path.replace("\\", "/").split("/")[:-1]
+    while parts:
+        directory = "/".join(parts)
+        if any(isfile(f"{directory}/{manifest}") for manifest in _MANIFESTS):
+            return directory
+        parts.pop()
+    return None
+
+
+def package_span(files: list[str], isfile=os.path.isfile) -> tuple:
+    """(the one package containing every staged file, every package they touch).
+
+    The first element is None when the files are spread across sibling packages —
+    `packages/api` and `packages/web` have no package in common, and `packages/` is
+    not one. A package that is an ancestor of all the others *is* returned, so a
+    change inside a package and a nested sub-package still scopes to the outer one.
+    """
+    roots: list[str] = []
+    for path in files:
+        root = package_root(path, isfile)
+        if root and root not in roots:
+            roots.append(root)
+    if not roots:
+        return None, []
+    shortest = min(roots, key=len)
+    shared = shortest if all(
+        r == shortest or r.startswith(shortest + "/") for r in roots
+    ) else None
+    return shared, roots
+
+
+def _package_names(roots: list[str], limit: int = 5) -> str:
+    names = sorted(root.rsplit("/", 1)[-1] for root in roots)
+    shown = ", ".join(names[:limit])
+    return shown + f", and {len(names) - limit} more" if len(names) > limit else shown
+
+
+def scope_note(files: list[str], known_scopes=None, isfile=os.path.isfile) -> str:
+    """The Conventional Commits scope these files imply, as a prompt line.
+
+    `feat: add retry` in a forty-package monorepo is nearly useless and
+    `feat(billing-api): add retry` is not, but the wrong scope is worse than none:
+    naming one package when the commit touched three hides two of them. So the
+    inference is deterministic and it abstains loudly.
+
+    `known_scopes` is the scope vocabulary observed in the repo's history (see
+    `history.house_style`). An empty — not absent — vocabulary means the history
+    was read and this repo does not use scopes at all, which is an instruction to
+    stay quiet rather than an invitation to start.
+    """
+    if known_scopes is not None and not known_scopes:
+        return ""
+    shared, roots = package_span(files, isfile)
+    if shared:
+        scope = shared.rsplit("/", 1)[-1]
+        note = (
+            f"Scope: '{scope}' - every staged file lives in the workspace package "
+            f"{shared}. Put it in the Conventional Commits prefix, e.g. 'fix({scope}): ...'."
+        )
+        if known_scopes and scope not in known_scopes:
+            note += " This repo's history has not used that scope before."
+        return note
+    if len(roots) > 1:
+        return (
+            f"Scope: the staged files span {len(roots)} workspace packages "
+            f"({_package_names(roots)}). Do NOT scope the message to one of them - that "
+            "would hide the rest. Omit the scope, or name what they have in common."
+        )
+    return ""
+
+
 def doc_line_share(diff: str) -> float | None:
     """Fraction of the commit's changed lines that live in documentation files."""
     doc_lines = total = 0
@@ -593,6 +684,21 @@ def dominant_language(subjects: list[str]) -> str | None:
     if top < max(2, len(subjects) * 0.25) or top < runner_up * 2:
         return None
     return best
+
+
+def known_scopes(records: list[str]) -> list[str]:
+    """The scopes this repo's recent commits actually use, most frequent first.
+
+    The same measurement the house-style block reports, handed to scope inference
+    (`files.scope_note`) so observation and inference cannot contradict each other.
+    An empty list is a finding, not a failure: this repo does not use scopes.
+    """
+    scopes = [
+        scope
+        for scope in (subject_type_scope(parse_commit(r)[0])[1] for r in records)
+        if scope
+    ]
+    return [name for name, _ in _ranked(scopes)]
 
 
 def _facts(commits: list) -> list[str]:
@@ -800,6 +906,7 @@ def build_user_prompt(
     summary: str = "",
     classes: dict | None = None,
     house_style: str = "",
+    scope: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -813,6 +920,10 @@ def build_user_prompt(
     ]
     if classes:
         parts += [f"Class mix: {class_mix(classes)}"]
+    if scope:
+        # Beside the file list it annotates, and before the diff: it is a fact
+        # about *which* code changed, which the diff body cannot state.
+        parts += [scope]
     if summary:
         # Before the diff, and outside its budget: when a large diff is trimmed
         # this is the part that still describes the whole change.
@@ -1183,6 +1294,7 @@ def call_model(
     summary: str = "",
     classes: dict | None = None,
     house_style: str = "",
+    scope: str = "",
     base: str | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> str:
@@ -1191,7 +1303,7 @@ def call_model(
         _system_prompt(body_only=title is not None),
         build_user_prompt(
             diff, files, title=title, guard=guard, summary=summary, classes=classes,
-            house_style=house_style,
+            house_style=house_style, scope=scope,
         ),
     )
 
@@ -1333,24 +1445,30 @@ def main() -> int:
     # trimming, and demotion must happen before budgeting so the space a lockfile
     # was using is handed to the files the commit is actually about.
     guard = doc_guard_note(files, diff)
-    house = "" if args.no_house_style else house_style(get_recent_commits())
-    # Subtracted from the diff budget, not added on top of it: the fingerprint is
+    records = [] if args.no_house_style else get_recent_commits()
+    house = house_style(records)
+    # None means no history was read, which is not the same as a history that shows
+    # no scopes -- only the second is a reason for scope inference to stay quiet.
+    vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
+    scope = scope_note(files, vocabulary)
+    # Subtracted from the diff budget, not added on top of it: the extra context is
     # worth a few hundred characters of diff, but it must not silently raise what
     # the user asked to send.
-    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - len(house)))
+    context_cost = len(house) + len(scope)
+    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - context_cost))
 
     if args.message:
         body = call_model(
             spec, api_key, model, diff, files, title=args.message, guard=guard,
-            summary=summary, classes=classes, house_style=house, base=base,
-            timeout=args.timeout,
+            summary=summary, classes=classes, house_style=house, scope=scope,
+            base=base, timeout=args.timeout,
         )
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
         message = call_model(
             spec, api_key, model, diff, files, guard=guard,
-            summary=summary, classes=classes, house_style=house, base=base,
-            timeout=args.timeout,
+            summary=summary, classes=classes, house_style=house, scope=scope,
+            base=base, timeout=args.timeout,
         )
 
     if args.dry_run:

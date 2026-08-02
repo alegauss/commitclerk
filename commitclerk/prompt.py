@@ -44,6 +44,7 @@ def build_user_prompt(
     summary: str = "",
     classes: dict | None = None,
     house_style: str = "",
+    scope: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -57,6 +58,10 @@ def build_user_prompt(
     ]
     if classes:
         parts += [f"Class mix: {class_mix(classes)}"]
+    if scope:
+        # Beside the file list it annotates, and before the diff: it is a fact
+        # about *which* code changed, which the diff body cannot state.
+        parts += [scope]
     if summary:
         # Before the diff, and outside its budget: when a large diff is trimmed
         # this is the part that still describes the whole change.

@@ -6,6 +6,8 @@ not evidence that this commit implements it.
 
 from __future__ import annotations
 
+import os
+
 from .diffing import chunk_path, count_changes, split_diff
 
 # A commit touching ONLY these counts as documentation-only: it gets a docs:
@@ -137,6 +139,95 @@ _MIXED_DOCS_NOTE = (
     "named in the prose as work done in this commit."
 )
 
+
+
+# A directory holding one of these is a workspace package: the unit a monorepo's
+# Conventional Commits scope names. The list is deliberately short — a false
+# positive invents a scope, which is worse than emitting none.
+_MANIFESTS = (
+    "package.json", "pyproject.toml", "setup.py", "pom.xml", "go.mod", "Cargo.toml",
+    "build.gradle", "build.gradle.kts", "composer.json", "Gemfile", "mix.exs",
+)
+
+
+def package_root(path: str, isfile=os.path.isfile) -> str | None:
+    """The nearest ancestor directory of `path` holding a workspace manifest.
+
+    Nearest, not outermost, so a monorepo's root `package.json` (the one that only
+    declares `workspaces`) never wins over the package the file actually lives in.
+    The repository root can never be returned: a single-package repo would get its
+    own checkout directory as a scope, and `feat(commitclerk): ...` in commitclerk
+    is noise, not information.
+    """
+    parts = path.replace("\\", "/").split("/")[:-1]
+    while parts:
+        directory = "/".join(parts)
+        if any(isfile(f"{directory}/{manifest}") for manifest in _MANIFESTS):
+            return directory
+        parts.pop()
+    return None
+
+
+def package_span(files: list[str], isfile=os.path.isfile) -> tuple:
+    """(the one package containing every staged file, every package they touch).
+
+    The first element is None when the files are spread across sibling packages —
+    `packages/api` and `packages/web` have no package in common, and `packages/` is
+    not one. A package that is an ancestor of all the others *is* returned, so a
+    change inside a package and a nested sub-package still scopes to the outer one.
+    """
+    roots: list[str] = []
+    for path in files:
+        root = package_root(path, isfile)
+        if root and root not in roots:
+            roots.append(root)
+    if not roots:
+        return None, []
+    shortest = min(roots, key=len)
+    shared = shortest if all(
+        r == shortest or r.startswith(shortest + "/") for r in roots
+    ) else None
+    return shared, roots
+
+
+def _package_names(roots: list[str], limit: int = 5) -> str:
+    names = sorted(root.rsplit("/", 1)[-1] for root in roots)
+    shown = ", ".join(names[:limit])
+    return shown + f", and {len(names) - limit} more" if len(names) > limit else shown
+
+
+def scope_note(files: list[str], known_scopes=None, isfile=os.path.isfile) -> str:
+    """The Conventional Commits scope these files imply, as a prompt line.
+
+    `feat: add retry` in a forty-package monorepo is nearly useless and
+    `feat(billing-api): add retry` is not, but the wrong scope is worse than none:
+    naming one package when the commit touched three hides two of them. So the
+    inference is deterministic and it abstains loudly.
+
+    `known_scopes` is the scope vocabulary observed in the repo's history (see
+    `history.house_style`). An empty — not absent — vocabulary means the history
+    was read and this repo does not use scopes at all, which is an instruction to
+    stay quiet rather than an invitation to start.
+    """
+    if known_scopes is not None and not known_scopes:
+        return ""
+    shared, roots = package_span(files, isfile)
+    if shared:
+        scope = shared.rsplit("/", 1)[-1]
+        note = (
+            f"Scope: '{scope}' - every staged file lives in the workspace package "
+            f"{shared}. Put it in the Conventional Commits prefix, e.g. 'fix({scope}): ...'."
+        )
+        if known_scopes and scope not in known_scopes:
+            note += " This repo's history has not used that scope before."
+        return note
+    if len(roots) > 1:
+        return (
+            f"Scope: the staged files span {len(roots)} workspace packages "
+            f"({_package_names(roots)}). Do NOT scope the message to one of them - that "
+            "would hide the rest. Omit the scope, or name what they have in common."
+        )
+    return ""
 
 
 def doc_line_share(diff: str) -> float | None:

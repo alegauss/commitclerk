@@ -9,7 +9,7 @@ import sys
 
 from . import __version__
 from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff
-from .files import classify_files, doc_guard_note
+from .files import classify_files, doc_guard_note, scope_note
 from .gitio import (
     get_recent_commits,
     get_staged_diff,
@@ -19,7 +19,7 @@ from .gitio import (
     partially_staged,
     unstaged_warning,
 )
-from .history import HISTORY_DEPTH, house_style
+from .history import HISTORY_DEPTH, MIN_COMMITS, house_style, known_scopes
 from .providers import (
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
@@ -148,24 +148,30 @@ def main() -> int:
     # trimming, and demotion must happen before budgeting so the space a lockfile
     # was using is handed to the files the commit is actually about.
     guard = doc_guard_note(files, diff)
-    house = "" if args.no_house_style else house_style(get_recent_commits())
-    # Subtracted from the diff budget, not added on top of it: the fingerprint is
+    records = [] if args.no_house_style else get_recent_commits()
+    house = house_style(records)
+    # None means no history was read, which is not the same as a history that shows
+    # no scopes -- only the second is a reason for scope inference to stay quiet.
+    vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
+    scope = scope_note(files, vocabulary)
+    # Subtracted from the diff budget, not added on top of it: the extra context is
     # worth a few hundred characters of diff, but it must not silently raise what
     # the user asked to send.
-    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - len(house)))
+    context_cost = len(house) + len(scope)
+    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - context_cost))
 
     if args.message:
         body = call_model(
             spec, api_key, model, diff, files, title=args.message, guard=guard,
-            summary=summary, classes=classes, house_style=house, base=base,
-            timeout=args.timeout,
+            summary=summary, classes=classes, house_style=house, scope=scope,
+            base=base, timeout=args.timeout,
         )
         message = f"{args.message}\n\n{body}".rstrip() + "\n"
     else:
         message = call_model(
             spec, api_key, model, diff, files, guard=guard,
-            summary=summary, classes=classes, house_style=house, base=base,
-            timeout=args.timeout,
+            summary=summary, classes=classes, house_style=house, scope=scope,
+            base=base, timeout=args.timeout,
         )
 
     if args.dry_run:

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Monorepo scopes are inferred from the workspace layout.** `feat: add retry` in a
+  forty-package repo is nearly useless; `feat(billing-api): add retry` is not. Each
+  staged file is walked up to the nearest directory holding a workspace manifest
+  (`package.json`, `pyproject.toml`, `pom.xml`, `go.mod`, `Cargo.toml`, `build.gradle`,
+  `composer.json`, `Gemfile`, `mix.exs`, `setup.py`), and when every file lands in the
+  same package, its directory name is offered as the Conventional Commits scope. The
+  *nearest* manifest wins, so a root `package.json` that only declares `workspaces`
+  never beats the package a file actually lives in, and the repository root is never a
+  scope — a single-package repo would otherwise get `feat(my-checkout-dir):` on every
+  commit. The wrong scope being worse than none, it abstains loudly: files spread
+  across sibling packages produce an explicit instruction *not* to pick one and hide
+  the rest. It also defers to your history — if the last 200 commits use no scopes at
+  all, inference stays silent instead of starting the habit for you, and a scope your
+  history has never used is flagged as new. No flag, no configuration, no API call.
 - **The message now matches your repository's own house style.** Before writing
   anything, the tool reads the last 200 non-merge commit subjects and bodies with a
   single `git log` and measures what this repo actually does: which Conventional

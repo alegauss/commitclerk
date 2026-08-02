@@ -49,6 +49,12 @@ message text is transmitted, with one exception: **scope names** (the `api` in
 them would be useless. No diff, patch, author, email, date or SHA from history is
 read or sent. `--no-house-style` skips the `git log` entirely.
 
+Scope inference is the only part of the tool that touches files outside the staged
+diff, and it never **reads** one: it asks whether a manifest (`package.json`,
+`pyproject.toml`, `go.mod`, …) *exists* in each ancestor directory of a staged
+file, and transmits at most the resulting directory name — which is already part
+of the staged path the model receives. No manifest contents are opened or sent.
+
 That endpoint is `https://api.openai.com/v1/chat/completions` by default, and it
 is under your control:
 

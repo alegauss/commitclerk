@@ -48,6 +48,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📄 **Doc-aware** | Detects documentation commits — pure *and* mixed with code — and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
 | 🏠 **Writes like your repo** | Reads your last 200 commits to learn the types, scopes, body shape and language your team actually uses, so the message belongs in *your* history instead of being generically correct. Local, no extra API call. |
+| 📦 **Monorepo-aware scopes** | Staged files are walked up to the nearest workspace manifest, so a change confined to one package becomes `fix(billing-api): …`. Spread across packages, it refuses to name one and hide the rest. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
@@ -232,7 +233,8 @@ The same rule set also keeps titles imperative and under 72 characters, keeps bo
 ```
 git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──┐
 git diff --stat --summary ──▶ renames, modes, binary sizes ─────────┤
-git log -n200 ──▶ house style: types, scopes, body shape, language ─┴──▶ prompt
+git log -n200 ──▶ house style: types, scopes, body shape, language ─┤
+nearest workspace manifest ──▶ inferred scope ──────────────────────┴──▶ prompt
                                                                           │
                                         provider API (--provider) ◀────────┘
                                                 │
@@ -242,7 +244,7 @@ git log -n200 ──▶ house style: types, scopes, body shape, language ─┴�
 The source is a seven-module package under [`commitclerk/`](commitclerk/) — `diffing`,
 `files`, `history`, `gitio`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (1378 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (1496 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start

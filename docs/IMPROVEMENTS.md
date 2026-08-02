@@ -44,17 +44,6 @@ trailer covers Jira, Linear and GitHub. It must be *config-gated and off by
 default* — a spurious `Refs:` on a repo with no tracker is noise, and this project
 does not add ceremony to other people's history uninvited.
 
-### B.3 — Scope inference for monorepos
-
-`feat: add retry` in a 40-package monorepo is nearly useless; `feat(billing-api):
-add retry` is not. The inference is deterministic and needs no model: take the
-longest common path prefix of the staged files, then walk up to the nearest
-directory containing a manifest (`package.json`, `pyproject.toml`, `pom.xml`,
-`go.mod`, `Cargo.toml`) and use its name. If files span several packages, either
-emit no scope or the shared root — never guess one package and hide the others.
-Cross-check against the scope vocabulary discovered in §B.1 so inference and
-observation agree.
-
 ### B.5 — Standing and one-off context
 
 `--context "this reverts the caching experiment"` handles the case that no amount
@@ -124,8 +113,10 @@ how a tool gets uninstalled.
 
 `--offline` produces a decent deterministic message with no network: type from the
 file-class mix (§C.2) narrowed to the types the house-style fingerprint found in
-this repo, scope from path inference (§B.3), and a body of grouped bullets
-(`- Update 3 files under src/api/`). It is not as good as the model. It is
+this repo, scope from the workspace-manifest inference the online path already
+uses, and a body of grouped bullets (`- Update 3 files under src/api/`). Every
+input it needs is already computed locally on every run. It is not as good as the
+model. It is
 infinitely better than an error at the moment someone is trying to commit, and it
 is what the hook falls back to automatically on any failure.
 
@@ -410,7 +401,7 @@ Two layers, in order:
 1. **Offline golden corpus (T50).** Real diffs committed as fixtures — doc-only,
    mixed doc+code, rename-heavy, lockfile-dominated, binary, huge — asserted
    against the *deterministic* pipeline: file classes (§C.2), budget allocation
-   (§C.1), inferred scope (§B.3), offline message (§D.3), prompt assembly. No
+   (§C.1), inferred scope, offline message (§D.3), prompt assembly. No
    network, runs in CI on every PR, catches most regressions.
 2. **Live evaluation (T51).** The corpus through a real model behind an opt-in
    env flag, scored by a judge model against a rubric (correct type? title under

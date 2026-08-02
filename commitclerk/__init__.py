@@ -38,7 +38,9 @@ keep the message about what THIS commit actually changes.
 
 `history.py` reads the last 200 commit subjects and bodies and measures the types,
 scopes, body shape and language this repo actually uses, so the message written
-belongs in this history rather than being generically correct.
+belongs in this history rather than being generically correct. `files.py` walks
+each staged file up to its nearest workspace manifest, so a monorepo change
+confined to one package is scoped to it.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -85,6 +87,9 @@ from .files import (  # noqa: E402
     doc_guard_note,
     doc_line_share,
     is_doc_only,
+    package_root,
+    package_span,
+    scope_note,
 )
 from .history import (  # noqa: E402
     HISTORY_DEPTH,
@@ -95,6 +100,7 @@ from .history import (  # noqa: E402
     bullet_marker,
     dominant_language,
     house_style,
+    known_scopes,
     parse_commit,
     split_records,
     strip_prefix,
@@ -159,6 +165,8 @@ __all__ = [
     "classify_files",
     "doc_guard_note",
     "house_style",
+    "known_scopes",
+    "scope_note",
     "get_recent_commits",
     "budget_diff",
     "demote_diff",
