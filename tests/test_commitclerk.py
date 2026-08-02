@@ -1078,6 +1078,221 @@ def _diff(path, *added, start=1):
     )
 
 
+class TestClerkignoreMatching(unittest.TestCase):
+    def rules(self, *lines):
+        return commitclerk.parse_clerkignore("\n".join(lines))
+
+    def hits(self, patterns, paths):
+        rules = self.rules(*patterns)
+        return [p for p in paths if commitclerk.excluded(p, rules)]
+
+    def test_a_bare_name_matches_at_any_depth(self):
+        self.assertEqual(
+            self.hits([".env"], [".env", "src/.env", "a/b/.env", "env"]),
+            [".env", "src/.env", "a/b/.env"],
+        )
+
+    def test_a_leading_slash_anchors_to_the_repository_root(self):
+        self.assertEqual(self.hits(["/.env"], [".env", "src/.env"]), [".env"])
+
+    def test_a_pattern_with_a_slash_inside_is_anchored_too(self):
+        self.assertEqual(
+            self.hits(["config/prod.json"], ["config/prod.json", "a/config/prod.json"]),
+            ["config/prod.json"],
+        )
+
+    def test_a_star_does_not_cross_a_directory_boundary(self):
+        self.assertEqual(
+            self.hits(["secrets/*.pem"], ["secrets/a.pem", "secrets/deep/b.pem"]),
+            ["secrets/a.pem"],
+        )
+
+    def test_a_double_star_does(self):
+        self.assertEqual(
+            self.hits(["secrets/**/*.pem"], ["secrets/a.pem", "secrets/deep/b.pem"]),
+            ["secrets/a.pem", "secrets/deep/b.pem"],
+        )
+
+    def test_a_trailing_slash_takes_everything_beneath(self):
+        self.assertEqual(
+            self.hits(["secrets/"], ["secrets/a.pem", "secrets/x/b.pem", "secrets.md"]),
+            ["secrets/a.pem", "secrets/x/b.pem"],
+        )
+
+    def test_a_bare_directory_name_also_takes_what_is_under_it(self):
+        self.assertEqual(self.hits(["vault"], ["vault/key.pem"]), ["vault/key.pem"])
+
+    def test_the_last_matching_rule_wins_so_negation_means_something(self):
+        patterns = ["*.env", "!.env.example"]
+        self.assertEqual(
+            self.hits(patterns, ["prod.env", ".env.example"]), ["prod.env"]
+        )
+
+    def test_order_matters_and_a_later_rule_can_re_exclude(self):
+        patterns = ["*.env", "!.env.example", "secrets/.env.example"]
+        self.assertEqual(
+            self.hits(patterns, [".env.example", "secrets/.env.example"]),
+            ["secrets/.env.example"],
+        )
+
+    def test_windows_separators_in_a_path_still_match(self):
+        rules = self.rules("secrets/")
+        self.assertTrue(commitclerk.excluded(r"secrets\key.pem", rules))
+
+    def test_comments_and_blank_lines_are_skipped(self):
+        rules = self.rules("# a comment", "", "   ", ".env")
+        self.assertEqual(len(rules), 1)
+
+    def test_no_rules_means_nothing_is_withheld(self):
+        self.assertEqual(commitclerk.excluded_paths(["a.py", ".env"], []), [])
+
+    def test_matches_come_back_in_the_order_git_reported_them(self):
+        rules = self.rules("*.env")
+        self.assertEqual(
+            commitclerk.excluded_paths(["z.env", "a.py", "a.env"], rules),
+            ["z.env", "a.env"],
+        )
+
+
+class TestClerkignoreRefusals(unittest.TestCase):
+    """A rule that quietly does nothing is a file quietly transmitted."""
+
+    def test_a_backslash_is_refused_rather_than_silently_unmatched(self):
+        with self.assertRaises(commitclerk.ConfigError) as caught:
+            commitclerk.parse_clerkignore("src\\secret.env")
+        self.assertIn("forward slashes", str(caught.exception))
+
+    def test_the_refusal_names_the_line_number(self):
+        with self.assertRaises(commitclerk.ConfigError) as caught:
+            commitclerk.parse_clerkignore("# fine\n\n.env\nbad\\path\n")
+        self.assertIn(":4", str(caught.exception))
+
+    def test_a_pattern_that_matches_nothing_is_refused(self):
+        for payload in ("!", "/", "!/"):
+            with self.subTest(payload=payload):
+                with self.assertRaises(commitclerk.ConfigError):
+                    commitclerk.parse_clerkignore(payload)
+
+    def test_every_refusal_is_ascii(self):
+        try:
+            commitclerk.parse_clerkignore("a\\b")
+        except commitclerk.ConfigError as exc:
+            str(exc).encode("ascii")
+
+
+class TestClerkignoreFile(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def test_the_file_sits_at_the_repository_root(self):
+        self.assertEqual(
+            commitclerk.clerkignore_path(os.path.join("some", "repo")),
+            os.path.join("some", "repo", commitclerk.CLERKIGNORE),
+        )
+
+    def test_outside_a_repository_there_is_no_file(self):
+        self.assertIsNone(commitclerk.clerkignore_path(None))
+
+    def test_a_missing_file_is_not_an_error(self):
+        path = os.path.join(self.dir, commitclerk.CLERKIGNORE)
+        self.assertEqual(commitclerk.read_clerkignore(path), [])
+        self.assertEqual(commitclerk.read_clerkignore(None), [])
+
+    def test_a_real_file_is_read_and_compiled(self):
+        path = os.path.join(self.dir, commitclerk.CLERKIGNORE)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("# secrets\n*.env\n")
+        rules = commitclerk.read_clerkignore(path)
+        self.assertTrue(commitclerk.excluded("prod.env", rules))
+
+
+class TestExcludedFromTheDiff(unittest.TestCase):
+    def diff(self, path, *added):
+        body = "".join("+" + line + "\n" for line in added)
+        return (
+            f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
+            f"@@ -0,0 +1,{len(added)} @@\n" + body
+        )
+
+    def test_the_body_goes_and_the_header_and_counts_stay(self):
+        diff = self.diff(".env", "OPENAI_API_KEY=sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6")
+        out = commitclerk.demote_diff(diff, {}, (), excluded={".env"})
+        self.assertNotIn("sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6", out)
+        self.assertIn("diff --git a/.env b/.env", out)
+        self.assertIn("excluded by .clerkignore, +1 -0", out)
+
+    def test_a_tiny_file_is_withheld_where_the_demotion_floor_would_not(self):
+        # DEMOTE_MIN_CHARS is 500; a three-line .env is the whole point.
+        diff = self.diff(".env", "A=1", "B=2", "C=3")
+        out = commitclerk.demote_diff(diff, {".env": "config"}, ("config",), excluded={".env"})
+        self.assertNotIn("+A=1", out)
+
+    def test_files_that_are_not_excluded_are_untouched(self):
+        diff = self.diff("src/a.py", "x = 1")
+        self.assertEqual(commitclerk.demote_diff(diff, {}, (), excluded={".env"}), diff)
+
+    def test_exclusion_leaves_nothing_for_the_secret_scan_to_refuse(self):
+        # This is the ordering that makes .clerkignore the escape hatch: run it
+        # first and the scan has no content to object to.
+        diff = self.diff(".env", "KEY=sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6")
+        self.assertTrue(commitclerk.scan_diff(diff))
+        withheld = commitclerk.demote_diff(diff, {}, (), excluded={".env"})
+        self.assertEqual(commitclerk.scan_diff(withheld), [])
+
+    def test_no_exclusions_and_no_classes_is_the_diff_itself(self):
+        diff = self.diff("a.py", "x = 1")
+        self.assertEqual(commitclerk.demote_diff(diff, {}), diff)
+
+
+class TestExclusionNotice(unittest.TestCase):
+    def test_it_names_what_was_withheld_and_what_was_not(self):
+        notice = commitclerk.exclusion_notice([".env"])
+        self.assertIn("1 file", notice)
+        self.assertIn(".env", notice)
+        # The honesty the feature turns on: the path went anyway.
+        self.assertIn("The paths and line counts were.", notice)
+
+    def test_a_long_list_is_summarised(self):
+        paths = [f"secret{n}.env" for n in range(9)]
+        notice = commitclerk.exclusion_notice(paths)
+        self.assertIn("9 files", notice)
+        self.assertIn("and 4 more", notice)
+
+    def test_nothing_withheld_produces_no_notice(self):
+        self.assertEqual(commitclerk.exclusion_notice([]), "")
+
+    def test_it_is_ascii(self):
+        commitclerk.exclusion_notice([f"s{n}.env" for n in range(9)]).encode("ascii")
+
+
+class TestExcludedInThePrompt(unittest.TestCase):
+    def test_the_annotation_carries_the_class_and_the_state(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFF", [".env", "a.py"],
+            classes={".env": "config", "a.py": "code"},
+            excluded=[".env"],
+        )
+        self.assertIn("- .env (config, excluded)", prompt)
+        self.assertIn("- a.py (code)", prompt)
+
+    def test_an_excluded_lockfile_and_excluded_source_do_not_read_alike(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFF", ["p.lock", "s.py"],
+            classes={"p.lock": "generated", "s.py": "code"},
+            excluded=["p.lock", "s.py"],
+        )
+        self.assertIn("- p.lock (generated, excluded)", prompt)
+        self.assertIn("- s.py (code, excluded)", prompt)
+
+    def test_nothing_excluded_leaves_the_file_list_as_it_was(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFF", ["a.py"], classes={"a.py": "code"}
+        )
+        self.assertIn("- a.py (code)", prompt)
+        self.assertNotIn("excluded", prompt)
+
+
 class TestSummaryMarks(unittest.TestCase):
     def test_creations_deletions_and_renames_are_read_off_the_summary(self):
         summary = (

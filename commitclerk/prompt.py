@@ -35,6 +35,19 @@ def _system_prompt(*, body_only: bool) -> str:
         + "\nReturn only the commit message text."
     )
 
+def _file_line(path: str, classes: dict, excluded) -> str:
+    """`- path (class, excluded)` -- the class, then whether the body is withheld.
+
+    Two annotations and not one: the class says what kind of file it is, which
+    is what the type prefix is picked from, and exclusion says only what the
+    model may see. An excluded lockfile and excluded source must not read alike.
+    """
+    marks = ([classes[path]] if path in classes else []) + (
+        ["excluded"] if path in excluded else []
+    )
+    return f"- {path} ({', '.join(marks)})" if marks else f"- {path}"
+
+
 def build_user_prompt(
     diff: str,
     files: list[str],
@@ -48,6 +61,7 @@ def build_user_prompt(
     scope: str = "",
     context: str = "",
     deep: str = "",
+    excluded=(),
 ) -> str:
     classes = classes or {}
     parts = []
@@ -60,9 +74,7 @@ def build_user_prompt(
         # Beside the fingerprint, and well before the diff. Both answer "how should
         # this be written"; everything from the file list down answers "about what".
         parts += [examples, ""]
-    parts += ["Files changed:"] + [
-        f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
-    ]
+    parts += ["Files changed:"] + [_file_line(f, classes, excluded) for f in files]
     if classes:
         parts += [f"Class mix: {class_mix(classes)}"]
     if scope:

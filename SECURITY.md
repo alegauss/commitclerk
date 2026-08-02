@@ -35,6 +35,22 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 
 ## Where your data goes
 
+**A `.clerkignore` withholds a file's contents.** One file at the repository
+root, `.gitignore` syntax (`#` comments, `!` negation with the last match
+winning, `/` anchoring, trailing `/` for a directory, `*` and `**`). A matched
+staged file reaches the model as its **path**, its **line counts** and a
+`[... excluded by .clerkignore, +N -M, contents not shown ...]` placeholder; its
+body is never transmitted, to any provider, including a local one. It is applied
+before the secret scan and before every request, so no ordering exists in which
+an excluded body is sent. Syntax the subset cannot honour is an error (exit `2`)
+naming the line, never a rule that silently matches nothing.
+
+**It withholds contents, not names.** The staged paths, their line counts and
+the `git --stat --summary` entry for an excluded file are all still sent. A
+repository whose *filenames* cannot be disclosed wants `--offline`, or wants not
+to run this tool at all — `.clerkignore` is not that control and must not be
+sold as one.
+
 **`--offline` makes no request at all.** Not a smaller one, not one to a local
 server: the message is composed from the staged file list, the file classes, the
 workspace manifest and `git --stat --summary`, and no socket is opened. No API
@@ -147,6 +163,10 @@ written by the tool:
 
 - `.clerk.json` at the repository root (`git rev-parse --show-toplevel`)
 - `~/.config/clerk/config.json`
+
+A third, `.clerkignore` at the repository root, is plain text rather than JSON
+and chooses which staged files have their **contents** withheld — see *Where
+your data goes*. Nothing in it is transmitted either.
 
 Only eleven keys are recognised — `provider`, `model`, `base_url`, `timeout`,
 `max_chars`, `house_style`, `examples`, `scan`, `deep`, `ticket_refs`,

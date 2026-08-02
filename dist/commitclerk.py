@@ -59,6 +59,10 @@ taken from the first place that has it:
 from any subdirectory, and is meant to be committed: it is how a team stops
 retyping its own convention. API keys are read from the environment only.
 
+`.clerkignore` at the repository root withholds the *contents* of the paths it
+matches (`.gitignore` syntax): they reach the model as a header and a line count
+only. The paths themselves are still sent - see `excludes.py`.
+
 `.clerk/context.md` under the repository root carries standing facts the diff
 cannot show, read verbatim on every run; `--context "<note>"` says the same
 thing for one commit. Both only add to the prompt - see `context.py`.
@@ -314,6 +318,169 @@ def context_note(standing: str = "", one_off: str = "",
     return "\n".join(lines)
 
 
+# --- from commitclerk/excludes.py -------------------------------------
+
+CLERKIGNORE = ".clerkignore"
+# How many paths the notice names before summarising. Enough to recognise the
+# list, not enough to bury the run's real output.
+MAX_NAMED = 5
+
+
+class Rule(NamedTuple):
+    """One line of `.clerkignore`, compiled."""
+
+    regex: object
+    negated: bool
+    source: str
+    line: int
+
+
+def clerkignore_path(root: str | None) -> str | None:
+    """`<repo root>/.clerkignore`, or None outside a repository.
+
+    The root and not the working directory, exactly as `.clerk.json` is found:
+    which subdirectory you are standing in must never change what is withheld.
+    """
+    return os.path.normpath(os.path.join(root, CLERKIGNORE)) if root else None
+
+
+def _translate(pattern: str) -> str:
+    """A glob as a regex fragment, where `*` stops at a `/` and `**` does not."""
+    out = []
+    i, size = 0, len(pattern)
+    while i < size:
+        char = pattern[i]
+        if char == "*":
+            if pattern[i:i + 3] == "**/":
+                out.append("(?:.*/)?")
+                i += 3
+                continue
+            if pattern[i:i + 2] == "**":
+                out.append(".*")
+                i += 2
+                continue
+            out.append("[^/]*")
+        elif char == "?":
+            out.append("[^/]")
+        elif char == "[":
+            close = pattern.find("]", i + 1)
+            if close == -1:
+                out.append(re.escape(char))
+            else:
+                body = pattern[i + 1:close]
+                out.append("[" + ("^" + body[1:] if body.startswith("!") else body) + "]")
+                i = close + 1
+                continue
+        else:
+            out.append(re.escape(char))
+        i += 1
+    return "".join(out)
+
+
+def compile_pattern(pattern: str, line: int = 0) -> Rule:
+    """One pattern as a `Rule` matching POSIX, repository-relative paths."""
+    source = pattern
+    negated = pattern.startswith("!")
+    if negated:
+        pattern = pattern[1:]
+
+    directory_only = pattern.endswith("/")
+    pattern = pattern.rstrip("/")
+
+    anchored = pattern.startswith("/")
+    if anchored:
+        pattern = pattern[1:]
+    elif "/" in pattern:
+        # `docs/x.md` is anchored to the root; a bare `x.md` matches at any
+        # depth. That asymmetry is `.gitignore`'s, and people already know it.
+        anchored = True
+
+    prefix = "" if anchored else "(?:.*/)?"
+    # A bare name may be a directory, so it also matches everything beneath it.
+    suffix = "/.*" if directory_only else "(?:/.*)?"
+    return Rule(
+        re.compile("^" + prefix + _translate(pattern) + suffix + "$"),
+        negated,
+        source,
+        line,
+    )
+
+
+def parse_clerkignore(text: str, path: str = CLERKIGNORE) -> list:
+    """The rules in `text`, in file order, or ConfigError naming the line.
+
+    Refusing beats ignoring. Every rule here is one a person wrote to keep
+    something off the wire, so a line this subset cannot honour has to stop the
+    run -- silently matching nothing is the one outcome they would not accept.
+    """
+    rules = []
+    for number, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "\\" in line:
+            raise ConfigError(
+                f"{path}:{number}: use forward slashes - '\\' is a separator here, "
+                "not an escape"
+            )
+        if line.lstrip("!").strip("/") == "":
+            raise ConfigError(f"{path}:{number}: '{line}' matches nothing")
+        rules.append(compile_pattern(line, number))
+    return rules
+
+
+def read_clerkignore(path: str | None) -> list:
+    """The rules in `path`, or [] when there is no such file."""
+    if not path or not os.path.isfile(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except (OSError, ValueError) as exc:
+        raise ConfigError(f"cannot read {path}: {exc}")
+    return parse_clerkignore(text, path)
+
+
+def excluded(path: str, rules: list) -> bool:
+    """Whether `path` is withheld, the last matching rule winning.
+
+    Last and not first, so `!` can carve an exception out of a broad rule above
+    it -- which is the order `.gitignore` uses and the only one in which
+    negation means anything.
+    """
+    posix = path.replace("\\", "/")
+    verdict = False
+    for rule in rules:
+        if rule.regex.match(posix):
+            verdict = not rule.negated
+    return verdict
+
+
+def excluded_paths(files: list, rules: list) -> list:
+    """The staged files `.clerkignore` withholds, in the order git reported them."""
+    return [path for path in files if excluded(path, rules)] if rules else []
+
+
+def exclusion_notice(paths: list) -> str:
+    """What to print when something was withheld, or "" when nothing was.
+
+    It names what was *not* sent and, in the same breath, what still was. A
+    notice that only mentioned the first would be read as the guarantee this
+    feature is careful not to give.
+    """
+    if not paths:
+        return ""
+    count = len(paths)
+    named = ", ".join(paths[:MAX_NAMED])
+    if count > MAX_NAMED:
+        named += f", and {count - MAX_NAMED} more"
+    subject = "1 file" if count == 1 else f"{count} files"
+    return (
+        f"Note: {subject} excluded by {CLERKIGNORE}; the contents were not sent "
+        f"({named}). The paths and line counts were."
+    )
+
+
 # --- from commitclerk/diffing.py --------------------------------------
 
 MAX_DIFF_CHARS = 60_000
@@ -418,7 +585,12 @@ def doc_guard_note(files: list[str], diff: str = "") -> str:
     return _MIXED_DOCS_NOTE.format(files=", ".join(docs), share=share_text)
 
 
-def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLASSES) -> str:
+def demote_diff(
+    diff: str,
+    classes: dict,
+    classes_to_demote: tuple = DEMOTED_CLASSES,
+    excluded=(),
+) -> str:
     """Replace the body of files that can never be the subject with one line.
 
     A `package-lock.json` bump is thousands of lines the model has been told not to
@@ -426,8 +598,12 @@ def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLA
     commit. The header stays — silently dropping a file would repeat the mistake
     head-truncation used to make — and the counts stay, because "regenerated the
     lockfile (+8412 -3110)" is the whole of what a reader needs.
+
+    `excluded` is `.clerkignore`'s answer and obeys neither rule above: no class
+    qualifies it and `DEMOTE_MIN_CHARS` does not apply, because a three-line
+    `.env` is exactly the case that file exists for.
     """
-    if not classes:
+    if not classes and not excluded:
         return diff
     out = []
     for chunk in split_diff(diff):
@@ -435,11 +611,13 @@ def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLA
         klass = classes.get(path) if path else None
         header, body = _split_header(chunk)
         body_text = "".join(body)
-        if klass in classes_to_demote and len(body_text) > DEMOTE_MIN_CHARS:
+        hidden = path in excluded if path else False
+        if hidden or (klass in classes_to_demote and len(body_text) > DEMOTE_MIN_CHARS):
             added, removed = count_changes(body_text)
+            what = "excluded by .clerkignore" if hidden else f"{klass} file"
             out.append(
                 "".join(header)
-                + f"[... {klass} file, +{added} -{removed}, contents not shown ...]\n"
+                + f"[... {what}, +{added} -{removed}, contents not shown ...]\n"
             )
         else:
             out.append(chunk)
@@ -1963,6 +2141,19 @@ def _system_prompt(*, body_only: bool) -> str:
         + "\nReturn only the commit message text."
     )
 
+def _file_line(path: str, classes: dict, excluded) -> str:
+    """`- path (class, excluded)` -- the class, then whether the body is withheld.
+
+    Two annotations and not one: the class says what kind of file it is, which
+    is what the type prefix is picked from, and exclusion says only what the
+    model may see. An excluded lockfile and excluded source must not read alike.
+    """
+    marks = ([classes[path]] if path in classes else []) + (
+        ["excluded"] if path in excluded else []
+    )
+    return f"- {path} ({', '.join(marks)})" if marks else f"- {path}"
+
+
 def build_user_prompt(
     diff: str,
     files: list[str],
@@ -1976,6 +2167,7 @@ def build_user_prompt(
     scope: str = "",
     context: str = "",
     deep: str = "",
+    excluded=(),
 ) -> str:
     classes = classes or {}
     parts = []
@@ -1988,9 +2180,7 @@ def build_user_prompt(
         # Beside the fingerprint, and well before the diff. Both answer "how should
         # this be written"; everything from the file list down answers "about what".
         parts += [examples, ""]
-    parts += ["Files changed:"] + [
-        f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
-    ]
+    parts += ["Files changed:"] + [_file_line(f, classes, excluded) for f in files]
     if classes:
         parts += [f"Class mix: {class_mix(classes)}"]
     if scope:
@@ -2711,6 +2901,10 @@ def main() -> int:
     root = get_repo_root()
     try:
         project, user, notices = load_config(root)
+        # Parsed on every path, applied only where there is something to
+        # withhold: a malformed .clerkignore is a mistake worth reporting even
+        # on a run that was never going to transmit anything.
+        rules = read_clerkignore(clerkignore_path(root))
     except ConfigError as exc:
         print(f"Error: {exc}.", file=sys.stderr)
         return 2
@@ -2797,6 +2991,14 @@ def main() -> int:
             ticket_refs, ticket_pattern, dry_run=args.dry_run,
         )
 
+    # Before the scan, not after: content that is never transmitted has nothing
+    # to refuse over, which is what makes .clerkignore the escape hatch for a
+    # false positive rather than one more thing --no-scan has to switch off.
+    hidden = excluded_paths(files, rules)
+    if hidden:
+        diff = demote_diff(diff, {}, (), excluded=set(hidden))
+        print(exclusion_notice(hidden), file=sys.stderr)
+
     # Before every request, and on the diff as staged rather than as trimmed: a
     # scan placed after demotion or the budget would clear a payload that
     # `--deep`'s own calls have already carried.
@@ -2830,6 +3032,7 @@ def main() -> int:
         "examples": examples,
         "scope": scope,
         "context": author,
+        "excluded": hidden,
     }
     if args.message:
         context["title"] = args.message

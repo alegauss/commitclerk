@@ -108,7 +108,12 @@ def doc_guard_note(files: list[str], diff: str = "") -> str:
     return _MIXED_DOCS_NOTE.format(files=", ".join(docs), share=share_text)
 
 
-def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLASSES) -> str:
+def demote_diff(
+    diff: str,
+    classes: dict,
+    classes_to_demote: tuple = DEMOTED_CLASSES,
+    excluded=(),
+) -> str:
     """Replace the body of files that can never be the subject with one line.
 
     A `package-lock.json` bump is thousands of lines the model has been told not to
@@ -116,8 +121,12 @@ def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLA
     commit. The header stays — silently dropping a file would repeat the mistake
     head-truncation used to make — and the counts stay, because "regenerated the
     lockfile (+8412 -3110)" is the whole of what a reader needs.
+
+    `excluded` is `.clerkignore`'s answer and obeys neither rule above: no class
+    qualifies it and `DEMOTE_MIN_CHARS` does not apply, because a three-line
+    `.env` is exactly the case that file exists for.
     """
-    if not classes:
+    if not classes and not excluded:
         return diff
     out = []
     for chunk in split_diff(diff):
@@ -125,11 +134,13 @@ def demote_diff(diff: str, classes: dict, classes_to_demote: tuple = DEMOTED_CLA
         klass = classes.get(path) if path else None
         header, body = _split_header(chunk)
         body_text = "".join(body)
-        if klass in classes_to_demote and len(body_text) > DEMOTE_MIN_CHARS:
+        hidden = path in excluded if path else False
+        if hidden or (klass in classes_to_demote and len(body_text) > DEMOTE_MIN_CHARS):
             added, removed = count_changes(body_text)
+            what = "excluded by .clerkignore" if hidden else f"{klass} file"
             out.append(
                 "".join(header)
-                + f"[... {klass} file, +{added} -{removed}, contents not shown ...]\n"
+                + f"[... {what}, +{added} -{removed}, contents not shown ...]\n"
             )
         else:
             out.append(chunk)

@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`.clerkignore`: a repository with three sensitive files can now say yes.**
+  Until now the decision was all-or-nothing per repository — one file you cannot
+  send meant the tool was banned everywhere. A `.clerkignore` at the repository
+  root, in the `.gitignore` syntax you already know, makes it **per file**: a
+  matched path keeps its diff header and its line counts and loses its body, so
+  the model reads `- secrets/prod.env (config, excluded)` and a
+  `[... excluded ...]` placeholder and can still say the file changed. Committed
+  like `.clerk.json`, because exclusion is a property of the repository and a
+  personal copy would mean a teammate's run transmits what yours withheld. It is
+  applied **before** the secret scan, which also makes it the clean way out of a
+  false positive: content that is never transmitted has nothing to refuse over,
+  so you no longer have to reach for `--no-scan`. **Only contents are withheld —
+  the paths are still sent**; a repository whose filenames cannot be disclosed
+  wants `--offline`, and the docs say so rather than letting the feature be read
+  as more than it is. Supported syntax is a documented subset (`#`, `!` with the
+  last match winning, `/` anchoring, trailing `/`, `*` and `**`), and anything
+  outside it is an error naming the line rather than a rule that silently
+  matches nothing — because a rule that quietly does nothing is a file quietly
+  transmitted.
 - **`--offline`: a message with no API call, no key and no network.** An API
   outage, an expired key or a flight without wifi should not be a broken git
   workflow — and once this tool is behind a `prepare-commit-msg` hook, that is

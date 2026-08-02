@@ -44,6 +44,10 @@ taken from the first place that has it:
 from any subdirectory, and is meant to be committed: it is how a team stops
 retyping its own convention. API keys are read from the environment only.
 
+`.clerkignore` at the repository root withholds the *contents* of the paths it
+matches (`.gitignore` syntax): they reach the model as a header and a line count
+only. The paths themselves are still sent - see `excludes.py`.
+
 `.clerk/context.md` under the repository root carries standing facts the diff
 cannot show, read verbatim on every run; `--context "<note>"` says the same
 thing for one commit. Both only add to the prompt - see `context.py`.
@@ -210,6 +214,18 @@ from .secrets import (  # noqa: E402
     scan_line,
     shannon_entropy,
 )
+from .excludes import (  # noqa: E402
+    CLERKIGNORE,
+    MAX_NAMED,
+    Rule,
+    clerkignore_path,
+    compile_pattern,
+    exclusion_notice,
+    excluded,
+    excluded_paths,
+    parse_clerkignore,
+    read_clerkignore,
+)
 from .offline import (  # noqa: E402
     MAX_BULLETS,
     MAX_TITLE,
@@ -326,4 +342,6 @@ __all__ = [
     "refusal_notice",
     "offline_message",
     "known_types",
+    "read_clerkignore",
+    "excluded_paths",
 ]

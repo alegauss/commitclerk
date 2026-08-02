@@ -54,6 +54,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 💬 **You can tell it why** | `--context "this reverts the caching experiment"` for one commit, and a committed `.clerk/context.md` for the standing facts about your repo. The one thing a diff can never show, said once instead of guessed at. |
 | ⚙️ **Config file per project** | A committed `.clerk.json` picks the provider, model, endpoint and budgets for everyone on the team, so a convention stops being flags each person retypes. Flags and environment variables still win over it. |
 | 🎫 **Ticket trailers** | Turn on `ticket_refs` and the issue key in your branch (`feat/PROJ-123-…`) becomes a `Refs: PROJ-123` trailer — Jira, Linear and GitHub out of the box. Off by default, and read off the branch rather than asked of the model, so it cannot be invented. |
+| 🚫 **Per-file veto, not per-repo** | A `.clerkignore` (same syntax as `.gitignore`) withholds a matched file's **contents**: the model gets its name and line counts and a placeholder. That's what lets a security team say yes to a repo with three sensitive files instead of no to the whole repo. Runs before the secret scan, so it's also the clean way out of a false positive. |
 | ✈️ **Works with the network down** | `--offline` writes a deterministic message with no API call, no key and no model — type from the file classes, scope from the workspace manifest, bullets grouped by directory. It never guesses `feat:` or `fix:`, so it is a draft, not a replacement. An outage or an expired key stops being a broken git workflow. |
 | 🛡️ **Refuses to leak a secret** | A staged `.env` is scanned *before* the first request, not after: known key shapes and high-entropy tokens on added lines stop the run with exit `3`, naming the file and line and never the match. This tool sits upstream of every secret-scanning hook you already have, so it was the blind spot. `--redact` masks instead of refusing; `--no-scan` opts out. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
@@ -272,7 +273,8 @@ The same rule set also keeps titles imperative and under 72 characters, keeps bo
 ## How it works
 
 ```
-git diff --staged ──▶ secret scan: refuse (exit 3), or --redact ────┐
+git diff --staged ──▶ .clerkignore: matched bodies withheld ────────┐
+      └──▶ secret scan: refuse (exit 3), or --redact ───────────────┤
       └──▶ per-file budget (--max-chars) ──▶ doc-only? ─────────────┤
       └──▶ oversized files ──▶ one summary each (--deep) ───────────┤
 git diff --stat --summary ──▶ renames, modes, binary sizes ─────────┤
@@ -288,11 +290,11 @@ nearest workspace manifest ──▶ inferred scope ─────────�
 left column alone, so no prompt is built and no provider is ever resolved.
 ```
 
-The source is a thirteen-module package under [`commitclerk/`](commitclerk/) — `config`,
-`context`, `diffing`, `deep`, `files`, `secrets`, `offline`, `history`, `gitio`,
-`trailers`, `prompt`, `providers`, `cli` — and
+The source is a fourteen-module package under [`commitclerk/`](commitclerk/) — `config`,
+`context`, `excludes`, `diffing`, `deep`, `files`, `secrets`, `offline`, `history`,
+`gitio`, `trailers`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (2870 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (3073 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -347,6 +349,44 @@ is an error (exit `2`) rather than a setting silently dropped.
 > A committed `.clerk.json` can set `base_url`, which is **where your diff is
 > sent**. Read it as you would any other file you run code from — see
 > [SECURITY.md](SECURITY.md).
+
+### Keeping a file's contents off the wire
+
+A repository with three sensitive files should not have to refuse the tool
+outright. `.clerkignore` at the repository root makes that call **per file**:
+
+```gitignore
+# .clerkignore — same syntax as .gitignore
+secrets/
+*.env
+!.env.example
+config/production.json
+```
+
+A matched file keeps its diff header and its line counts and loses its body. The
+model sees `- secrets/prod.env (config, excluded)` in the file list and
+`[... excluded by .clerkignore, +12 -3, contents not shown ...]` where the diff
+would be, so the message can say the file changed without its contents leaving
+the machine.
+
+> **The paths are still sent.** Only contents are withheld. If a *filename* cannot
+> be disclosed either, use `--offline`, which makes no request at all, or don't run
+> the tool on that repository.
+
+It runs **before** the secret scan, which makes it the clean way out of a false
+positive: content that is never transmitted has nothing to refuse over, so you
+do not have to turn the whole scan off with `--no-scan`.
+
+Supported: `#` comments, blank lines, `!` negation (the last matching rule wins),
+`/`-anchored patterns, trailing `/` for a directory, `*` (stops at a `/`) and `**`
+(does not). Anything this subset cannot honour — a backslash separator, a rule
+that matches nothing — is an **error** (exit `2`) naming the line, never a pattern
+that silently does nothing. A rule that quietly does nothing is a file quietly
+transmitted.
+
+Like `.clerk.json`, it is found from the repository root and meant to be committed:
+exclusion is a property of the repository, and a personal copy would mean a
+teammate's run transmits what yours withheld.
 
 ### Telling it what the diff cannot show
 
@@ -471,6 +511,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 
 ## Privacy and cost
 
+- **A `.clerkignore` withholds a file's contents entirely.** Same syntax as `.gitignore`, read from the repository root. A matched file reaches the model as its path, its line counts and a `[... excluded ...]` placeholder — never its body. Applied before the secret scan and before any request. **The paths themselves are still sent**; only contents are withheld. See [Keeping a file's contents off the wire](#keeping-a-files-contents-off-the-wire).
 - **Nothing is sent until the staged diff has been scanned for secrets.** Before the first request, every *added* line is checked for known credential shapes (`sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox…`, `AIza`, `-----BEGIN … PRIVATE KEY-----`, JWTs) and for high-entropy tokens. A hit **refuses the run** with exit `3`, naming the file, the line and which detector fired — never the match itself, because a terminal is somewhere a secret gets copied out of. This runs on the diff *as staged*, before trimming and before `--deep`'s extra requests, so there is no path that sends first and checks later. `--redact` masks and continues; `--no-scan` or `"scan": false` turns it off.
 - **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` or a `.clerk.json` in the repository names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.
 - **Some of your recent commit *messages* are sent too.** The house-style block carries counts and shapes measured from the last 200 subjects and bodies — types, scopes, body shape, median subject length, trailer keys, language — not the messages themselves, except scope names and trailer keys, which appear verbatim because counting them would be useless. Separately, the two or three past commits that touched the same files as your staged diff are sent **verbatim** as style examples, subject plus body clipped to 400 characters, with trailer blocks (and the email addresses in them) stripped first. No diff, author, email, date or SHA from history is read. Those are two different data flows and each has its own switch: `--no-examples` drops the verbatim messages and keeps the counts, and `--no-house-style` skips the `git log` and both of them.

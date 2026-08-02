@@ -401,6 +401,11 @@
         <p>Standard library only — <code>urllib</code>, <code>subprocess</code>, <code>argparse</code>. Drop the file in and run it, or install it properly. Your call.</p>
       </div>
       <div class="card reveal">
+        <div class="ico">🚫</div>
+        <h3>Per-file veto, not per-repo</h3>
+        <p>A <code>.clerkignore</code> — same syntax as <code>.gitignore</code> — withholds a file's <b>contents</b>: the model gets its name, its line counts and a placeholder. Three sensitive files no longer mean banning the tool everywhere.</p>
+      </div>
+      <div class="card reveal">
         <div class="ico">✈️</div>
         <h3>Works with the network down</h3>
         <p><code>--offline</code> writes the message locally — no API call, no key, no model. Type from the file classes, bullets grouped by directory. It never guesses <code>feat:</code> or <code>fix:</code>, so it's a draft, not a replacement.</p>
@@ -640,6 +645,12 @@ alias ac='git add -A &amp;&amp; clerk'</div>
     <div class="privacy">
       <div class="lock">🔒</div>
       <h2>Know what leaves your machine</h2>
+      <p>
+        <b>A <code>.clerkignore</code> keeps chosen files' contents off the wire entirely.</b> Same syntax as
+        <code>.gitignore</code>, at the repository root. A matched file reaches the model as its path, its
+        line counts and a placeholder — never its body. The paths themselves are still sent; if a filename
+        cannot be disclosed either, use <code>--offline</code>.
+      </p>
       <p>
         <b>Nothing is sent until the staged diff has been scanned for secrets.</b> Every added line is
         checked against known credential shapes and a high-entropy heuristic before the first request.

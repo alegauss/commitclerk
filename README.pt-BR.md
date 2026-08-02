@@ -52,6 +52,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 💬 **Você pode dizer o porquê** | `--context "this reverts the caching experiment"` para um commit, e um `.clerk/context.md` commitado para os fatos permanentes do repositório. A única coisa que um diff nunca mostra, dita uma vez em vez de adivinhada. |
 | ⚙️ **Configuração por projeto** | Um `.clerk.json` commitado escolhe provedor, modelo, endpoint e orçamentos para o time inteiro, então a convenção deixa de ser flags que cada pessoa redigita. Flags e variáveis de ambiente continuam vencendo. |
 | 🎫 **Trailers de ticket** | Ligue o `ticket_refs` e a chave da issue no seu branch (`feat/PROJ-123-…`) vira um trailer `Refs: PROJ-123` — Jira, Linear e GitHub de fábrica. Desligado por padrão, e lido do branch em vez de pedido ao modelo, então não há como ser inventado. |
+| 🚫 **Veto por arquivo, não por repositório** | Um `.clerkignore` (mesma sintaxe do `.gitignore`) retém o **conteúdo** do arquivo que casar: o modelo recebe o nome, as contagens de linha e um placeholder. É isso que permite a um time de segurança dizer sim a um repo com três arquivos sensíveis, em vez de não ao repo inteiro. Roda antes do scan de segredos, então também é a saída limpa para um falso positivo. |
 | ✈️ **Funciona com a rede fora** | O `--offline` escreve uma mensagem determinística sem chamada de API, sem chave e sem modelo — tipo pelas classes de arquivo, escopo pelo manifest do workspace, bullets agrupados por diretório. Nunca chuta `feat:` nem `fix:`, então é rascunho, não substituto. Uma queda da API ou uma chave vencida deixa de quebrar o fluxo de git. |
 | 🛡️ **Se recusa a vazar um segredo** | Um `.env` no stage é escaneado *antes* da primeira requisição, não depois: formatos conhecidos de chave e tokens de alta entropia em linhas adicionadas param a execução com o código de saída `3`, nomeando arquivo e linha e nunca o próprio trecho. Esta ferramenta fica a montante de todo hook de secret-scanning que você já tem, então era justamente o ponto cego. `--redact` mascara em vez de recusar; `--no-scan` desliga. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
@@ -332,6 +333,45 @@ ajuste descartado em silêncio.
 > é enviado**. Leia-o como leria qualquer outro arquivo de onde você executa
 > código — veja o [SECURITY.md](SECURITY.md).
 
+### Mantendo o conteúdo de um arquivo fora da rede
+
+Um repositório com três arquivos sensíveis não deveria ter que recusar a
+ferramenta inteira. O `.clerkignore` na raiz do repositório move essa decisão
+para **por arquivo**:
+
+```gitignore
+# .clerkignore — mesma sintaxe do .gitignore
+secrets/
+*.env
+!.env.example
+config/production.json
+```
+
+Um arquivo que casa mantém o cabeçalho do diff e as contagens de linha, e perde
+o corpo. O modelo vê `- secrets/prod.env (config, excluded)` na lista de arquivos
+e `[... excluded by .clerkignore, +12 -3, contents not shown ...]` onde estaria o
+diff, então a mensagem pode dizer que o arquivo mudou sem o conteúdo dele sair da
+máquina.
+
+> **Os caminhos continuam sendo enviados.** Só o conteúdo é retido. Se o *nome* do
+> arquivo também não pode ser revelado, use `--offline`, que não faz requisição
+> nenhuma, ou simplesmente não rode a ferramenta naquele repositório.
+
+Ele roda **antes** do scan de segredos, o que faz dele a saída limpa para um falso
+positivo: conteúdo que nunca é transmitido não tem sobre o que ser recusado, então
+você não precisa desligar o scan inteiro com `--no-scan`.
+
+Suportado: comentários com `#`, linhas em branco, negação com `!` (vence a última
+regra que casar), padrões ancorados com `/`, `/` no fim para diretório, `*` (para
+numa `/`) e `**` (não para). O que esse subconjunto não consegue honrar — uma barra
+invertida como separador, uma regra que não casa com nada — é **erro** (saída `2`)
+nomeando a linha, nunca um padrão que silenciosamente não faz nada. Regra que não
+faz nada é arquivo transmitido sem querer.
+
+Como o `.clerk.json`, é procurado a partir da raiz do repositório e feito para ser
+commitado: a exclusão é uma propriedade do repositório, e uma cópia pessoal
+significaria que a execução de um colega transmite o que a sua reteve.
+
 ### Dizendo o que o diff não mostra
 
 Um diff mostra *o que* mudou. Ele nunca mostra o porquê, e nenhuma leitura o
@@ -456,6 +496,7 @@ aponte para algum lugar em que você confia.
 
 ## Privacidade e custo
 
+- **Um `.clerkignore` retém o conteúdo de um arquivo por inteiro.** Mesma sintaxe do `.gitignore`, lido da raiz do repositório. Um arquivo que casa chega ao modelo como caminho, contagens de linha e um placeholder `[... excluded ...]` — nunca o corpo. Aplicado antes do scan de segredos e antes de qualquer requisição. **Os caminhos em si continuam sendo enviados**; só o conteúdo é retido. Veja [Mantendo o conteúdo de um arquivo fora da rede](#mantendo-o-conteúdo-de-um-arquivo-fora-da-rede).
 - **Nada é enviado antes de o diff staged ser escaneado em busca de segredos.** Antes da primeira requisição, toda linha *adicionada* é checada contra formatos conhecidos de credencial (`sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox…`, `AIza`, `-----BEGIN … PRIVATE KEY-----`, JWTs) e contra tokens de alta entropia. Um acerto **recusa a execução** com código de saída `3`, nomeando o arquivo, a linha e qual detector disparou — nunca o trecho em si, porque um terminal é justamente de onde um segredo acaba copiado. Isso roda sobre o diff *como está no stage*, antes do corte e antes das requisições extras do `--deep`, então não existe caminho que envie primeiro e cheque depois. `--redact` mascara e continua; `--no-scan` ou `"scan": false` desliga.
 - **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou a API da Anthropic com `--provider anthropic`, ou o que `--base-url` ou um `.clerk.json` do repositório apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, use `--provider ollama` (modelo local, sem chave, nada pela rede) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
 - **Algumas das suas *mensagens* de commit recentes também são enviadas.** O bloco de house style leva contagens e formatos medidos a partir dos últimos 200 títulos e corpos — tipos, escopos, formato do corpo, tamanho mediano do título, chaves de trailer, idioma —, não as mensagens em si, exceto nomes de escopo e chaves de trailer, que aparecem literalmente porque contá-los não serviria de nada. Além disso, os dois ou três commits passados que mexeram nos mesmos arquivos do seu diff staged são enviados **literalmente** como exemplos de estilo: título mais corpo cortado em 400 caracteres, com os blocos de trailer (e os e-mails dentro deles) removidos antes. Nenhum diff, autor, e-mail, data ou SHA do histórico é lido. São dois fluxos de dados diferentes e cada um tem a sua chave: `--no-examples` corta as mensagens literais e mantém as contagens, e `--no-house-style` pula o `git log` e as duas coisas.

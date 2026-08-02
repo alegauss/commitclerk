@@ -17,6 +17,12 @@ from .deep import (
     summary_user_prompt,
 )
 from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff, over_budget_paths
+from .excludes import (
+    clerkignore_path,
+    exclusion_notice,
+    excluded_paths,
+    read_clerkignore,
+)
 from .files import classify_files, doc_guard_note, scope_note
 from .gitio import (
     get_branch_name,
@@ -321,6 +327,10 @@ def main() -> int:
     root = get_repo_root()
     try:
         project, user, notices = load_config(root)
+        # Parsed on every path, applied only where there is something to
+        # withhold: a malformed .clerkignore is a mistake worth reporting even
+        # on a run that was never going to transmit anything.
+        rules = read_clerkignore(clerkignore_path(root))
     except ConfigError as exc:
         print(f"Error: {exc}.", file=sys.stderr)
         return 2
@@ -407,6 +417,14 @@ def main() -> int:
             ticket_refs, ticket_pattern, dry_run=args.dry_run,
         )
 
+    # Before the scan, not after: content that is never transmitted has nothing
+    # to refuse over, which is what makes .clerkignore the escape hatch for a
+    # false positive rather than one more thing --no-scan has to switch off.
+    hidden = excluded_paths(files, rules)
+    if hidden:
+        diff = demote_diff(diff, {}, (), excluded=set(hidden))
+        print(exclusion_notice(hidden), file=sys.stderr)
+
     # Before every request, and on the diff as staged rather than as trimmed: a
     # scan placed after demotion or the budget would clear a payload that
     # `--deep`'s own calls have already carried.
@@ -440,6 +458,7 @@ def main() -> int:
         "examples": examples,
         "scope": scope,
         "context": author,
+        "excluded": hidden,
     }
     if args.message:
         context["title"] = args.message
