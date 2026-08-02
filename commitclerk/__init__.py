@@ -20,6 +20,7 @@ single-file build with `python commitclerk.py`):
     clerk --no-house-style      # do not copy this repo's own commit conventions
     clerk --no-examples         # keep the fingerprint, send no past message text
     clerk --redact              # mask a staged secret instead of refusing to send
+    clerk --offline             # no API call at all: a local, deterministic draft
     clerk --context "reverts the caching experiment"   # why, in one sentence
     git clerk                   # same tool, as a native git subcommand
 
@@ -77,6 +78,12 @@ refuses (exit 3) when a line carries a known credential shape or a high-entropy
 token, naming the file, the line and the detector but never the match. `--redact`
 masks them in the request instead; the commit still contains them. `--no-scan`
 or `"scan": false` turns it off.
+
+`offline.py` writes the message with no key, no network and no model when
+`--offline` is passed: the type from the file classes, the scope from the
+workspace manifest, bullets grouped by directory. It never emits feat: or fix:,
+which state intent no local signal carries, so it is a draft rather than a
+replacement - and it beats an error at the moment someone is trying to commit.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -175,6 +182,7 @@ from .history import (  # noqa: E402
     dominant_language,
     house_style,
     known_scopes,
+    known_types,
     parse_commit,
     path_tokens,
     similar_commits,
@@ -201,6 +209,18 @@ from .secrets import (  # noqa: E402
     scan_diff,
     scan_line,
     shannon_entropy,
+)
+from .offline import (  # noqa: E402
+    MAX_BULLETS,
+    MAX_TITLE,
+    group_by_directory,
+    offline_bullets,
+    offline_message,
+    offline_scope,
+    offline_subject,
+    offline_title,
+    offline_type,
+    summary_marks,
 )
 from .gitio import (  # noqa: E402
     MAX_SUMMARY_CHARS,
@@ -261,7 +281,9 @@ from .providers import (  # noqa: E402
 from .cli import (  # noqa: E402  (last: it imports the rest)
     _wants_examples,
     _wants_refs,
+    call_target,
     deepen,
+    finish,
     main,
     prog_name,
 )
@@ -302,4 +324,6 @@ __all__ = [
     "scan_diff",
     "redact_diff",
     "refusal_notice",
+    "offline_message",
+    "known_types",
 ]

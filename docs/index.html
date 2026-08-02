@@ -401,6 +401,11 @@
         <p>Standard library only — <code>urllib</code>, <code>subprocess</code>, <code>argparse</code>. Drop the file in and run it, or install it properly. Your call.</p>
       </div>
       <div class="card reveal">
+        <div class="ico">✈️</div>
+        <h3>Works with the network down</h3>
+        <p><code>--offline</code> writes the message locally — no API call, no key, no model. Type from the file classes, bullets grouped by directory. It never guesses <code>feat:</code> or <code>fix:</code>, so it's a draft, not a replacement.</p>
+      </div>
+      <div class="card reveal">
         <div class="ico">🛡️</div>
         <h3>Refuses to leak a secret</h3>
         <p>Stage a <code>.env</code> by accident and the request goes out before the commit exists. Known key shapes and high-entropy tokens stop the run with exit <code>3</code> — nothing sent, the file and line named, the secret never printed.</p>
@@ -511,6 +516,7 @@
           <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Character budget for the diff. A larger diff is trimmed <b>per file</b>, so every changed file still reaches the model; lockfiles and vendored files collapse to one line first.</td></tr>
           <tr><td><code>--redact</code></td><td>off</td><td>When the pre-flight scan finds a suspected secret, mask it in the request and carry on instead of refusing. <b>The commit still contains it</b> — this protects what is sent, not what is committed.</td></tr>
           <tr><td><code>--no-scan</code></td><td>off</td><td>Skip the pre-flight secret scan entirely.</td></tr>
+          <tr><td><code>--offline</code></td><td>off</td><td>Write the message locally — no API call, no key, no network. Never emits <code>feat:</code> or <code>fix:</code>, so treat it as a draft.</td></tr>
           <tr><td><code>--version</code></td><td>—</td><td>Print the version and exit.</td></tr>
         </tbody>
       </table>

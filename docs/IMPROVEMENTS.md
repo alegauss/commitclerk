@@ -92,26 +92,6 @@ shape (T29) rather than trusting it. A corpus case in T50 should be a history
 containing a deliberately adversarial commit message. Nobody in this niche
 documents this. Doing so is a credibility asset, not an admission.
 
-### §T21 Offline mode makes the tool safe to depend on
-
-Once commitclerk is behind a `prepare-commit-msg` hook (T36), an API outage, an expired
-key or a flight without wifi becomes a *broken git workflow*. That is how a tool gets
-uninstalled.
-
-`--offline` composes what every run already computes -- the file classes, the
-workspace-manifest scope, the history's own type and scope vocabulary, `git --stat
---summary` -- and adds no new git call and no second inference to keep in step with the
-first.
-
-**It never guesses `feat:` or `fix:`.** Those two state intent, which is the one thing no local signal carries, and writing history that did not happen is the failure this product exists to prevent. The type comes only from what the classes prove -- `docs:`, `test:`, `build:` -- narrowed to the types this repo's history actually uses, and otherwise falls to `chore:`, which claims nothing about behaviour. The body is bullets grouped by directory (`- Update 3 files under src/api/`), their verbs read off the summary's create, delete and rename markers, capped at the same 2-6 the prompt asks of the model.
-
-It resolves before the provider does, so a missing key is not an error. No `--deep`, and
-no secret scan: that scan exists to stop a transmission and there is none.
-
-The fallback is **not** automatic on the CLI path. Quietly substituting a worse message
-for the one the author asked for is the tool deciding for them; T36's hook is what opts
-in.
-
 ## Block E — Configuration & conventions
 
 ### §T26 Rule packs turn forks into configuration

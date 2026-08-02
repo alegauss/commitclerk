@@ -1078,6 +1078,246 @@ def _diff(path, *added, start=1):
     )
 
 
+class TestSummaryMarks(unittest.TestCase):
+    def test_creations_deletions_and_renames_are_read_off_the_summary(self):
+        summary = (
+            " app.py    | 2 +-\n"
+            " create mode 100644 src/new.py\n"
+            " delete mode 100644 src/old.py\n"
+            " rename src/{a.py => b.py} (100%)\n"
+        )
+        created, deleted, renamed = commitclerk.summary_marks(summary)
+        self.assertEqual(created, {"src/new.py"})
+        self.assertEqual(deleted, {"src/old.py"})
+        self.assertEqual(renamed, 1)
+
+    def test_a_path_with_spaces_survives(self):
+        created, _d, _r = commitclerk.summary_marks(" create mode 100644 a b/c d.py\n")
+        self.assertEqual(created, {"a b/c d.py"})
+
+    def test_an_empty_summary_is_not_an_error(self):
+        self.assertEqual(commitclerk.summary_marks(""), (set(), set(), 0))
+
+
+class TestOfflineType(unittest.TestCase):
+    """The half of the offline path that must never claim intent."""
+
+    def test_it_never_returns_feat_or_fix(self):
+        # No local signal separates an implemented feature from a refactor, and
+        # claiming one is the failure this whole product exists to prevent.
+        mixes = (
+            {"a.py": "code"},
+            {"a.py": "code", "b.md": "docs"},
+            {"a.py": "code", "t.py": "test"},
+            {"a.py": "code", "p.lock": "generated"},
+        )
+        for classes in mixes:
+            with self.subTest(classes=classes):
+                self.assertNotIn(commitclerk.offline_type(classes), ("feat", "fix"))
+
+    def test_documentation_only_is_proved_by_the_classes(self):
+        self.assertEqual(commitclerk.offline_type({"a.md": "docs", "b.md": "docs"}), "docs")
+
+    def test_tests_only_is_too(self):
+        self.assertEqual(commitclerk.offline_type({"t.py": "test"}), "test")
+
+    def test_only_build_shaped_classes_give_build(self):
+        self.assertEqual(
+            commitclerk.offline_type({"p.lock": "generated", "s.cfg": "config"}), "build"
+        )
+
+    def test_anything_with_code_falls_to_chore(self):
+        self.assertEqual(commitclerk.offline_type({"a.py": "code", "b.md": "docs"}), "chore")
+
+    def test_a_history_with_no_prefixes_gets_no_prefix(self):
+        # An empty vocabulary is a finding: this repo does not prefix subjects.
+        self.assertEqual(commitclerk.offline_type({"a.md": "docs"}, []), "")
+
+    def test_a_type_the_history_never_uses_falls_back_to_chore(self):
+        self.assertEqual(
+            commitclerk.offline_type({"a.md": "docs"}, ["feat", "chore"]), "chore"
+        )
+
+    def test_chore_is_used_even_where_the_history_has_not_yet(self):
+        # A repo with any prefix at all uses Conventional Commits; emitting none
+        # would break its convention. The repo that wants none says so with [].
+        self.assertEqual(commitclerk.offline_type({"a.md": "docs"}, ["feat"]), "chore")
+
+    def test_a_type_the_history_uses_is_kept(self):
+        self.assertEqual(commitclerk.offline_type({"a.md": "docs"}, ["docs", "feat"]), "docs")
+
+
+class TestOfflineScope(unittest.TestCase):
+    def setUp(self):
+        self.manifests = {"packages/api/package.json", "packages/web/package.json"}
+        self.isfile = lambda p: p.replace("\\", "/") in self.manifests
+
+    def test_one_shared_package_becomes_the_scope(self):
+        files = ["packages/api/a.js", "packages/api/lib/b.js"]
+        self.assertEqual(commitclerk.offline_scope(files, None, self.isfile), "api")
+
+    def test_files_spanning_packages_abstain(self):
+        files = ["packages/api/a.js", "packages/web/b.js"]
+        self.assertEqual(commitclerk.offline_scope(files, None, self.isfile), "")
+
+    def test_a_history_that_uses_no_scopes_silences_it(self):
+        files = ["packages/api/a.js"]
+        self.assertEqual(commitclerk.offline_scope(files, [], self.isfile), "")
+
+
+class TestGroupByDirectory(unittest.TestCase):
+    def test_files_group_in_the_order_git_reported_them(self):
+        files = ["src/a.py", "docs/x.md", "src/b.py", "top.py"]
+        self.assertEqual(
+            commitclerk.group_by_directory(files),
+            [("src", ["src/a.py", "src/b.py"]), ("docs", ["docs/x.md"]), ("", ["top.py"])],
+        )
+
+    def test_windows_separators_are_normalised(self):
+        self.assertEqual(
+            commitclerk.group_by_directory([r"src\a.py"]), [("src", [r"src\a.py"])]
+        )
+
+
+class TestOfflineSubject(unittest.TestCase):
+    def test_a_single_file_is_named(self):
+        self.assertEqual(commitclerk.offline_subject(["src/a.py"]), "update src/a.py")
+
+    def test_creations_and_deletions_change_the_verb(self):
+        self.assertEqual(
+            commitclerk.offline_subject(["src/a.py"], created={"src/a.py"}),
+            "add src/a.py",
+        )
+        self.assertEqual(
+            commitclerk.offline_subject(["src/a.py"], deleted={"src/a.py"}),
+            "remove src/a.py",
+        )
+
+    def test_a_mixed_group_stays_on_update(self):
+        files = ["a.py", "b.py"]
+        self.assertTrue(
+            commitclerk.offline_subject(files, created={"a.py"}).startswith("update")
+        )
+
+    def test_one_directory_is_counted_and_named(self):
+        files = ["src/api/a.py", "src/api/b.py", "src/api/c.py"]
+        self.assertEqual(commitclerk.offline_subject(files), "update 3 files in src/api")
+
+    def test_several_directories_are_counted(self):
+        files = ["src/a.py", "docs/b.md", "tests/c.py"]
+        self.assertEqual(
+            commitclerk.offline_subject(files), "update 3 files across 3 directories"
+        )
+
+    def test_an_all_rename_commit_is_a_move(self):
+        files = ["b.py", "d.py"]
+        self.assertTrue(commitclerk.offline_subject(files, renamed=2).startswith("move"))
+
+
+class TestOfflineTitle(unittest.TestCase):
+    def test_the_type_and_scope_lead(self):
+        manifests = {"packages/api/package.json"}
+        title = commitclerk.offline_title(
+            ["packages/api/a.md"], {"packages/api/a.md": "docs"},
+            isfile=lambda p: p.replace("\\", "/") in manifests,
+        )
+        self.assertEqual(title, "docs(api): update packages/api/a.md")
+
+    def test_it_never_exceeds_72_characters(self):
+        deep = "src/" + "/".join(f"level{n}" for n in range(12)) + "/module.py"
+        title = commitclerk.offline_title([deep], {deep: "code"})
+        self.assertLessEqual(len(title), commitclerk.MAX_TITLE)
+
+    def test_one_long_path_keeps_its_basename_rather_than_a_clipped_path(self):
+        deep = "src/" + "/".join(f"level{n}" for n in range(12)) + "/module.py"
+        self.assertIn("module.py", commitclerk.offline_title([deep], {deep: "code"}))
+
+    def test_it_has_no_trailing_period(self):
+        title = commitclerk.offline_title(["a.py"], {"a.py": "code"})
+        self.assertFalse(title.endswith("."))
+
+
+class TestOfflineBullets(unittest.TestCase):
+    def test_one_bullet_per_directory_with_a_count(self):
+        files = ["src/a.py", "src/b.py", "docs/c.md"]
+        self.assertEqual(
+            commitclerk.offline_bullets(files),
+            ["- Update 2 files under src/", "- Update docs/c.md"],
+        )
+
+    def test_a_lone_file_at_the_root_is_named(self):
+        self.assertEqual(commitclerk.offline_bullets(["x.py"]), ["- Update x.py"])
+
+    def test_several_root_files_say_so(self):
+        self.assertEqual(
+            commitclerk.offline_bullets(["x.py", "y.py"]),
+            ["- Update 2 files at the repository root"],
+        )
+
+    def test_verbs_are_per_group(self):
+        files = ["new/a.py", "old/b.py"]
+        self.assertEqual(
+            commitclerk.offline_bullets(files, created={"new/a.py"}, deleted={"old/b.py"}),
+            ["- Add new/a.py", "- Remove old/b.py"],
+        )
+
+    def test_it_never_exceeds_the_cap_the_prompt_asks_of_the_model(self):
+        files = [f"dir{n}/file.py" for n in range(20)]
+        bullets = commitclerk.offline_bullets(files)
+        self.assertEqual(len(bullets), commitclerk.MAX_BULLETS)
+        self.assertEqual(bullets[-1], "- Update 15 files under 15 more directories")
+
+    def test_it_does_not_pad_a_single_directory_to_two_bullets(self):
+        # Inventing a second bullet would be inventing content.
+        self.assertEqual(len(commitclerk.offline_bullets(["src/a.py", "src/b.py"])), 1)
+
+
+class TestOfflineMessage(unittest.TestCase):
+    def test_title_blank_line_then_bullets(self):
+        message = commitclerk.offline_message(
+            ["src/a.py", "src/b.py"], {"src/a.py": "code", "src/b.py": "code"}
+        )
+        lines = message.splitlines()
+        self.assertEqual(lines[0], "chore: update 2 files in src")
+        self.assertEqual(lines[1], "")
+        self.assertEqual(lines[2], "- Update 2 files under src/")
+        self.assertTrue(message.endswith("\n"))
+
+    def test_the_summary_supplies_the_verbs(self):
+        message = commitclerk.offline_message(
+            ["src/a.py"], {"src/a.py": "code"}, " create mode 100644 src/a.py\n"
+        )
+        self.assertIn("add src/a.py", message)
+        self.assertIn("- Add src/a.py", message)
+
+    def test_an_authors_title_wins_exactly_as_it_does_online(self):
+        message = commitclerk.offline_message(
+            ["src/a.py"], {"src/a.py": "code"}, title="fix: stop the retry storm"
+        )
+        self.assertTrue(message.startswith("fix: stop the retry storm\n\n"))
+        self.assertIn("- Update src/a.py", message)
+
+    def test_a_documentation_only_commit_is_docs(self):
+        message = commitclerk.offline_message(
+            ["README.md"], {"README.md": "docs"}
+        )
+        self.assertTrue(message.startswith("docs: update README.md"))
+
+    def test_the_whole_message_is_ascii(self):
+        commitclerk.offline_message(
+            ["src/a.py", "docs/b.md"], {"src/a.py": "code", "docs/b.md": "docs"}
+        ).encode("ascii")
+
+
+class TestKnownTypes(unittest.TestCase):
+    def test_the_types_come_back_most_frequent_first(self):
+        records = ["feat: a", "fix: b", "fix: c", "fix: d", "feat: e"]
+        self.assertEqual(commitclerk.known_types(records), ["fix", "feat"])
+
+    def test_a_history_without_prefixes_is_an_empty_list_not_an_error(self):
+        self.assertEqual(commitclerk.known_types(["just a subject", "another one"]), [])
+
+
 class TestShannonEntropy(unittest.TestCase):
     def test_a_single_repeated_character_carries_no_information(self):
         self.assertEqual(commitclerk.shannon_entropy("aaaaaaaa"), 0.0)

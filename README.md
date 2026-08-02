@@ -54,6 +54,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 💬 **You can tell it why** | `--context "this reverts the caching experiment"` for one commit, and a committed `.clerk/context.md` for the standing facts about your repo. The one thing a diff can never show, said once instead of guessed at. |
 | ⚙️ **Config file per project** | A committed `.clerk.json` picks the provider, model, endpoint and budgets for everyone on the team, so a convention stops being flags each person retypes. Flags and environment variables still win over it. |
 | 🎫 **Ticket trailers** | Turn on `ticket_refs` and the issue key in your branch (`feat/PROJ-123-…`) becomes a `Refs: PROJ-123` trailer — Jira, Linear and GitHub out of the box. Off by default, and read off the branch rather than asked of the model, so it cannot be invented. |
+| ✈️ **Works with the network down** | `--offline` writes a deterministic message with no API call, no key and no model — type from the file classes, scope from the workspace manifest, bullets grouped by directory. It never guesses `feat:` or `fix:`, so it is a draft, not a replacement. An outage or an expired key stops being a broken git workflow. |
 | 🛡️ **Refuses to leak a secret** | A staged `.env` is scanned *before* the first request, not after: known key shapes and high-entropy tokens on added lines stop the run with exit `3`, naming the file and line and never the match. This tool sits upstream of every secret-scanning hook you already have, so it was the blind spot. `--redact` masks instead of refusing; `--no-scan` opts out. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
 | 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
@@ -111,7 +112,7 @@ clerk             # or: git clerk
 ```
 clerk [-m TITLE] [--context NOTE] [--dry-run] [--provider NAME] [--base-url URL]
       [--model MODEL] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
-      [--no-examples] [--redact] [--no-scan] [--version]
+      [--no-examples] [--redact] [--no-scan] [--offline] [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -134,6 +135,7 @@ the tool from a repository checkout instead, replace `clerk` with
 | `--deep` | off | For a commit no budget can fit: summarise each **oversized** file in its own cheap request, then write the message from those summaries plus the smaller files' real diffs. Costs one extra request per oversized file — and nothing at all when the diff already fits. |
 | `--no-house-style` | off | Skip the `git log` behind both the house-style fingerprint and the worked examples. Use it when the history is imported or machine-generated, or to keep past commit message text off the wire. |
 | `--no-examples` | off | Send no past commit message **text**, but keep the fingerprint, which reports only counts and shapes. The narrow half of `--no-house-style`, for a team that will share a statistic about its history but not the history itself. Implied by `--no-house-style`. |
+| `--offline` | off | Write the message locally: no API call, no key, no network. Type from the file classes, scope from the workspace manifest, bullets grouped by directory. It **never** emits `feat:` or `fix:` — those state intent, which nothing local can see — so treat it as a draft. Use it on a plane, during an outage, or with an expired key. |
 | `--redact` | off | When the pre-flight scan finds a suspected secret, mask it in the request and carry on instead of refusing. **The commit is unchanged and still contains it** — this protects what is sent, not what is committed. |
 | `--no-scan` | off | Do not scan the staged diff for secrets before sending it. Turns off `--redact` along with it, there being nothing left to mask. |
 | `--version` | — | Print the version and exit. |
@@ -179,6 +181,12 @@ clerk --no-examples
 # The scan flagged something you know is a fixture: mask it and carry on
 # (the commit still contains it — this only protects the request)
 clerk --redact
+
+# On a plane, mid-outage, or with an expired key: a local deterministic draft
+clerk --offline
+
+# Offline, but you know the intent — the best of both, and still no API call
+clerk --offline -m "fix: stop the retry storm"
 
 # Tell it the one thing the diff cannot show
 clerk --context "this reverts the caching experiment we ran last sprint"
@@ -275,13 +283,16 @@ nearest workspace manifest ──▶ inferred scope ─────────�
                                         provider API (--provider) ◀────────┘
                                                 │
                               message ──▶ print ──▶ git commit -F -
+
+--offline skips the two boxes on the right: the message is written from the
+left column alone, so no prompt is built and no provider is ever resolved.
 ```
 
-The source is a twelve-module package under [`commitclerk/`](commitclerk/) — `config`,
-`context`, `diffing`, `deep`, `files`, `secrets`, `history`, `gitio`, `trailers`,
-`prompt`, `providers`, `cli` — and
+The source is a thirteen-module package under [`commitclerk/`](commitclerk/) — `config`,
+`context`, `diffing`, `deep`, `files`, `secrets`, `offline`, `history`, `gitio`,
+`trailers`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (2608 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (2870 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start

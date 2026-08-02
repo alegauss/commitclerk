@@ -52,6 +52,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 💬 **Você pode dizer o porquê** | `--context "this reverts the caching experiment"` para um commit, e um `.clerk/context.md` commitado para os fatos permanentes do repositório. A única coisa que um diff nunca mostra, dita uma vez em vez de adivinhada. |
 | ⚙️ **Configuração por projeto** | Um `.clerk.json` commitado escolhe provedor, modelo, endpoint e orçamentos para o time inteiro, então a convenção deixa de ser flags que cada pessoa redigita. Flags e variáveis de ambiente continuam vencendo. |
 | 🎫 **Trailers de ticket** | Ligue o `ticket_refs` e a chave da issue no seu branch (`feat/PROJ-123-…`) vira um trailer `Refs: PROJ-123` — Jira, Linear e GitHub de fábrica. Desligado por padrão, e lido do branch em vez de pedido ao modelo, então não há como ser inventado. |
+| ✈️ **Funciona com a rede fora** | O `--offline` escreve uma mensagem determinística sem chamada de API, sem chave e sem modelo — tipo pelas classes de arquivo, escopo pelo manifest do workspace, bullets agrupados por diretório. Nunca chuta `feat:` nem `fix:`, então é rascunho, não substituto. Uma queda da API ou uma chave vencida deixa de quebrar o fluxo de git. |
 | 🛡️ **Se recusa a vazar um segredo** | Um `.env` no stage é escaneado *antes* da primeira requisição, não depois: formatos conhecidos de chave e tokens de alta entropia em linhas adicionadas param a execução com o código de saída `3`, nomeando arquivo e linha e nunca o próprio trecho. Esta ferramenta fica a montante de todo hook de secret-scanning que você já tem, então era justamente o ponto cego. `--redact` mascara em vez de recusar; `--no-scan` desliga. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
 | 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit — e, se o modelo rejeitar um parâmetro, a requisição é corrigida e reenviada. |
@@ -109,7 +110,7 @@ clerk             # ou: git clerk
 ```
 clerk [-m TÍTULO] [--context NOTA] [--dry-run] [--provider NOME] [--base-url URL]
       [--model MODELO] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
-      [--no-examples] [--redact] [--no-scan] [--version]
+      [--no-examples] [--redact] [--no-scan] [--offline] [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -131,6 +132,7 @@ preferir rodar a partir de um clone do repositório, troque `clerk` por
 | `--deep` | desligado | Para o commit que não cabe em orçamento nenhum: resume cada arquivo **grande demais** em uma requisição barata só dele e depois escreve a mensagem a partir desses resumos mais os diffs reais dos arquivos menores. Custa uma requisição extra por arquivo grande — e nada quando o diff já cabe. |
 | `--no-house-style` | desligado | Pula o `git log` por trás tanto do fingerprint de house style quanto dos exemplos extraídos do histórico. Útil quando o histórico é importado ou gerado por máquina, ou para manter o texto de mensagens antigas fora da rede. |
 | `--no-examples` | desligado | Não envia **texto** de mensagens de commit antigas, mas mantém o fingerprint, que leva apenas contagens e formatos. É a metade estreita do `--no-house-style`, para um time que aceita compartilhar uma estatística sobre o próprio histórico, mas não o histórico. Implícito no `--no-house-style`. |
+| `--offline` | desligado | Escreve a mensagem localmente: sem chamada de API, sem chave, sem rede. Tipo pelas classes de arquivo, escopo pelo manifest do workspace, bullets agrupados por diretório. **Nunca** emite `feat:` nem `fix:` — esses afirmam intenção, que nada local enxerga —, então trate como rascunho. Útil no avião, durante uma queda da API ou com a chave vencida. |
 | `--redact` | desligado | Quando o scan pré-envio encontra um suspeito de segredo, mascara na requisição e segue em frente em vez de recusar. **O commit não muda e continua contendo o segredo** — isto protege o que é enviado, não o que é commitado. |
 | `--no-scan` | desligado | Não escaneia o diff staged em busca de segredos antes de enviá-lo. Desliga o `--redact` junto, já que não sobra nada para mascarar. |
 | `--version` | — | Mostra a versão e sai. |
@@ -176,6 +178,12 @@ clerk --no-examples
 # O scan apontou algo que você sabe ser um fixture: mascare e siga em frente
 # (o commit continua contendo — isto só protege a requisição)
 clerk --redact
+
+# No avião, durante uma queda ou com a chave vencida: rascunho local determinístico
+clerk --offline
+
+# Offline, mas você sabe a intenção — o melhor dos dois, e ainda sem chamada de API
+clerk --offline -m "fix: stop the retry storm"
 
 # Diga a única coisa que o diff não mostra
 clerk --context "this reverts the caching experiment we ran last sprint"

@@ -319,6 +319,22 @@ def known_scopes(records: list[str]) -> list[str]:
     return [name for name, _ in _ranked(scopes)]
 
 
+def known_types(records: list[str]) -> list[str]:
+    """The Conventional Commits types this repo's commits use, most frequent first.
+
+    The companion of `known_scopes`, off the same measurement the house-style
+    block reports. An empty list is a finding, not a failure: the history was
+    read and this repo does not prefix its subjects, which is an instruction not
+    to start -- see `offline.offline_type`, the only caller that can act on it.
+    """
+    types = [
+        kind
+        for kind in (subject_type_scope(parse_commit(r)[0])[0] for r in records)
+        if kind
+    ]
+    return [name for name, _ in _ranked(types)]
+
+
 def _facts(commits: list) -> list[str]:
     """The house-style observations, most useful first."""
     subjects = [subject for subject, _ in commits]

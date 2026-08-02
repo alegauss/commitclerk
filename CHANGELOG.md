@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--offline`: a message with no API call, no key and no network.** An API
+  outage, an expired key or a flight without wifi should not be a broken git
+  workflow — and once this tool is behind a `prepare-commit-msg` hook, that is
+  exactly what it becomes. `--offline` writes the message from what every run
+  already computes locally: the type from the staged files' classes, the scope
+  from the same workspace-manifest inference the online path uses, and bullets
+  grouped by directory (`- Update 3 files under src/api/`) whose verbs come from
+  `git --stat --summary`. **It never writes `feat:` or `fix:`.** Those two state
+  intent, which no local signal carries, and a message claiming work that did
+  not happen is the one thing this tool exists to prevent; only `docs:`, `test:`
+  and `build:` can be proved by the file classes, and everything else falls to
+  `chore:`, which asserts nothing about behaviour. The type is narrowed to what
+  your history actually uses, and a repository that does not prefix its subjects
+  gets no prefix. It is a draft, not a replacement for the model — `-m` still
+  sets the title and the `Refs:` trailer still applies — and it is not automatic:
+  quietly substituting a worse message for the one you asked for is the tool
+  deciding for you.
 - **A staged secret no longer leaves the machine before anything has looked at
   it.** Stage a `.env` by accident and every other generator sends it: the
   request goes out before the commit exists, and unlike the commit that cannot

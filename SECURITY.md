@@ -35,6 +35,13 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 
 ## Where your data goes
 
+**`--offline` makes no request at all.** Not a smaller one, not one to a local
+server: the message is composed from the staged file list, the file classes, the
+workspace manifest and `git --stat --summary`, and no socket is opened. No API
+key is read or required, and the provider is never resolved. It is the only mode
+in which nothing whatsoever leaves the machine, `--provider ollama` included —
+that one still sends your diff, only to `localhost`.
+
 **Before any of it, the staged diff is scanned.** Every *added* line is checked
 against known credential shapes (`sk-`, `gh[pousr]_`, `github_pat_`,
 `AKIA`/`ASIA`, `xox[baprs]-`, `AIza`, `-----BEGIN ... PRIVATE KEY-----`, JWTs)

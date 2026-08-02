@@ -34,8 +34,10 @@ from .history import (
     MIN_COMMITS,
     house_style,
     known_scopes,
+    known_types,
     worked_examples,
 )
+from .offline import offline_message
 from .secrets import redact_diff, redaction_notice, refusal_notice, scan_diff
 from .trailers import (
     DEFAULT_TICKET_PATTERN,
@@ -96,6 +98,61 @@ def _wants_examples(house_style_on, cli, project, user) -> bool:
     ask for text out of a history nothing read.
     """
     return bool(house_style_on and layered(cli, None, project, user, True))
+
+
+def finish(message: str, ticket_refs, ticket_pattern: str, *, dry_run: bool) -> int:
+    """Trailer, print, commit -- the tail the online and offline paths share.
+
+    The trailer is applied here, after the message exists and never through the
+    model: the key is read off the branch, so the one thing that could go wrong
+    is a paraphrase, and this way there is none. `--offline` gets it too, the
+    branch name being as local as everything else on that path.
+    """
+    if ticket_refs:
+        key = ticket_key(get_branch_name(), ticket_pattern)
+        if key:
+            message = add_trailer(message, TICKET_TRAILER, key)
+
+    if dry_run:
+        print(message)
+        return 0
+
+    print("--- commit message ---")
+    print(message)
+    print("----------------------")
+
+    proc = subprocess.run(
+        ["git", "commit", "-F", "-"],
+        input=message,
+        text=True,
+        encoding="utf-8",
+    )
+    return proc.returncode
+
+
+def call_target(args, project: dict, user: dict, provider: str) -> tuple:
+    """(spec, api_key, model, base, "") for the endpoint to call, or (…, problem).
+
+    Separated from `main` because `--offline` must not run any of it: resolving
+    a provider that will never be called turns an unset key into an error on the
+    one path that has no use for one.
+    """
+    spec = resolve_provider(provider)
+    if spec is None:
+        known = ", ".join(sorted(PROVIDERS))
+        return None, None, None, None, (
+            f"unknown provider '{provider}'. Known providers: {known}"
+        )
+    missing = missing_key_env(spec)
+    if missing:
+        return None, None, None, None, f"{missing} is not set"
+
+    model = resolve_model(spec, args.model, project.get("model"), user.get("model"))
+    base = resolve_base(spec, args.base_url, project.get("base_url"), user.get("base_url"))
+    problem = base_url_error(base)
+    if problem:
+        return None, None, None, None, problem
+    return spec, api_key_for(spec), model, base, ""
 
 
 def deepen(
@@ -235,6 +292,16 @@ def main() -> int:
              "by --no-house-style.",
     )
     parser.add_argument(
+        "--offline",
+        action="store_true",
+        default=None,
+        help="Write the message locally with no API call, no key and no network. The "
+             "type comes from the file classes, the scope from the workspace manifest "
+             "and the bullets are grouped by directory. It never guesses feat: or "
+             "fix:, which state intent nothing local can see, so it is a draft rather "
+             "than a replacement - and it always beats an error when you are offline.",
+    )
+    parser.add_argument(
         "--redact",
         action="store_true",
         default=None,
@@ -303,27 +370,15 @@ def main() -> int:
         )
         return 2
 
-    spec = resolve_provider(provider)
-    if spec is None:
-        known = ", ".join(sorted(PROVIDERS))
-        print(
-            f"Error: unknown provider '{provider}'. Known providers: {known}.",
-            file=sys.stderr,
-        )
-        return 2
-
-    missing = missing_key_env(spec)
-    if missing:
-        print(f"Error: {missing} is not set.", file=sys.stderr)
-        return 2
-    api_key = api_key_for(spec)
-    model = resolve_model(spec, args.model, project.get("model"), user.get("model"))
-
-    base = resolve_base(spec, args.base_url, project.get("base_url"), user.get("base_url"))
-    problem = base_url_error(base)
-    if problem:
-        print(f"Error: {problem}.", file=sys.stderr)
-        return 2
+    # Not resolved at all under --offline: that path makes no request, so a
+    # missing key is not a problem it has, and refusing to write a message over
+    # one would reintroduce the outage this flag exists to survive.
+    spec = api_key = model = base = None
+    if not args.offline:
+        spec, api_key, model, base, problem = call_target(args, project, user, provider)
+        if problem:
+            print(f"Error: {problem}.", file=sys.stderr)
+            return 2
 
     diff = get_staged_diff()
     if not diff.strip():
@@ -336,6 +391,21 @@ def main() -> int:
         print(warning, file=sys.stderr)
 
     classes = classify_files(files, diff)
+
+    if args.offline:
+        # No secret scan on this path: that scan exists to stop a transmission,
+        # and there is none. Refusing a commit that sends nothing would make
+        # this a pre-commit hook, which is a different tool.
+        records = get_recent_commits() if house_style_on else []
+        return finish(
+            offline_message(
+                files, classes, get_staged_summary(),
+                title=args.message,
+                types=known_types(records) if records else None,
+                scopes=known_scopes(records) if len(records) >= MIN_COMMITS else None,
+            ),
+            ticket_refs, ticket_pattern, dry_run=args.dry_run,
+        )
 
     # Before every request, and on the diff as staged rather than as trimmed: a
     # scan placed after demotion or the budget would clear a payload that
@@ -399,28 +469,7 @@ def main() -> int:
         # The model was asked for the body only, so the author's title leads.
         message = f"{args.message}\n\n{message}".rstrip() + "\n"
 
-    # After the model, never through it: the key is read off the branch, so the
-    # one thing that could go wrong is a paraphrase, and this way there is none.
-    if ticket_refs:
-        key = ticket_key(get_branch_name(), ticket_pattern)
-        if key:
-            message = add_trailer(message, TICKET_TRAILER, key)
-
-    if args.dry_run:
-        print(message)
-        return 0
-
-    print("--- commit message ---")
-    print(message)
-    print("----------------------")
-
-    proc = subprocess.run(
-        ["git", "commit", "-F", "-"],
-        input=message,
-        text=True,
-        encoding="utf-8",
-    )
-    return proc.returncode
+    return finish(message, ticket_refs, ticket_pattern, dry_run=args.dry_run)
 
 
 

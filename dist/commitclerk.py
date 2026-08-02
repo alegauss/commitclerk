@@ -35,6 +35,7 @@ single-file build with `python commitclerk.py`):
     clerk --no-house-style      # do not copy this repo's own commit conventions
     clerk --no-examples         # keep the fingerprint, send no past message text
     clerk --redact              # mask a staged secret instead of refusing to send
+    clerk --offline             # no API call at all: a local, deterministic draft
     clerk --context "reverts the caching experiment"   # why, in one sentence
     git clerk                   # same tool, as a native git subcommand
 
@@ -92,6 +93,12 @@ refuses (exit 3) when a line carries a known credential shape or a high-entropy
 token, naming the file, the line and the detector but never the match. `--redact`
 masks them in the request instead; the commit still contains them. `--no-scan`
 or `"scan": false` turns it off.
+
+`offline.py` writes the message with no key, no network and no model when
+`--offline` is passed: the type from the file classes, the scope from the
+workspace manifest, bullets grouped by directory. It never emits feat: or fix:,
+which state intent no local signal carries, so it is a draft rather than a
+replacement - and it beats an error at the moment someone is trying to commit.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -1139,6 +1146,198 @@ def redaction_notice(masked: int) -> str:
     )
 
 
+# --- from commitclerk/offline.py --------------------------------------
+
+# The same ceiling the prompt asks of the model. There is no floor: a commit
+# touching one directory gets one bullet, because padding it to two would mean
+# inventing the second.
+MAX_BULLETS = 6
+MAX_TITLE = 72
+
+# Classes that prove the commit is about the build rather than the product. Code
+# or a mix is deliberately absent: neither proves anything a type may claim.
+_BUILDISH = frozenset(("config", "generated", "vendor", "binary"))
+
+
+def summary_marks(summary: str) -> tuple:
+    """(created paths, deleted paths, how many renames) from `git --summary`.
+
+    Only the three facts a verb can be read off. Renames are counted rather than
+    resolved: git writes them as `src/{a.py => b.py}`, and a half-parsed path is
+    worse than a count, which is all the verb needs.
+    """
+    created, deleted, renamed = set(), set(), 0
+    for raw in summary.splitlines():
+        line = raw.strip()
+        if line.startswith("create mode "):
+            created.add(_path_after_mode(line))
+        elif line.startswith("delete mode "):
+            deleted.add(_path_after_mode(line))
+        elif line.startswith("rename "):
+            renamed += 1
+    return created, deleted, renamed
+
+
+def _path_after_mode(line: str) -> str:
+    """The path in `create mode 100644 some/file with spaces.py`."""
+    parts = line.split(" ", 3)
+    return parts[3] if len(parts) == 4 else ""
+
+
+def _verb(paths: set, created: set, deleted: set) -> str:
+    """What happened to every path in the group, or "Update" when they disagree."""
+    if paths and paths <= created:
+        return "Add"
+    if paths and paths <= deleted:
+        return "Remove"
+    return "Update"
+
+
+def offline_type(classes: dict, known=None) -> str:
+    """The Conventional Commits type the file classes *prove*, or "" for none.
+
+    Never `feat` and never `fix`: both state intent, and nothing available
+    offline can tell an implemented feature from a refactor. `known` is the
+    history's own vocabulary -- an empty list means this repo does not prefix
+    its subjects at all, and the honest answer there is no prefix.
+    """
+    if known is not None and not known:
+        return ""
+    present = set(classes.values())
+    chosen = "chore"
+    if present == {"docs"}:
+        chosen = "docs"
+    elif present == {"test"}:
+        chosen = "test"
+    elif present and present <= _BUILDISH:
+        chosen = "build"
+    # `chore` even when the history has not used it yet. A repo with any prefix
+    # at all uses Conventional Commits, and emitting none there breaks its own
+    # convention -- the repo that wants no prefix said so with an empty `known`,
+    # which returned above.
+    return chosen if not known or chosen in known else "chore"
+
+
+def offline_scope(files: list, known=None, isfile=os.path.isfile) -> str:
+    """The workspace package every staged file shares, or "" when they do not.
+
+    The same `package_span` the online path infers from, so the two can never
+    disagree, and the same abstention: files spread across sibling packages get
+    no scope rather than one that hides the rest.
+    """
+    if known is not None and not known:
+        return ""
+    shared, _roots = package_span(files, isfile)
+    return shared.rsplit("/", 1)[-1] if shared else ""
+
+
+def group_by_directory(files: list) -> list:
+    """(directory, its files) in the order git reported them, root as ""."""
+    groups: dict = {}
+    for path in files:
+        directory = os.path.dirname(path.replace("\\", "/"))
+        groups.setdefault(directory, []).append(path)
+    return list(groups.items())
+
+
+def offline_subject(files: list, created=(), deleted=(), renamed: int = 0) -> str:
+    """The imperative half of the title: what happened, and to how much."""
+    if not files:
+        return "update the working tree"
+    paths = set(files)
+    if renamed and renamed == len(files):
+        verb = "move"
+    else:
+        verb = _verb(paths, set(created), set(deleted)).lower()
+    if len(files) == 1:
+        return f"{verb} {files[0]}"
+    groups = group_by_directory(files)
+    if len(groups) == 1 and groups[0][0]:
+        return f"{verb} {len(files)} files in {groups[0][0]}"
+    if len(groups) == 1:
+        return f"{verb} {len(files)} files"
+    return f"{verb} {len(files)} files across {len(groups)} directories"
+
+
+def offline_title(
+    files: list,
+    classes: dict,
+    created=(),
+    deleted=(),
+    renamed: int = 0,
+    *,
+    types=None,
+    scopes=None,
+    isfile=os.path.isfile,
+) -> str:
+    """`type(scope): subject`, within 72 characters."""
+    kind = offline_type(classes, types)
+    scope = offline_scope(files, scopes, isfile)
+    prefix = ""
+    if kind:
+        prefix = f"{kind}({scope}): " if scope else f"{kind}: "
+
+    subject = offline_subject(files, created, deleted, renamed)
+    # A single deeply nested path is the one case that reliably overruns. Its
+    # basename still identifies the file, and a clipped path may not.
+    if len(prefix) + len(subject) > MAX_TITLE and len(files) == 1:
+        subject = f"{subject.split(' ', 1)[0]} {os.path.basename(files[0])}"
+    title = prefix + subject
+    return title if len(title) <= MAX_TITLE else title[:MAX_TITLE - 3].rstrip() + "..."
+
+
+def offline_bullets(files: list, created=(), deleted=(), limit: int = MAX_BULLETS) -> list:
+    """One bullet per directory, most of them collapsed to a count.
+
+    Grouped rather than listed per file: "3 files under src/api/" is what a
+    reader of the log wants, and forty filenames is what they scroll past.
+    """
+    created, deleted = set(created), set(deleted)
+    groups = group_by_directory(files)
+    shown = groups if len(groups) <= limit else groups[:limit - 1]
+
+    bullets = []
+    for directory, members in shown:
+        verb = _verb(set(members), created, deleted)
+        if len(members) == 1:
+            bullets.append(f"- {verb} {members[0]}")
+        else:
+            where = f"under {directory}/" if directory else "at the repository root"
+            bullets.append(f"- {verb} {len(members)} files {where}")
+
+    rest = groups[len(shown):]
+    if rest:
+        spare = sum(len(members) for _d, members in rest)
+        bullets.append(f"- Update {spare} files under {len(rest)} more directories")
+    return bullets
+
+
+def offline_message(
+    files: list,
+    classes: dict,
+    summary: str = "",
+    *,
+    title: str | None = None,
+    types=None,
+    scopes=None,
+    isfile=os.path.isfile,
+) -> str:
+    """The whole message, deterministically, from facts already in hand.
+
+    `title` is the author's own `-m`, which wins here exactly as it does online:
+    they know the intent this path is careful never to guess at.
+    """
+    created, deleted, renamed = summary_marks(summary)
+    head = title if title else offline_title(
+        files, classes, created, deleted, renamed,
+        types=types, scopes=scopes, isfile=isfile,
+    )
+    bullets = offline_bullets(files, created, deleted)
+    if not bullets:
+        return head + "\n"
+    return head + "\n\n" + "\n".join(bullets) + "\n"
+
+
 # --- from commitclerk/history.py --------------------------------------
 
 # 200 is enough to see a convention and short enough that `git log` stays instant.
@@ -1443,6 +1642,22 @@ def known_scopes(records: list[str]) -> list[str]:
         if scope
     ]
     return [name for name, _ in _ranked(scopes)]
+
+
+def known_types(records: list[str]) -> list[str]:
+    """The Conventional Commits types this repo's commits use, most frequent first.
+
+    The companion of `known_scopes`, off the same measurement the house-style
+    block reports. An empty list is a finding, not a failure: the history was
+    read and this repo does not prefix its subjects, which is an instruction not
+    to start -- see `offline.offline_type`, the only caller that can act on it.
+    """
+    types = [
+        kind
+        for kind in (subject_type_scope(parse_commit(r)[0])[0] for r in records)
+        if kind
+    ]
+    return [name for name, _ in _ranked(types)]
 
 
 def _facts(commits: list) -> list[str]:
@@ -2275,6 +2490,61 @@ def _wants_examples(house_style_on, cli, project, user) -> bool:
     return bool(house_style_on and layered(cli, None, project, user, True))
 
 
+def finish(message: str, ticket_refs, ticket_pattern: str, *, dry_run: bool) -> int:
+    """Trailer, print, commit -- the tail the online and offline paths share.
+
+    The trailer is applied here, after the message exists and never through the
+    model: the key is read off the branch, so the one thing that could go wrong
+    is a paraphrase, and this way there is none. `--offline` gets it too, the
+    branch name being as local as everything else on that path.
+    """
+    if ticket_refs:
+        key = ticket_key(get_branch_name(), ticket_pattern)
+        if key:
+            message = add_trailer(message, TICKET_TRAILER, key)
+
+    if dry_run:
+        print(message)
+        return 0
+
+    print("--- commit message ---")
+    print(message)
+    print("----------------------")
+
+    proc = subprocess.run(
+        ["git", "commit", "-F", "-"],
+        input=message,
+        text=True,
+        encoding="utf-8",
+    )
+    return proc.returncode
+
+
+def call_target(args, project: dict, user: dict, provider: str) -> tuple:
+    """(spec, api_key, model, base, "") for the endpoint to call, or (…, problem).
+
+    Separated from `main` because `--offline` must not run any of it: resolving
+    a provider that will never be called turns an unset key into an error on the
+    one path that has no use for one.
+    """
+    spec = resolve_provider(provider)
+    if spec is None:
+        known = ", ".join(sorted(PROVIDERS))
+        return None, None, None, None, (
+            f"unknown provider '{provider}'. Known providers: {known}"
+        )
+    missing = missing_key_env(spec)
+    if missing:
+        return None, None, None, None, f"{missing} is not set"
+
+    model = resolve_model(spec, args.model, project.get("model"), user.get("model"))
+    base = resolve_base(spec, args.base_url, project.get("base_url"), user.get("base_url"))
+    problem = base_url_error(base)
+    if problem:
+        return None, None, None, None, problem
+    return spec, api_key_for(spec), model, base, ""
+
+
 def deepen(
     diff: str,
     budget: int,
@@ -2412,6 +2682,16 @@ def main() -> int:
              "by --no-house-style.",
     )
     parser.add_argument(
+        "--offline",
+        action="store_true",
+        default=None,
+        help="Write the message locally with no API call, no key and no network. The "
+             "type comes from the file classes, the scope from the workspace manifest "
+             "and the bullets are grouped by directory. It never guesses feat: or "
+             "fix:, which state intent nothing local can see, so it is a draft rather "
+             "than a replacement - and it always beats an error when you are offline.",
+    )
+    parser.add_argument(
         "--redact",
         action="store_true",
         default=None,
@@ -2480,27 +2760,15 @@ def main() -> int:
         )
         return 2
 
-    spec = resolve_provider(provider)
-    if spec is None:
-        known = ", ".join(sorted(PROVIDERS))
-        print(
-            f"Error: unknown provider '{provider}'. Known providers: {known}.",
-            file=sys.stderr,
-        )
-        return 2
-
-    missing = missing_key_env(spec)
-    if missing:
-        print(f"Error: {missing} is not set.", file=sys.stderr)
-        return 2
-    api_key = api_key_for(spec)
-    model = resolve_model(spec, args.model, project.get("model"), user.get("model"))
-
-    base = resolve_base(spec, args.base_url, project.get("base_url"), user.get("base_url"))
-    problem = base_url_error(base)
-    if problem:
-        print(f"Error: {problem}.", file=sys.stderr)
-        return 2
+    # Not resolved at all under --offline: that path makes no request, so a
+    # missing key is not a problem it has, and refusing to write a message over
+    # one would reintroduce the outage this flag exists to survive.
+    spec = api_key = model = base = None
+    if not args.offline:
+        spec, api_key, model, base, problem = call_target(args, project, user, provider)
+        if problem:
+            print(f"Error: {problem}.", file=sys.stderr)
+            return 2
 
     diff = get_staged_diff()
     if not diff.strip():
@@ -2513,6 +2781,21 @@ def main() -> int:
         print(warning, file=sys.stderr)
 
     classes = classify_files(files, diff)
+
+    if args.offline:
+        # No secret scan on this path: that scan exists to stop a transmission,
+        # and there is none. Refusing a commit that sends nothing would make
+        # this a pre-commit hook, which is a different tool.
+        records = get_recent_commits() if house_style_on else []
+        return finish(
+            offline_message(
+                files, classes, get_staged_summary(),
+                title=args.message,
+                types=known_types(records) if records else None,
+                scopes=known_scopes(records) if len(records) >= MIN_COMMITS else None,
+            ),
+            ticket_refs, ticket_pattern, dry_run=args.dry_run,
+        )
 
     # Before every request, and on the diff as staged rather than as trimmed: a
     # scan placed after demotion or the budget would clear a payload that
@@ -2576,28 +2859,7 @@ def main() -> int:
         # The model was asked for the body only, so the author's title leads.
         message = f"{args.message}\n\n{message}".rstrip() + "\n"
 
-    # After the model, never through it: the key is read off the branch, so the
-    # one thing that could go wrong is a paraphrase, and this way there is none.
-    if ticket_refs:
-        key = ticket_key(get_branch_name(), ticket_pattern)
-        if key:
-            message = add_trailer(message, TICKET_TRAILER, key)
-
-    if args.dry_run:
-        print(message)
-        return 0
-
-    print("--- commit message ---")
-    print(message)
-    print("----------------------")
-
-    proc = subprocess.run(
-        ["git", "commit", "-F", "-"],
-        input=message,
-        text=True,
-        encoding="utf-8",
-    )
-    return proc.returncode
+    return finish(message, ticket_refs, ticket_pattern, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
