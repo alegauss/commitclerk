@@ -46,9 +46,11 @@ from .history import (
 from .offline import offline_message
 from .secrets import redact_diff, redaction_notice, refusal_notice, scan_diff
 from .trailers import (
+    ASSISTED_TRAILER,
     DEFAULT_TICKET_PATTERN,
     TICKET_TRAILER,
     add_trailer,
+    assisted_value,
     compile_ticket_pattern,
     ticket_key,
 )
@@ -106,18 +108,32 @@ def _wants_examples(house_style_on, cli, project, user) -> bool:
     return bool(house_style_on and layered(cli, None, project, user, True))
 
 
-def finish(message: str, ticket_refs, ticket_pattern: str, *, dry_run: bool) -> int:
-    """Trailer, print, commit -- the tail the online and offline paths share.
+def finish(
+    message: str,
+    ticket_refs,
+    ticket_pattern: str,
+    *,
+    dry_run: bool,
+    assisted: str = "",
+) -> int:
+    """Trailers, print, commit -- the tail the online and offline paths share.
 
-    The trailer is applied here, after the message exists and never through the
-    model: the key is read off the branch, so the one thing that could go wrong
-    is a paraphrase, and this way there is none. `--offline` gets it too, the
-    branch name being as local as everything else on that path.
+    Both trailers are applied here, after the message exists and never through
+    the model: one is read off the branch and one off the version and the model
+    actually called, so the only thing that could go wrong is a paraphrase, and
+    this way there is none. `--offline` gets both, the branch name being as
+    local as everything else on that path.
+
+    `Refs:` first. That one is about the work; `Assisted-by:` is about how the
+    message was written, and fixing the order here keeps it from becoming an
+    accident of which branch of `main` ran.
     """
     if ticket_refs:
         key = ticket_key(get_branch_name(), ticket_pattern)
         if key:
             message = add_trailer(message, TICKET_TRAILER, key)
+    if assisted:
+        message = add_trailer(message, ASSISTED_TRAILER, assisted)
 
     if dry_run:
         print(message)
@@ -373,6 +389,9 @@ def main() -> int:
     ticket_refs = layered(
         None, None, _wants_refs(project), _wants_refs(user), False,
     )
+    assisted_by = layered(
+        None, None, project.get("assisted_by"), user.get("assisted_by"), False,
+    )
     if ticket_refs and compile_ticket_pattern(ticket_pattern) is None:
         print(
             f"Error: 'ticket_pattern' is not a valid regular expression: {ticket_pattern}.",
@@ -415,6 +434,9 @@ def main() -> int:
                 scopes=known_scopes(records) if len(records) >= MIN_COMMITS else None,
             ),
             ticket_refs, ticket_pattern, dry_run=args.dry_run,
+            # No model was called, and saying one was is the lie this whole
+            # tool is built to not tell.
+            assisted=assisted_value(__version__) if assisted_by else "",
         )
 
     # Before the scan, not after: content that is never transmitted has nothing
@@ -488,7 +510,10 @@ def main() -> int:
         # The model was asked for the body only, so the author's title leads.
         message = f"{args.message}\n\n{message}".rstrip() + "\n"
 
-    return finish(message, ticket_refs, ticket_pattern, dry_run=args.dry_run)
+    return finish(
+        message, ticket_refs, ticket_pattern, dry_run=args.dry_run,
+        assisted=assisted_value(__version__, model) if assisted_by else "",
+    )
 
 
 

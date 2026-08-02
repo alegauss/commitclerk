@@ -36,8 +36,8 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style, examples, scan, deep, ticket_refs, ticket_pattern). A setting is
-taken from the first place that has it:
+house_style, examples, scan, deep, ticket_refs, ticket_pattern, assisted_by). A
+setting is taken from the first place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
@@ -55,6 +55,11 @@ thing for one commit. Both only add to the prompt - see `context.py`.
 With ticket_refs on, the issue key in the branch name (feat/PROJ-123-thing)
 is appended to the finished message as a `Refs: PROJ-123` trailer. Off by
 default, and never sent to the model - see `trailers.py`.
+
+With assisted_by on, one more trailer records provenance:
+`Assisted-by: commitclerk <version> (<model>)`, or `(offline, no model)` under
+--offline, which called none. Off by default: an unrequested watermark in
+someone else's git history is a non-goal.
 
 Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
@@ -253,9 +258,12 @@ from .gitio import (  # noqa: E402
 )
 from .prompt import _system_prompt, build_user_prompt  # noqa: E402
 from .trailers import (  # noqa: E402
+    ASSISTED_TRAILER,
     DEFAULT_TICKET_PATTERN,
+    OFFLINE_MODEL,
     TICKET_TRAILER,
     add_trailer,
+    assisted_value,
     compile_ticket_pattern,
     ticket_key,
 )
@@ -344,4 +352,5 @@ __all__ = [
     "known_types",
     "read_clerkignore",
     "excluded_paths",
+    "assisted_value",
 ]

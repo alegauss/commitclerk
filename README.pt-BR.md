@@ -320,6 +320,7 @@ todos os repositórios, e qualquer projeto que discorde sobrescreve.
 | `deep` | booleano | `true` é `--deep` |
 | `ticket_refs` | booleano | — (desligado por padrão; veja abaixo) |
 | `ticket_pattern` | string | — (implica `ticket_refs`) |
+| `assisted_by` | booleano | — (desligado por padrão; adiciona um trailer `Assisted-by:`, veja abaixo) |
 
 O arquivo é procurado a partir da raiz do repositório, não do diretório em que
 você está, então a ferramenta se comporta igual três níveis abaixo. Chaves de API
@@ -427,6 +428,37 @@ A chave é lida do branch e anexada à mensagem pronta, nunca enviada ao modelo,
 não há como ser parafraseada ou inventada. Um branch sem chave não gera trailer, um
 trailer que você já escreveu não é repetido, e um bloco de trailers existente é
 completado em vez de duplicado.
+
+### Registrando que um commit teve assistência de IA
+
+Algumas organizações já exigem isso. Com `"assisted_by": true`, a mensagem final
+ganha um trailer:
+
+```
+Assisted-by: commitclerk 0.2.1 (gpt-4o-mini)
+```
+
+**Desligado por padrão, e sem flag** — pelo mesmo motivo que o `ticket_refs` não
+tem uma. Se o seu histórico carrega proveniência é algo que o repositório decide
+uma vez, não algo que cada commit reabre, e uma marca d'água não solicitada no
+git log de outra pessoa é um non-goal deste projeto.
+
+O `--offline` não chama modelo nenhum, então ele diz isso:
+
+```
+Assisted-by: commitclerk 0.2.1 (offline, no model)
+```
+
+Nomear um modelo ali seria a ferramenta registrando trabalho que não aconteceu,
+que é a única coisa que ela existe para não fazer — e mantém os dois casos
+distinguíveis para o `git log --grep="Assisted-by"`, que é o motivo inteiro de
+registrar.
+
+A chave é fixa e não configurável: uma que variasse por repositório derrubaria
+esse grep. Com o `ticket_refs` também ligado, o `Refs:` vem primeiro — aquele é
+sobre o trabalho, este sobre como a mensagem foi escrita. Os dois são anexados
+depois que o modelo respondeu, então nenhum pode ser parafraseado ou inventado, e
+uma re-execução não repete nenhum dos dois.
 
 ### Variáveis de ambiente
 

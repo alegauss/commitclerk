@@ -78,24 +78,6 @@ shape (T29) rather than trusting it. A corpus case in T50 should be a history
 containing a deliberately adversarial commit message. Nobody in this niche
 documents this. Doing so is a credibility asset, not an admission.
 
-### §T23 Provenance, opt-in only
-
-Some organisations now require AI assistance to be recorded, and today they add the line
-by hand. An opt-in `Assisted-by: commitclerk 0.2.1 (gpt-4o-mini)` trailer serves them.
-
-**Config only, no flag** -- exactly like `ticket_refs`, and for its reason: whether a repository's history carries provenance is something that repository decides once, not something each commit re-argues. `"assisted_by": true`, off by default, because an unrequested watermark in someone else's git history is a non-goal and a default-on version of this would be one.
-
-**`--offline` must not name a model.** Nothing was called, so `(gpt-4o-mini)` there would be the tool writing history that did not happen, which is the single failure it exists to prevent. That path emits `(offline, no model)` -- the true statement, and the more useful one to grep for.
-
-Applied in `finish`, after the message exists and never through the model, for the same
-reason `Refs:` is: a trailer the model could paraphrase is a trailer that can be wrong.
-It lands **after** `Refs:` when both apply, that one being about the work and this one
-about how the message was written, and it reuses `add_trailer`, so a re-run or a
-hand-written copy does not produce it twice.
-
-The key is fixed. Making it configurable would defeat the `git log --grep` that is the
-entire point of recording it.
-
 ## Block E — Configuration & conventions
 
 ### §T26 Rule packs turn forks into configuration

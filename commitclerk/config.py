@@ -43,6 +43,10 @@ SETTINGS = {
     # history uninvited. Setting `ticket_pattern` turns it on too.
     "ticket_refs": bool,
     "ticket_pattern": str,
+    # Off unless asked for, and config-only for `ticket_refs`' reason: whether a
+    # repository's history records AI assistance is decided once by that
+    # repository, and an unrequested watermark in it is a non-goal.
+    "assisted_by": bool,
 }
 
 _TYPE_NAMES = {str: "a string", int: "a whole number", bool: "true or false"}

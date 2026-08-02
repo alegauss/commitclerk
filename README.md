@@ -294,7 +294,7 @@ The source is a fourteen-module package under [`commitclerk/`](commitclerk/) —
 `context`, `excludes`, `diffing`, `deep`, `files`, `secrets`, `offline`, `history`,
 `gitio`, `trailers`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (3073 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (3122 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -338,6 +338,7 @@ repository, and any project that disagrees overrides it.
 | `deep` | boolean | `true` is `--deep` |
 | `ticket_refs` | boolean | — (off by default; see below) |
 | `ticket_pattern` | string | — (implies `ticket_refs`) |
+| `assisted_by` | boolean | — (off by default; adds an `Assisted-by:` trailer, see below) |
 
 The file is found from the repository root, not the directory you are standing
 in, so the tool behaves the same three levels down. API keys are **not** settings:
@@ -443,6 +444,36 @@ The key is read off the branch and appended to the finished message, never sent
 to the model, so it cannot be paraphrased or invented. A branch with no key
 produces no trailer, a trailer you already wrote is not repeated, and an existing
 trailer block is joined rather than duplicated.
+
+### Recording that a commit was AI-assisted
+
+Some organisations now require it. Set `"assisted_by": true` and the finished
+message gains one trailer:
+
+```
+Assisted-by: commitclerk 0.2.1 (gpt-4o-mini)
+```
+
+**Off by default, and there is no flag** — for the same reason `ticket_refs` has
+none. Whether your history carries provenance is something a repository decides
+once, not something each commit re-argues, and an unrequested watermark in
+someone else's git log is a non-goal of this project.
+
+`--offline` calls no model, so it says so:
+
+```
+Assisted-by: commitclerk 0.2.1 (offline, no model)
+```
+
+Naming a model there would be the tool recording work that did not happen, which
+is the one thing it exists not to do — and it keeps the two cases apart for the
+`git log --grep="Assisted-by"` that is the whole point of writing it down.
+
+The key is fixed and not configurable: one that varied per repository would
+defeat that grep. When `ticket_refs` is on too, `Refs:` comes first — that one is
+about the work, this one about how the message was written. Both are appended
+after the model has answered, so neither can be paraphrased or invented, and a
+re-run does not state either twice.
 
 ### Environment variables
 

@@ -51,8 +51,8 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style, examples, scan, deep, ticket_refs, ticket_pattern). A setting is
-taken from the first place that has it:
+house_style, examples, scan, deep, ticket_refs, ticket_pattern, assisted_by). A
+setting is taken from the first place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
@@ -70,6 +70,11 @@ thing for one commit. Both only add to the prompt - see `context.py`.
 With ticket_refs on, the issue key in the branch name (feat/PROJ-123-thing)
 is appended to the finished message as a `Refs: PROJ-123` trailer. Off by
 default, and never sent to the model - see `trailers.py`.
+
+With assisted_by on, one more trailer records provenance:
+`Assisted-by: commitclerk <version> (<model>)`, or `(offline, no model)` under
+--offline, which called none. Off by default: an unrequested watermark in
+someone else's git history is a non-goal.
 
 Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
@@ -161,6 +166,10 @@ SETTINGS = {
     # history uninvited. Setting `ticket_pattern` turns it on too.
     "ticket_refs": bool,
     "ticket_pattern": str,
+    # Off unless asked for, and config-only for `ticket_refs`' reason: whether a
+    # repository's history records AI assistance is decided once by that
+    # repository, and an unrequested watermark in it is a non-goal.
+    "assisted_by": bool,
 }
 
 _TYPE_NAMES = {str: "a string", int: "a whole number", bool: "true or false"}
@@ -2049,6 +2058,12 @@ DEFAULT_TICKET_PATTERN = r"[A-Z]{2,10}-\d+|#\d+"
 
 TICKET_TRAILER = "Refs"
 
+# Fixed, never configurable: a key that varies per repository defeats the
+# `git log --grep` that is the entire reason to record this.
+ASSISTED_TRAILER = "Assisted-by"
+# What `--offline` names instead of a model, because it called none.
+OFFLINE_MODEL = "offline, no model"
+
 # A git trailer line: `Key: value`, where the key is a word, possibly hyphenated.
 # `feat(api):` does not match, which is what keeps a title-only message from
 # being mistaken for a trailer block. Not `_TRAILER_RE`: the single-file build
@@ -2111,6 +2126,17 @@ def add_trailer(message: str, key: str, value: str) -> str:
     else:
         paragraphs.append(line)
     return "\n\n".join(paragraphs) + "\n"
+
+
+def assisted_value(version: str, model=None) -> str:
+    """`commitclerk <version> (<model>)`, or the honest thing when none was called.
+
+    `--offline` calls no model, and naming one there would be the tool recording
+    work that did not happen -- the single failure it exists to prevent. It also
+    keeps the two cases apart for the `git log --grep` this trailer is written
+    for, which is the whole of what a provenance record is good for.
+    """
+    return f"commitclerk {version} ({model or OFFLINE_MODEL})"
 
 
 # --- from commitclerk/prompt.py ---------------------------------------
@@ -2680,18 +2706,32 @@ def _wants_examples(house_style_on, cli, project, user) -> bool:
     return bool(house_style_on and layered(cli, None, project, user, True))
 
 
-def finish(message: str, ticket_refs, ticket_pattern: str, *, dry_run: bool) -> int:
-    """Trailer, print, commit -- the tail the online and offline paths share.
+def finish(
+    message: str,
+    ticket_refs,
+    ticket_pattern: str,
+    *,
+    dry_run: bool,
+    assisted: str = "",
+) -> int:
+    """Trailers, print, commit -- the tail the online and offline paths share.
 
-    The trailer is applied here, after the message exists and never through the
-    model: the key is read off the branch, so the one thing that could go wrong
-    is a paraphrase, and this way there is none. `--offline` gets it too, the
-    branch name being as local as everything else on that path.
+    Both trailers are applied here, after the message exists and never through
+    the model: one is read off the branch and one off the version and the model
+    actually called, so the only thing that could go wrong is a paraphrase, and
+    this way there is none. `--offline` gets both, the branch name being as
+    local as everything else on that path.
+
+    `Refs:` first. That one is about the work; `Assisted-by:` is about how the
+    message was written, and fixing the order here keeps it from becoming an
+    accident of which branch of `main` ran.
     """
     if ticket_refs:
         key = ticket_key(get_branch_name(), ticket_pattern)
         if key:
             message = add_trailer(message, TICKET_TRAILER, key)
+    if assisted:
+        message = add_trailer(message, ASSISTED_TRAILER, assisted)
 
     if dry_run:
         print(message)
@@ -2947,6 +2987,9 @@ def main() -> int:
     ticket_refs = layered(
         None, None, _wants_refs(project), _wants_refs(user), False,
     )
+    assisted_by = layered(
+        None, None, project.get("assisted_by"), user.get("assisted_by"), False,
+    )
     if ticket_refs and compile_ticket_pattern(ticket_pattern) is None:
         print(
             f"Error: 'ticket_pattern' is not a valid regular expression: {ticket_pattern}.",
@@ -2989,6 +3032,9 @@ def main() -> int:
                 scopes=known_scopes(records) if len(records) >= MIN_COMMITS else None,
             ),
             ticket_refs, ticket_pattern, dry_run=args.dry_run,
+            # No model was called, and saying one was is the lie this whole
+            # tool is built to not tell.
+            assisted=assisted_value(__version__) if assisted_by else "",
         )
 
     # Before the scan, not after: content that is never transmitted has nothing
@@ -3062,7 +3108,10 @@ def main() -> int:
         # The model was asked for the body only, so the author's title leads.
         message = f"{args.message}\n\n{message}".rstrip() + "\n"
 
-    return finish(message, ticket_refs, ticket_pattern, dry_run=args.dry_run)
+    return finish(
+        message, ticket_refs, ticket_pattern, dry_run=args.dry_run,
+        assisted=assisted_value(__version__, model) if assisted_by else "",
+    )
 
 
 if __name__ == "__main__":

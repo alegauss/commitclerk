@@ -32,6 +32,7 @@
 - ✅ **T19** **A staged secret leaves the machine before anything has looked at it** — The staged diff is scanned for credential shapes and high-entropy tokens before the first request, refusing with exit 3 and naming the file and line but never the match.
 - ✅ **T21** **A hook that calls an API hard-blocks the commit when the network is down** — `--offline` writes the whole message locally with no key, no network and no provider resolved, taking the type from the file classes and never guessing feat: or fix:.
 - ✅ **T20** **A repository with three sensitive files cannot allow the tool at all** — `.clerkignore` withholds a matched file's body from every request, leaving its path and line counts, and runs before the secret scan so exclusion is also the way out of a false positive.
+- ✅ **T23** **History cannot say which commits were AI-assisted** — An opt-in `assisted_by` writes `Assisted-by: commitclerk <version> (<model>)` after the model has answered, and says `(offline, no model)` on the path that called none.
 
 ## Block E — Configuration & conventions
 

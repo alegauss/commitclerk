@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`Assisted-by:` — provenance, for the teams whose policy now requires it.**
+  Set `"assisted_by": true` and the finished message carries
+  `Assisted-by: commitclerk 0.2.1 (gpt-4o-mini)`, which is the line those teams
+  add by hand today. **Off by default and with no flag**, exactly like
+  `ticket_refs`: whether your history records AI assistance is something a
+  repository decides once, not something each commit re-argues, and an
+  unrequested watermark in someone else's git log is a declared non-goal of this
+  project. Under `--offline` it writes `(offline, no model)` instead of naming
+  one, because no model was called and saying otherwise would be the tool
+  recording work that did not happen — and because a provenance record is only
+  worth having if `git log --grep` can tell the two apart. The key is fixed
+  rather than configurable for that same reason. It is appended after the model
+  has answered, so it cannot be paraphrased or invented, it comes after `Refs:`
+  when both apply, and a re-run never states it twice.
 - **`.clerkignore`: a repository with three sensitive files can now say yes.**
   Until now the decision was all-or-nothing per repository — one file you cannot
   send meant the tool was banned everywhere. A `.clerkignore` at the repository

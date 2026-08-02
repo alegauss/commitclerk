@@ -1078,6 +1078,70 @@ def _diff(path, *added, start=1):
     )
 
 
+class TestAssistedByTrailer(unittest.TestCase):
+    """Provenance, and the one case where naming a model would be a lie."""
+
+    def test_the_key_is_a_recognised_setting(self):
+        self.assertIs(commitclerk.SETTINGS["assisted_by"], bool)
+
+    def test_it_names_the_tool_version_and_the_model_called(self):
+        self.assertEqual(
+            commitclerk.assisted_value("0.2.1", "gpt-4o-mini"),
+            "commitclerk 0.2.1 (gpt-4o-mini)",
+        )
+
+    def test_offline_never_names_a_model(self):
+        # Nothing was called; writing a model here would be the tool recording
+        # work that did not happen.
+        value = commitclerk.assisted_value("0.2.1")
+        self.assertEqual(value, "commitclerk 0.2.1 (offline, no model)")
+        self.assertNotIn("gpt", value)
+
+    def test_an_empty_model_is_treated_as_offline_rather_than_printed(self):
+        self.assertIn(commitclerk.OFFLINE_MODEL, commitclerk.assisted_value("0.2.1", ""))
+
+    def test_the_two_cases_are_distinguishable_to_a_grep(self):
+        online = commitclerk.assisted_value("0.2.1", "claude-haiku-4-5")
+        self.assertNotEqual(online, commitclerk.assisted_value("0.2.1"))
+
+    def test_it_lands_in_the_trailer_block(self):
+        message = commitclerk.add_trailer(
+            "feat: add X\n\n- why\n",
+            commitclerk.ASSISTED_TRAILER,
+            commitclerk.assisted_value("0.2.1", "gpt-4o-mini"),
+        )
+        self.assertTrue(
+            message.endswith("Assisted-by: commitclerk 0.2.1 (gpt-4o-mini)\n")
+        )
+
+    def test_it_joins_an_existing_trailer_block_after_refs(self):
+        message = commitclerk.add_trailer("feat: add X\n\n- why\n", "Refs", "PROJ-1")
+        message = commitclerk.add_trailer(
+            message, commitclerk.ASSISTED_TRAILER, commitclerk.assisted_value("0.2.1")
+        )
+        lines = message.rstrip("\n").splitlines()
+        self.assertEqual(lines[-2], "Refs: PROJ-1")
+        self.assertEqual(lines[-1], "Assisted-by: commitclerk 0.2.1 (offline, no model)")
+
+    def test_a_re_run_does_not_state_it_twice(self):
+        value = commitclerk.assisted_value("0.2.1", "gpt-4o-mini")
+        once = commitclerk.add_trailer(
+            "feat: add X\n\n- why\n", commitclerk.ASSISTED_TRAILER, value
+        )
+        self.assertEqual(
+            commitclerk.add_trailer(once, commitclerk.ASSISTED_TRAILER, value), once
+        )
+
+    def test_the_key_is_a_constant_not_a_setting(self):
+        # A key that varied per repository would defeat the grep it exists for.
+        self.assertEqual(commitclerk.ASSISTED_TRAILER, "Assisted-by")
+        self.assertNotIn("assisted_trailer", commitclerk.SETTINGS)
+
+    def test_the_value_is_ascii(self):
+        commitclerk.assisted_value("0.2.1", "gpt-4o-mini").encode("ascii")
+        commitclerk.assisted_value("0.2.1").encode("ascii")
+
+
 class TestClerkignoreMatching(unittest.TestCase):
     def rules(self, *lines):
         return commitclerk.parse_clerkignore("\n".join(lines))

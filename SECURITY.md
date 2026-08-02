@@ -168,9 +168,10 @@ A third, `.clerkignore` at the repository root, is plain text rather than JSON
 and chooses which staged files have their **contents** withheld — see *Where
 your data goes*. Nothing in it is transmitted either.
 
-Only eleven keys are recognised — `provider`, `model`, `base_url`, `timeout`,
+Only twelve keys are recognised — `provider`, `model`, `base_url`, `timeout`,
 `max_chars`, `house_style`, `examples`, `scan`, `deep`, `ticket_refs`,
-`ticket_pattern` — and each is type-checked before it takes effect; a
+`ticket_pattern`, `assisted_by` — and each is type-checked before it takes
+effect; a
 key that is not one of those is reported on stderr and ignored. **API keys are
 not settings and are never read from either file**, so a config file committed to
 a repository cannot carry, capture or redirect a credential. Nothing from these

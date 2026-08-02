@@ -16,6 +16,12 @@ DEFAULT_TICKET_PATTERN = r"[A-Z]{2,10}-\d+|#\d+"
 
 TICKET_TRAILER = "Refs"
 
+# Fixed, never configurable: a key that varies per repository defeats the
+# `git log --grep` that is the entire reason to record this.
+ASSISTED_TRAILER = "Assisted-by"
+# What `--offline` names instead of a model, because it called none.
+OFFLINE_MODEL = "offline, no model"
+
 # A git trailer line: `Key: value`, where the key is a word, possibly hyphenated.
 # `feat(api):` does not match, which is what keeps a title-only message from
 # being mistaken for a trailer block. Not `_TRAILER_RE`: the single-file build
@@ -78,3 +84,14 @@ def add_trailer(message: str, key: str, value: str) -> str:
     else:
         paragraphs.append(line)
     return "\n\n".join(paragraphs) + "\n"
+
+
+def assisted_value(version: str, model=None) -> str:
+    """`commitclerk <version> (<model>)`, or the honest thing when none was called.
+
+    `--offline` calls no model, and naming one there would be the tool recording
+    work that did not happen -- the single failure it exists to prevent. It also
+    keeps the two cases apart for the `git log --grep` this trailer is written
+    for, which is the whole of what a provenance record is good for.
+    """
+    return f"commitclerk {version} ({model or OFFLINE_MODEL})"
