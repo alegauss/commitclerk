@@ -70,3 +70,14 @@ jobs:
         uses: astral-sh/ruff-action@v3
         with:
           args: check --output-format=github
+
+  docs:
+    # The same gate the write path runs locally, called through the action roadkeep
+    # ships rather than a hand-copied `run:` block that would drift per repository.
+    # It fails the build on a violated limit, a pointer resolving to nothing, a section
+    # nothing points at, a dep nothing satisfies, or an always-loaded file over budget.
+    name: roadkeep lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: alegauss/roadkeep@main

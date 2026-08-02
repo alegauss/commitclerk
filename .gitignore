@@ -29,6 +29,11 @@ env/
 *.swp
 *~
 
+# Claude Code — the project's shared config, hooks and skills are committed;
+# a developer's own permissions and session state are not.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # OS noise
 .DS_Store
 Thumbs.db

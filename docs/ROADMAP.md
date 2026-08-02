@@ -1,191 +1,138 @@
-# commitclerk — Roadmap
+# commitclerk — Roadmap (active backlog)
 
-The **only** source of truth for what is planned and what is active. Shipped work
-lives in [`CHANGELOG.md`](../CHANGELOG.md); design rationale for the tasks below
-lives in [`IMPROVEMENTS.md`](IMPROVEMENTS.md); positioning and distribution bets
-live in [`STRATEGY.md`](STRATEGY.md). Maintenance rules:
-[`.claude/skills/commitclerk-roadmap-docs`](../.claude/skills/commitclerk-roadmap-docs/SKILL.md).
-
-**Status legend:** 💭 idea · 📋 designed · 🛠 in-progress · ⏳ partial.
-Shipped tasks are *removed* from this file — they are not marked ✅ here.
-
-**Next free task number and block letter:** [`last-task.md`](last-task.md).
-
----
-
-## The thesis
-
-commitclerk today is a seven-module package, built into one ~1 650-line standalone file,
-with one genuinely differentiated idea: **it refuses to describe documentation prose as
-work that was implemented.**
-Everything below is an answer to one of three questions:
-
-1. **Will it scale technically?** Provider portability is done (Block **A** shipped
-   in full), and the tool now reads the repository around the diff: its house style,
-   its own past commits about the same files, its workspace layout. What is left in
-   Block **B** needs a config file first; Block **C** is the commit no budget fits.
-2. **Can a team actually adopt it?** A tool that ships a raw diff to a third party
-   with no redaction, no config file, no offline path and no `commit-msg`
-   validation cannot be mandated by anyone. Blocks **D**, **E**, **F** and **G**
-   make it adoptable rather than merely installable.
-3. **Is a commit message the whole product?** The same staged-diff-plus-history
-   pipeline can write changelogs, release notes, PR descriptions and a semver
-   recommendation. Block **H** is where the tool stops being a one-trick script.
-   Blocks **I** and **J** are reach and the ability to change the prompt without
-   silently breaking it.
-
-## Non-goals (binding — check before proposing work)
-
-- **No runtime dependencies in the core path.** Standard library only. This is the
-  product's trust story, not a preference. A task that needs a package is a task
-  that needs a redesign, or a `STRATEGY.md` decision first.
-- **No telemetry, analytics, remote config, or phone-home.** Ever. Not opt-in.
-- **No hosted service and no server component.** The tool runs on your machine.
-- **Never stage silently from the Python entrypoint.** Wrappers may stage; the
-  tool itself reads what you chose to stage. Losing this makes the tool unsafe to
-  put behind a hook.
-- **No auto-push, no auto-PR, no auto-merge.** The commit is the last step.
-- **Not a code reviewer or a linter for code.** It describes changes; it does not
-  judge them.
-- **No gitmoji / emoji in messages by default**, and no "written by AI" watermark
-  by default (see T23 for the opt-in trailer).
-- **Do not rewrite history.** No amend-by-default, no interactive rebase driving.
-- **Not a fork-per-team product.** Conventions are configuration (Block E), not
-  patches to `_RULES`.
-
----
+> **Single source of truth for task status.** Flat, one line per task.
+> Only **unshipped** work lives here (💭 idea · 📋 designed · ⏳ partial · 🛠 in-progress).
+> Shipped work moves to [CHANGELOG.md](CHANGELOG.md); the user-facing release notes are
+> [`../CHANGELOG.md`](../CHANGELOG.md), which is a published artifact and not a task
+> ledger. Design rationale lives in [IMPROVEMENTS.md](IMPROVEMENTS.md); positioning and
+> distribution bets live in [STRATEGY.md](STRATEGY.md).
+>
+> **What this is.** A CLI that writes the commit message from the staged diff, with one
+> genuinely differentiated idea: **it refuses to describe documentation prose as work
+> that was implemented.** Every line below answers one of three questions — will it scale
+> technically (Blocks B, C), can a team actually adopt it (D, E, F, G), and is a commit
+> message the whole product (H, I, J).
+>
+> **An entry here is one sentence: what + why + `→` pointer.** The symptom is what does
+> not work, never the name of the fix — a line named after its solution cannot be
+> falsified, so it never gets closed, only abandoned.
+>
+> **This file is written by `roadkeep`, never by hand:** `add`, `status`, `amend`, `ship`,
+> `retire`. Ids are derived, never chosen; `docs/last-task.md` is gone because `next-id`
+> answers it from the files.
+>
+> **How to pick work:** `roadkeep brief` — in-progress first, then `priority` in
+> `roadkeep.toml`, then the lowest-numbered task whose deps are all shipped.
 
 ## Block B — Context beyond the diff
 
-*The tool's founding insight is that the diff alone misleads. The history now
-answers "how does this repo write commits" and the tree answers "which package is
-this". What is left is intent — which lives in the branch name and in the author's
-head, and needs somewhere to configure it.* → [§B](IMPROVEMENTS.md#b--context-beyond-the-diff)
+*The founding insight is that the diff alone misleads. History now answers "how does this
+repo write commits" and the tree answers "which package is this". What is left is intent,
+which lives in the branch name and in the author's head.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T9 | 💭 | Branch/ticket context: parse an issue key out of the branch name (`feat/PROJ-123-thing`) via a configurable regex and emit a `Refs: PROJ-123` trailer. → §B.2 | T25 |
-| T12 | 💭 | `--context "<note>"` for one-off intent, plus `.clerk/context.md` for standing repo facts ("this repo ships a CLI; `clerk` is the binary name"). → §B.5 | T25 |
+- 💭 **T9** (deps: T25) **The issue key is in the branch name and never reaches the message** — a configurable regex over `feat/PROJ-123-thing` emits a `Refs: PROJ-123` trailer, so the link between a commit and its ticket stops being retyped. → §T9
+- 💭 **T12** (deps: T25) **Intent lives in the author's head and the tool has nowhere to read it** — a one-off `--context "<note>"` and a standing `.clerk/context.md` are the two shapes intent arrives in, and neither is derivable from a diff. → §T12
 
 ## Block C — Diff intelligence
 
-*Every file reaches the model, classified, with generated noise collapsed, the doc
-guard honest on mixed commits, and partial staging called out. What is left is the
-commit no budget can fit.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
+*Every file reaches the model, classified, with generated noise collapsed, the doc guard
+honest on mixed commits, and partial staging called out. What is left is the commit no
+budget can fit.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T17 | 💭 | Map-reduce pass for very large diffs (opt-in): summarize each oversized file separately, then write the message from the summaries. Handles the commit that no budget can fit. → §C.4 | — |
+- 💭 **T17** (deps: —) **A commit larger than any budget is only trimmed, so its tail is never described** — summarizing each oversized file separately and writing the message from the summaries is the one path that scales past a context window. → §T17
 
 ## Block D — Trust & safety
 
-*This block is what turns "a neat script" into "a tool a company can approve".* → [§D](IMPROVEMENTS.md#d--trust--safety)
+*This block is what turns "a neat script" into "a tool a company can approve".*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T19 | 💭 | **Secret pre-flight** — scan the staged diff for known key shapes and high-entropy strings *before* the request leaves the machine; refuse by default, `--redact` to mask and continue, `--no-scan` to override. A committed secret sent to a third-party API is the worst thing this tool could do. → §D.1 | — |
-| T20 | 💭 | `.clerkignore`: paths whose contents are never transmitted, replaced by a filename-and-linecount placeholder. Lets a team allow the tool on a repo with a few sensitive files. → §D.2 | — |
-| T21 | 💭 | `--offline`: a deterministic, LLM-free message (type from file classes, scope from paths, bullets grouped by directory). No key, no network, no failure mode — so a hook or CI job can never hard-block a commit. → §D.3 | — |
-| T22 | 💭 | CI job that runs the suite with socket creation monkeypatched to raise, proving there is no accidental egress path outside the one documented call. → §D.4 | T53 |
-| T23 | 💭 | Opt-in `Assisted-by: commitclerk <version> (<model>)` trailer for teams that need AI-assistance provenance in history. Off by default. → §D.5 | T25 |
-| T24 | 💭 | A real data-flow / threat-model section in `SECURITY.md`: exactly what leaves the machine, what never does, what an attacker controlling the model output could attempt. Two injection vectors now, not one — *diff content*, and *past commit messages* replayed verbatim as worked examples. → §D.1 | T19 |
-| T61 | 📋 | **Split the history kill switch.** `--no-house-style` disables two things with very different data-flow: the fingerprint (counts and shapes) and the worked examples (past message text, verbatim). A team can want the first without the second. Add `--no-examples`, keep the combined switch. → §D.6 | — |
+- 💭 **T19** (deps: —) **A staged secret leaves the machine before anything has looked at it** — scanning for known key shapes and high-entropy strings before the request is sent, refusing by default, is the worst outcome this tool can have and the cheapest to prevent. → §T19
+- 💭 **T20** (deps: —) **A repository with three sensitive files cannot allow the tool at all** — paths whose contents are never transmitted, replaced by a filename-and-linecount placeholder, make the allow decision per file instead of per repository. → §T20
+- 💭 **T21** (deps: —) **A hook that calls an API hard-blocks the commit when the network is down** — a deterministic LLM-free message, type from file classes and bullets grouped by directory, has no key, no network and no failure mode. → §T21
+- 💭 **T22** (deps: T53) **The no-egress claim is documented and never tested** — running the suite with socket creation monkeypatched to raise turns the claim into a build failure the moment it stops being true. → §T22
+- 💭 **T23** (deps: T25) **History cannot say which commits were AI-assisted** — an opt-in `Assisted-by: commitclerk <version> (<model>)` trailer is what a team needing provenance adds by hand today, and it stays off by default. → §T23
+- 💭 **T24** (deps: T19) **`SECURITY.md` does not say what leaves the machine** — the data flow now has two injection vectors, diff content and past commit messages replayed verbatim as worked examples, and a reader can audit neither. → §T24
+- 📋 **T61** (deps: —) **One switch hides two very different data flows** — `--no-house-style` disables the fingerprint (counts and shapes) and the worked examples (past message text, verbatim) together, and a team can want the first without the second. → §T61
 
 ## Block E — Configuration & conventions
 
-*Every team's commit convention is slightly different. Today the only way to encode
-that is to fork `_RULES`, which is how a tool acquires a thousand incompatible
-forks and no ecosystem.* → [§E](IMPROVEMENTS.md#e--configuration--conventions)
+*Every team's commit convention is slightly different, and the only way to encode one
+today is to fork `_RULES` — which is how a tool acquires a thousand incompatible forks
+and no ecosystem.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T25 | 💭 | `.clerk.json` project config (types, scopes, title length, language, ticket regex, model, provider) with documented precedence **CLI > env > project > user > default**. JSON, not TOML — `tomllib` is 3.11+ and the floor is 3.8. → §E.1 | — |
-| T26 | 💭 | Rule packs: `--rules <file>` / `$CLERK_RULES` to replace or append to `_RULES`, so a team encodes its convention without forking the tool. → §E.2 | T25 |
-| T27 | 💭 | `--lang pt-BR` (and friends) so the message matches the team's working language. The project already ships a pt-BR README; the tool should be able to speak it. → §E.3 | T25 |
-| T28 | 💭 | **`clerk --lint`** — validate an existing message (a file, or `HEAD`) against the same rules with **zero API calls**. Turns a one-way generator into a two-sided tool: usable as a `commit-msg` hook and in CI, by people who don't want generation at all. → §E.4 | T25 |
-| T29 | 💭 | Enforce the configured type/scope allowlist on the model's output: one repair retry, then fail loudly rather than committing an off-convention message. → §E.4 | T28 |
+- 💭 **T25** (deps: —) **A team convention is retyped as flags on every commit** — a project config file with documented precedence, CLI > env > project > user > default, is what every other task in this block waits on. → §T25
+- 💭 **T26** (deps: T25) **Encoding a team's convention means forking `_RULES`** — replacing or appending to the rules from a file named by flag or environment variable is how the tool gets an ecosystem instead of a thousand private patches. → §T26
+- 💭 **T27** (deps: T25) **The message is English whatever language the team works in** — a language flag matches the register the repository is already written in, and this one ships a pt-BR README against an English-only generator. → §T27
+- 💭 **T28** (deps: T25) **An existing message cannot be checked without generating a new one** — validating a file or `HEAD` against the same rules with zero API calls makes the tool usable as a `commit-msg` hook and in CI by people who never generate. → §T28
+- 💭 **T29** (deps: T28) **The model's type and scope are trusted without being checked** — one repair retry and then a loud failure is the only outcome that keeps an off-convention message out of history. → §T29
 
 ## Block F — Interaction & UX
 
-*The current flow is fire-and-commit: if the message is wrong, your only recourse
-is `git commit --amend`.* → [§F](IMPROVEMENTS.md#f--interaction--ux)
+*The current flow is fire-and-commit: if the message is wrong, the only recourse is
+`git commit --amend`.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T30 | 💭 | Interactive confirm loop — `[a]ccept · [e]dit · [r]egenerate · [q]uit` — with `--yes` to keep the current non-interactive behaviour for scripts. → §F.1 | — |
-| T31 | 💭 | `--edit`: open the generated message in `$EDITOR` / `core.editor` before committing. → §F.1 | T30 |
-| T32 | 💭 | Stream the completion so a slow or local model shows progress instead of a frozen terminal for 30 seconds. → §F.2 | — |
-| T33 | 💭 | `--verbose`: model, prompt/completion tokens, estimated cost, elapsed time, prompt version. `--quiet` for hook use. Cost is currently invisible. → §F.3 | T52 |
-| T34 | 💭 | `--amend`: build the diff from `HEAD` plus the staged changes and pass the existing message as context, instead of describing only the fixup. → §F.4 | — |
-| T35 | 💭 | Colour output (respecting `NO_COLOR` and non-TTY) and a documented error taxonomy with distinct exit codes per failure class. Today an API failure and a git failure are indistinguishable to a script. → §F.5 | — |
-| T59 | 💭 | `--max-output-tokens`: a provider-agnostic budget for the *reply*. Anthropic's is a hard-coded 8 192 and OpenAI's is unset, so a verbose model can burn the budget before writing prose and the run fails with "returned no message text". → §F.6 | — |
-| T62 | 📋 | **`--show-prompt`** — print the fully assembled request and exit, no API call. Eight sources now feed one prompt (rules, house style, examples, file classes, class mix, scope, summary, guard, diff) and there is no way to see what was actually sent. → §F.7 | — |
-| T63 | 💭 | Budget the whole *request*, not just the diff. `--max-chars` governs the diff alone; the change summary sits outside it by design, and rules, house style, examples and guard sit beside it. Nothing bounds their sum, so a small-context local model can be overrun by context the user never asked for. → §F.6 | T33 |
+- 💭 **T30** (deps: —) **A wrong message is only fixable after it is already committed** — accept, edit, regenerate or quit before the commit is the loop the tool is missing, with a flag keeping today's non-interactive behaviour for scripts. → §T30
+- 💭 **T31** (deps: T30) **Editing the message means rewriting it after the commit** — opening it in `$EDITOR` or `core.editor` first is the whole distance between a good draft and a correct message. → §T31
+- 💭 **T32** (deps: —) **A slow or local model shows a frozen terminal for thirty seconds** — streaming the completion is the difference between waiting and wondering whether the process hung. → §T32
+- 💭 **T33** (deps: T52) **What a run costs is invisible** — model, prompt and completion tokens, estimated cost, elapsed time and prompt version answer it in one flag, with a quiet counterpart for hook use. → §T33
+- 💭 **T34** (deps: —) **An amended commit is described by its fixup alone** — building the diff from `HEAD` plus the staged changes and passing the existing message as context is what makes the rewritten message true. → §T34
+- 💭 **T35** (deps: —) **An API failure and a git failure are indistinguishable to a script** — a documented error taxonomy with a distinct exit code per failure class is what a caller branches on, and colour has to respect `NO_COLOR` and a non-TTY. → §T35
+- 💭 **T59** (deps: —) **Nothing budgets the reply, so a verbose model fails with "returned no message text"** — Anthropic's cap is hard-coded at 8 192 and OpenAI's is unset, so the budget has to be provider-agnostic to be a budget at all. → §T59
+- 📋 **T62** (deps: —) **There is no way to see what was actually sent** — nine sources now feed one request, from rules and house style to the guard and the diff, and a prompt nobody can print is a prompt nobody can review. → §T62
+- 💭 **T63** (deps: T33) **Nothing bounds the size of the whole request** — the diff budget governs the diff alone while rules, house style, examples and guard sit beside it, so a small-context local model is overrun by context the user never asked for. → §T63
 
 ## Block G — Git-native integration
 
-*The tool is only ever used if it is on the path of least resistance.* → [§G](IMPROVEMENTS.md#g--git-native-integration)
+*The tool is only ever used if it is on the path of least resistance.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T36 | 💭 | `prepare-commit-msg` hook + `clerk --install-hook` / `--uninstall-hook`. Must no-op for merge, squash, rebase and `-m`-supplied messages, and must never block a commit when the API is down. → §G.1 | T21 |
-| T39 | 💭 | `.pre-commit-hooks.yaml` so the tool is installable through the `pre-commit` framework the rest of the Python world already runs. → §G.4 | T28, T36 |
+- 💭 **T36** (deps: T21) **The tool runs only when the author remembers to run it** — a `prepare-commit-msg` hook and its installer put it on the path of least resistance, and it must no-op for merge, squash, rebase and a supplied message. → §T36
+- 💭 **T39** (deps: T28, T36) **The framework the Python world already runs cannot install this tool** — a `.pre-commit-hooks.yaml` is the entire distance between the two. → §T39
 
 ## Block H — Beyond a single commit
 
-*Same inputs, much larger product. The pipeline "read git history → structure it →
-write prose about it" is not specific to one commit.* → [§H](IMPROVEMENTS.md#h--beyond-a-single-commit)
+*Same inputs, much larger product: "read git history, structure it, write prose about it"
+is not specific to one commit.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T40 | 💭 | **`clerk --split`** — propose a set of logical commits from one mixed working tree (grouped by subsystem/intent), then stage and commit them in order, each with its own message. Directly attacks the reason bad commit messages exist: the commit itself was never coherent. The most ambitious task here. → §H.1 | T30 |
-| T41 | 💭 | `clerk changelog <range>`: generate or roll Keep a Changelog entries from the commits in a tag range. Dogfoods this repo's own release flow and closes the loop with `scripts/bump_version.py`. → §H.2 | — |
-| T42 | 💭 | `clerk release-notes <range>`: human-facing notes grouped by user benefit for the GitHub Release body — a different register from the changelog, not a rename of it. → §H.2 | T41 |
-| T43 | 💭 | `clerk bump --suggest`: read the commits since the last tag and recommend patch/minor/major, with the breaking-change detection the Conventional Commits spec already implies. Feeds the existing publish workflow. → §H.3 | T41 |
-| T44 | 💭 | `clerk pr`: title + description for the current branch from its whole commit range, printable or pipeable to `gh pr create`. → §H.4 | T41 |
+- 💭 **T40** (deps: T30) **A mixed working tree becomes one commit nothing can describe** — proposing a set of logical commits grouped by subsystem and staging them in order attacks the reason bad messages exist, which is that the commit was never coherent. → §T40
+- 💭 **T41** (deps: —) **Changelog entries are written by hand from commits that already say it** — generating them for a tag range dogfoods this repository's own release flow and closes the loop with `scripts/bump_version.py`. → §T41
+- 💭 **T42** (deps: T41) **A release body needs a different register and there is only the changelog** — notes grouped by user benefit are a separate artifact from a changelog, not a rename of one. → §T42
+- 💭 **T43** (deps: T41) **The version bump is a judgement made without reading the commits** — the commits since the last tag already imply patch, minor or major, breaking changes included, and the publish workflow is waiting on the answer. → §T43
+- 💭 **T44** (deps: T41) **A PR title and description are retyped from commits that already exist** — the branch's whole commit range is the input, printable or pipeable straight into `gh pr create`. → §T44
 
 ## Block I — Distribution & reach
 
-*A tool nobody can find is a tool nobody uses.* → [§I](IMPROVEMENTS.md#i--distribution--reach)
+*A tool nobody can find is a tool nobody uses.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T45 | 💭 | A GitHub Action that posts a suggested commit message / PR title as a PR comment — the tool's own best advertisement, running where developers already are. → §I.1 | T44 |
-| T46 | 💭 | Packaging beyond PyPI: Homebrew tap, Scoop manifest, documented `uvx commitclerk`, and a single-file release asset with a published SHA-256 (the curl path is already advertised in the README but unsigned). → §I.2 | — |
-| T47 | 💭 | Grow the landing page into a real docs site once the README outgrows itself — the README stays the canonical quick start and never becomes a stub. → §I.3 | — |
-| T48 | 💭 | A `recipes/` directory of ready-made rule packs: Angular convention, strict Conventional Commits, ticket-mandatory enterprise, pt-BR. Turns configuration into a shareable ecosystem. → §I.4 | T26 |
-| T49 | 💭 | A demo GIF / asciinema cast at the top of the README. For a CLI this is the single highest-leverage adoption change in the whole roadmap, and it costs an afternoon. → §I.5 | — |
+- 💭 **T45** (deps: T44) **Nobody meets the tool where they already work** — an Action that posts a suggested commit message or PR title as a review comment is advertising that does work. → §T45
+- 💭 **T46** (deps: —) **The curl install advertised in the README is unsigned** — a Homebrew tap, a Scoop manifest, a documented `uvx` path and a release asset with a published checksum are where people actually install things. → §T46
+- 💭 **T47** (deps: —) **The README is the only documentation and it is outgrowing itself** — a docs site can take the depth, as long as the README stays the canonical quick start and never becomes a stub. → §T47
+- 💭 **T48** (deps: T26) **Every team writes its rule pack from nothing** — ready-made packs for the Angular convention, strict Conventional Commits, ticket-mandatory enterprise and pt-BR turn configuration into something shareable. → §T48
+- 💭 **T49** (deps: —) **A CLI nobody can watch is a CLI nobody tries** — a demo cast at the top of the README is the highest-leverage adoption change on this list and it costs an afternoon. → §T49
 
 ## Block J — Quality engineering
 
-*The prompt is the product. There is currently no way to change it and know whether
-output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
+*The prompt is the product, and there is currently no way to change it and know whether
+the output got better or worse.*
 
-| ID | Status | Task | Depends on |
-| --- | --- | --- | --- |
-| T50 | 💭 | Golden fixture corpus: real diffs (doc-only, mixed, rename-heavy, lockfile-dominated, binary) with expected classification, asserted **offline** against the deterministic parts of the pipeline. → §J.1 | — |
-| T51 | 💭 | Prompt evaluation harness: run the corpus through a live model behind an opt-in env flag, score with a judge model, report regressions. The safety net that makes prompt changes reviewable. → §J.2 | T50 |
-| T52 | 💭 | `PROMPT_VERSION` constant, surfaced by `--verbose` and recorded in eval output, so a quality result is attributable to a specific prompt. → §J.2 | — |
-| T53 | 💭 | A fake-provider test double so end-to-end paths (commit, hook, split) are testable with no API key and no network. → §J.3 | — |
-| T54 | 💭 | A `--help` snapshot test, so a CLI surface change is always a reviewed diff and never an accident. → §J.4 | — |
-| T57 | 💭 | Assert every user-facing string is ASCII. Two em dashes shipped in `--help` and a retry notice rendered as `?` on a cp1252 Windows console before being caught by hand. → §J.6 | — |
-| T58 | 💭 | Docs-drift test: every flag in `argparse` and every provider in `PROVIDERS` must appear in both READMEs and `docs/llms.txt`, and the `dist/commitclerk.py` line count quoted in `README.md` must match the artifact. Six documentation surfaces are updated by hand per shipped flag; the line count went stale three times in one afternoon. → §J.7 | T54 |
-| T60 | 📋 | **Instruction examples leak into the output.** `_RULES` illustrates a rule with `("regenerated the lockfile")`, and the model emits that phrase verbatim — three generations out of three produced a false "Regenerated the lockfile" bullet on commits containing no lockfile. The tool's whole premise is not writing false history. → §J.8 | — |
-| T64 | 💭 | `.gitattributes` pinning text files to LF. Every `git add` on Windows warns "CRLF will be replaced by LF", and `build_single_file.py --check` compares artifact text — a line-ending difference between contributors is a CI failure nobody can reproduce locally. → §J.9 | — |
+- 💭 **T50** (deps: —) **The deterministic half of the pipeline is asserted against nothing** — real diffs that are doc-only, mixed, rename-heavy, lockfile-dominated and binary, with their expected classification, are the fixture every other quality task needs. → §T50
+- 💭 **T51** (deps: T50) **A prompt change cannot be shown to be an improvement** — running the corpus through a live model behind an opt-in flag and scoring it with a judge is the safety net that makes a prompt edit reviewable. → §T51
+- 💭 **T52** (deps: —) **A quality result cannot be attributed to a prompt** — a version constant, surfaced by the verbose flag and recorded in eval output, is what makes a score mean anything a month later. → §T52
+- 💭 **T53** (deps: —) **Every end-to-end path needs an API key to test** — a fake-provider double makes commit, hook and split testable with no key and no network. → §T53
+- 💭 **T54** (deps: —) **A CLI surface change reaches users without anyone reviewing it** — a `--help` snapshot test turns every change to it into a diff somebody read. → §T54
+- 💭 **T57** (deps: —) **Non-ASCII output renders as `?` on a cp1252 console** — two em dashes and a retry notice shipped that way before being caught by hand, which is a portability constraint and not a style preference. → §T57
+- 💭 **T58** (deps: T54) **Six documentation surfaces are updated by hand per shipped flag** — every flag and provider has to reach both READMEs and `docs/llms.txt`, and the artifact line count quoted in `README.md` went stale three times in one afternoon. → §T58
+- 📋 **T60** (deps: —) **Instruction examples leak into the output** — `_RULES` illustrates a rule with `("regenerated the lockfile")` and three generations out of three emitted that phrase verbatim on commits containing no lockfile. → §T60
+- 💭 **T64** (deps: —) **Line endings differ between contributors and the build compares artifact text** — pinning text files to LF removes both the `git add` warning on Windows and a check failure nobody can reproduce locally. → §T64
 
----
+## Non-goals
 
-## Suggested order (not binding)
+Deliberately **not** built — check this list before proposing work:
 
-If you want the highest value per unit of effort, roughly:
-
-0. **T60** — a one-line prompt fix for a reproducible defect that writes *false
-   statements* into git history. Everything else on this list is an improvement;
-   this one is the product failing at the thing it exists to do.
-1. **T49** — trivial, and it fixes the discovery problem.
-2. **T25, T28** — config plus lint; together they unlock team adoption.
-3. **T19, T21** — the two blockers for corporate approval.
-4. **T62** — `--show-prompt`; with eight context sources feeding one request,
-   every task above is easier to build and review once you can see what is sent.
-5. **T57, T58** — cheap guards for the two mistakes this project keeps making by hand.
-6. **T40, T41** — the product expansion.
+- **No runtime dependencies in the core path.** The standard library alone is the trust story, so a task that needs a package is a task that needs a redesign or a `STRATEGY.md` decision first.
+- **No telemetry, analytics, remote config or phone-home.** Not opt-in and not behind a flag, because a tool that reads a private diff earns trust by having nothing to report.
+- **No hosted service and no server component.** The tool runs on your machine, which is what keeps the data-flow answer short enough to audit.
+- **Never stage silently from the Python entrypoint.** Wrappers may stage and the tool reads what you chose to stage, and losing that makes it unsafe to put behind a hook.
+- **No auto-push, no auto-PR, no auto-merge.** The commit is the last step, and everything after it is a decision the author has not made yet.
+- **Not a code reviewer or a linter for code.** It describes changes and does not judge them, which is the only reason it can be trusted on every commit.
+- **No gitmoji and no AI watermark by default.** Both stay opt-in, the provenance trailer included, because how a team signs its history is the team's choice.
+- **Do not rewrite history.** No amend-by-default and no interactive rebase driving, because a tool that rewrites history can destroy work the author cannot recover.
+- **Not a fork-per-team product.** Conventions are configuration, which is what Block E exists to build, and never patches to `_RULES`.

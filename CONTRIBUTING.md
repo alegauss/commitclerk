@@ -107,6 +107,13 @@ heart of the tool. When you propose a change to them:
 - Update `README.md` when you change a flag, an environment variable, or the
   default behavior.
 - Add an entry to `CHANGELOG.md` under `## [Unreleased]`.
+- **Do not hand-edit the files under `docs/`** — `ROADMAP.md`, `CHANGELOG.md` and
+  `IMPROVEMENTS.md` are written by [roadkeep](https://github.com/alegauss/roadkeep),
+  which derives the ids, the `→ §T<n>` pointers and the dependency annotations and
+  refuses an over-length field at insertion. CI runs `roadkeep lint` over them, so a
+  hand-edit fails the build. Propose a task in an issue instead; a maintainer runs
+  `roadkeep add`. The published `CHANGELOG.md` at the repository root is *not* governed
+  and is edited normally.
 
 ## Reporting bugs
 

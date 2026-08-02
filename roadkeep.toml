@@ -1,0 +1,73 @@
+# commitclerk's own configuration for `roadkeep` — the tool that owns writes to the four
+# files below, so the format is refused at insertion instead of remembered by an author.
+# Every number here was measured against this repository's backlog, not chosen.
+
+prefix = "T"
+
+# the pointer is the task id, derived on render. The outline this file used to carry
+# (§B.2, §J.8) numbered rationale by block letter, which is a second numbering to keep in
+# sync and a hole in the outline every time a section is deleted.
+ref_scheme = "id"
+
+# ids appear in the always-loaded guide too, and an id the scan misses is an id reused.
+id_sources = ["agents.md"]
+
+# what jumps the queue, in order — this replaces the "Suggested order (not binding)"
+# section the roadmap used to end with, which was advice no command could read. T60 first
+# because it is the product failing at the thing it exists to do; then discovery, then the
+# config-plus-lint pair that unlocks team adoption, then the two corporate blockers.
+priority = ["T60", "T49", "T25", "T28", "T19", "T21", "T62", "T57", "T58", "T40", "T41"]
+
+# where a defect in roadkeep itself is filed, for the `report --issue` handoff. Nothing is
+# ever sent from here: it only addresses the `gh` command a person runs after reading it.
+[report]
+upstream = "alegauss/roadkeep"
+
+[files]
+roadmap = "docs/ROADMAP.md"
+# the task ledger, indexed by block. NOT `CHANGELOG.md` at the repository root: that one
+# is release-shaped, published to PyPI, and grouped by version rather than by task — two
+# different artefacts that answer two different questions.
+changelog = "docs/CHANGELOG.md"
+improvements = "docs/IMPROVEMENTS.md"
+strategy = "docs/STRATEGY.md"
+
+[limits]
+# Measured over the 45 converted lines: longest symptom 83, why 177, rendered line 275.
+# The limits stay at roadkeep's own defaults, which are the P90 of two live corpora — a
+# limit set to this file's own maximum would refuse the next honest line by one character.
+symptom = 120
+why = 200
+line = 320
+
+# a section is prose, so its budget is words: 250 clears the longest rationale section
+# here (§T40, `--split`, at 226) and nothing more. The file this replaced grew to 28 KB
+# one honest paragraph at a time, which is what an unbudgeted rationale file does.
+section = 250
+prose = 88
+
+# the roadmap's other bullet. Measured on the nine non-goals: longest lead 47, why 178.
+[non_goals]
+lead = 60
+why = 200
+
+[budgets]
+# Files loaded on every turn, and what each may cost. Held by the exit code of `lint`, not
+# by a sentence at the bottom of the file it governs — which is the arrangement that let a
+# sibling project's guide reach 186 KB while declaring a 150-line rule about itself.
+# close to the reading (88 lines, 5186 bytes), and in bytes as well as lines: a line
+# budget alone is met by writing longer lines.
+"agents.md" = { lines = 95, bytes = 5600 }
+# CLAUDE.md only points at agents.md; a pointer that grew a second paragraph is a second
+# place the rules live.
+"CLAUDE.md" = { lines = 12, bytes = 600 }
+
+[markers]
+# 💭 first: it is what `add` defaults to, and almost everything here starts as an idea.
+open = ["💭", "📋", "⏳", "🛠"]
+# which of those still have their design to write — `pick --designed` sets them aside for
+# a caller that asked to execute rather than to plan.
+undesigned = ["💭"]
+shipped = "✅"
+# the ledger's other door: a line that left without shipping.
+retired = "🗑"
