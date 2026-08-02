@@ -43,7 +43,7 @@ budget can fit.*
 *This block is what turns "a neat script" into "a tool a company can approve".*
 
 - 💭 **T22** (deps: T53) **The no-egress claim is documented and never tested** — running the suite with socket creation monkeypatched to raise turns the claim into a build failure the moment it stops being true. → §T22
-- 💭 **T24** (deps: T19 ✅) **`SECURITY.md` does not say what leaves the machine** — the data flow now has two injection vectors, diff content and past commit messages replayed verbatim as worked examples, and a reader can audit neither. → §T24
+- 📋 **T24** (deps: T19 ✅) **`SECURITY.md` does not say what leaves the machine** — the data flow now has two injection vectors, diff content and past commit messages replayed verbatim as worked examples, and a reader can audit neither. → §T24
 
 ## Block E — Configuration & conventions
 
