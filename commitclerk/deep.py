@@ -18,6 +18,7 @@ stays testable string work and the caller keeps every decision about failure.
 from __future__ import annotations
 
 from .diffing import _split_header, chunk_path, count_changes, split_diff, truncate
+from .fencing import FENCE_RULE, fence
 
 # What one file may show its summarizer. The same number as the whole-commit
 # default, which is the point: a file too big to share a budget is given one.
@@ -47,7 +48,11 @@ SUMMARY_SYSTEM_PROMPT = (
     "edited and what it now covers. Never restate documented features as work this "
     "commit implemented.\n"
     "- If nothing meaningful changed (whitespace, reformatting, a mechanical rename), "
-    "say exactly that in one line."
+    "say exactly that in one line.\n"
+    # This call reads a whole file's diff, unfiltered and unbudgeted. It is the
+    # most exposed request the tool makes, not the least, and being cheap is no
+    # reason to frame it with weaker rules than the one that writes the message.
+    + FENCE_RULE
 )
 
 # Sits with the diff it describes, because it is the key to a notation that
@@ -62,7 +67,12 @@ DEEP_NOTE = (
 
 def summary_user_prompt(path: str, chunk: str, limit: int = SUMMARY_INPUT_CHARS) -> str:
     """The request for one file's summary."""
-    return "\n".join([f"File: {path}", "", "Unified diff for this file:", truncate(chunk, limit)])
+    return "\n".join([
+        f"File: {path}",
+        "",
+        "Unified diff for this file:",
+        fence("FILE DIFF", truncate(chunk, limit)),
+    ])
 
 
 def clean_summary(

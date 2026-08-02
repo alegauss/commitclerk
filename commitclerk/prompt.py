@@ -7,6 +7,7 @@ prose to be rewrapped.
 
 from __future__ import annotations
 
+from .fencing import FENCE_RULE, fence
 from .files import class_mix
 
 _RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
@@ -16,7 +17,8 @@ _RULES = """- Describe what THIS commit changes, not what the changed text says.
 - Bullets start with '- ' on their own line.
 - Read the change summary for facts the diff body cannot show. A rename is a move, never a rewrite; a mode change is a permission change; a binary file has a size change and no readable content, so never invent what is inside one.
 - Each changed file is annotated with its class: code, test, docs, generated, config, vendor, binary. Pick the type prefix from the classes that are the point of the commit — only docs means docs:, only test means test:, only config or generated means chore: or build:. Never make a generated, vendored or binary file the subject of the message and never narrate its contents; when such files accompany a real change, mention them in at most one bullet as a consequence ("regenerated the lockfile").
-- No markdown headers, no code fences, no emojis."""
+- No markdown headers, no code fences, no emojis.
+""" + FENCE_RULE
 
 
 def _system_prompt(*, body_only: bool) -> str:
@@ -96,7 +98,10 @@ def build_user_prompt(
         # Immediately above the diff, because it is the key to a notation that
         # only appears inside it: read anywhere else it explains nothing.
         parts += ["", deep]
-    parts += ["", "Unified diff:", diff]
+    # Fenced: this is the region a contributor writes. The sentinel is named
+    # after the digest of the diff itself, so nothing inside can close it early
+    # and continue as if it were the prompt.
+    parts += ["", "Unified diff:", fence("DIFF", diff)]
     if guard:
         # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
         # before the diff, 48 lines of changelog prose came after it and won — the

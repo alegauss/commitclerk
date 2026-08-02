@@ -15,6 +15,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from .fencing import fence, fence_overhead
+
 # 200 is enough to see a convention and short enough that `git log` stays instant.
 HISTORY_DEPTH = 200
 # The whole block, header and footer included. Subtracted from the diff budget by
@@ -265,6 +267,8 @@ def similar_commits(
 # Emphatic on purpose. Past commit messages are the one thing in this prompt that
 # looks exactly like the answer, and the tool's founding failure is describing work
 # from *earlier* commits as work done in this one.
+_EXAMPLES_LABEL = "COMMIT HISTORY"
+
 _EXAMPLES_HEADER = (
     "How this repo writes commit messages about these same files. Each block below "
     "is a DIFFERENT, EARLIER commit, shown only so you can match its voice, "
@@ -288,7 +292,9 @@ def worked_examples(
     the repository ages and costs no extra API call.
     """
     blocks = []
-    used = len(_EXAMPLES_HEADER)
+    # The fence is charged against the same budget as the examples: it is sent
+    # on every run that has any, so leaving it out would put the block over.
+    used = len(_EXAMPLES_HEADER) + fence_overhead(_EXAMPLES_LABEL)
     for record in similar_commits(records, paths, limit=limit):
         subject, body = parse_commit(record)
         if not subject:
@@ -301,7 +307,11 @@ def worked_examples(
             break
         blocks.append(block)
         used += len(block) + 2
-    return "\n\n".join([_EXAMPLES_HEADER] + blocks) if blocks else ""
+    if not blocks:
+        return ""
+    # The header stays outside: it is the tool instructing the model about what
+    # follows, and a fence tells the model not to obey what is inside it.
+    return _EXAMPLES_HEADER + "\n\n" + fence(_EXAMPLES_LABEL, "\n\n".join(blocks))
 
 
 def known_scopes(records: list[str]) -> list[str]:

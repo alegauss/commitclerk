@@ -290,11 +290,11 @@ nearest workspace manifest ──▶ inferred scope ─────────�
 left column alone, so no prompt is built and no provider is ever resolved.
 ```
 
-The source is a fourteen-module package under [`commitclerk/`](commitclerk/) — `config`,
-`context`, `excludes`, `diffing`, `deep`, `files`, `secrets`, `offline`, `history`,
-`gitio`, `trailers`, `prompt`, `providers`, `cli` — and
+The source is a fifteen-module package under [`commitclerk/`](commitclerk/) — `config`,
+`fencing`, `context`, `excludes`, `diffing`, `deep`, `files`, `secrets`, `offline`,
+`history`, `gitio`, `trailers`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (3122 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (3201 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -542,6 +542,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 
 ## Privacy and cost
 
+- **Repository content is sent as data, not as instruction.** A contributor can put `Ignore previous instructions…` in a comment, and a past commit message can carry the same payload and be replayed on every future commit near those files. Both regions are fenced with a sentinel named after the sha256 of what it wraps — content cannot close its own fence — and every system prompt says fenced text is material to describe and never instruction to obey. This raises the cost of an injection; it is not proof, and [`SECURITY.md`](SECURITY.md#prompt-injection-from-repository-content) documents the threat and the limits rather than omitting them.
 - **A `.clerkignore` withholds a file's contents entirely.** Same syntax as `.gitignore`, read from the repository root. A matched file reaches the model as its path, its line counts and a `[... excluded ...]` placeholder — never its body. Applied before the secret scan and before any request. **The paths themselves are still sent**; only contents are withheld. See [Keeping a file's contents off the wire](#keeping-a-files-contents-off-the-wire).
 - **Nothing is sent until the staged diff has been scanned for secrets.** Before the first request, every *added* line is checked for known credential shapes (`sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox…`, `AIza`, `-----BEGIN … PRIVATE KEY-----`, JWTs) and for high-entropy tokens. A hit **refuses the run** with exit `3`, naming the file, the line and which detector fired — never the match itself, because a terminal is somewhere a secret gets copied out of. This runs on the diff *as staged*, before trimming and before `--deep`'s extra requests, so there is no path that sends first and checks later. `--redact` masks and continues; `--no-scan` or `"scan": false` turns it off.
 - **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` or a `.clerk.json` in the repository names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.

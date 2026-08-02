@@ -61,6 +61,12 @@ With assisted_by on, one more trailer records provenance:
 --offline, which called none. Off by default: an unrequested watermark in
 someone else's git history is a non-goal.
 
+`fencing.py` wraps the two regions repository content controls - the staged diff
+and the past commit messages replayed as worked examples - in sentinels named
+after the sha256 of what they wrap, and every system prompt says fenced text is
+material to describe and never instruction to obey. See SECURITY.md for the
+threat model and for what this does not do.
+
 Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
 the model used to echo it as "feat: implement <feature>" even though the feature
@@ -219,6 +225,15 @@ from .secrets import (  # noqa: E402
     scan_line,
     shannon_entropy,
 )
+from .fencing import (  # noqa: E402
+    BEGIN,
+    END,
+    FENCE_RULE,
+    TAG_CHARS,
+    fence,
+    fence_overhead,
+    region_tag,
+)
 from .excludes import (  # noqa: E402
     CLERKIGNORE,
     MAX_NAMED,
@@ -353,4 +368,6 @@ __all__ = [
     "read_clerkignore",
     "excluded_paths",
     "assisted_value",
+    "fence",
+    "FENCE_RULE",
 ]
