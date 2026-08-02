@@ -24,22 +24,6 @@ branch name, and the author's own intent.
 
 ## Block D — Trust & safety
 
-### §T19 The scan is the difference between "neat" and "approved"
-
-A developer stages a `.env` by accident and runs `clerk`. Today, that secret is
-transmitted to a third-party API before the commit even exists — and unlike the
-commit, that transmission cannot be undone with `git reset`. The tool is
-*upstream* of every secret-scanning hook a team already runs, which makes it their
-blind spot.
-
-A pre-flight scan is well-trodden ground and needs no dependency: known prefixes
-(`sk-`, `ghp_`, `github_pat_`, `AKIA`, `xoxb-`, `-----BEGIN … PRIVATE KEY-----`,
-`eyJ` JWTs), plus a Shannon-entropy check on long unbroken tokens on added lines
-only. Default **refuse** with the file and line named; `--redact` masks the match
-and continues; `--no-scan` for the person who knows better. False positives are
-acceptable here in a way false negatives are not, and `.clerkignore` (§T20) is the
-escape hatch that keeps the false-positive cost low.
-
 ### §T20 `.clerkignore`
 
 `.gitignore` semantics, one file, ~20 lines of `fnmatch`. Matching files still
@@ -97,6 +81,32 @@ diff and history content are data and never instruction, and validate the output
 shape (T29) rather than trusting it. A corpus case in T50 should be a history
 containing a deliberately adversarial commit message. Nobody in this niche
 documents this. Doing so is a credibility asset, not an admission.
+
+### §T19 The scan is the difference between "neat" and "approved"
+
+A developer stages a `.env` by accident and runs `clerk`. That secret reaches a
+third-party API before the commit exists, and unlike the commit it cannot be undone with
+`git reset`. The tool sits *upstream* of every secret-scanning hook a team already runs,
+which makes it their blind spot.
+
+No dependency needed: known prefixes (`sk-`, `ghp_`, `github_pat_`, `AKIA`, `xoxb-`,
+`-----BEGIN ... PRIVATE KEY-----`, `eyJ` JWTs) plus Shannon entropy on long unbroken
+tokens, both on **added lines only** (`+`, never `+++`) - a secret being removed is
+already in history.
+
+It runs on the **raw staged diff**, before demotion and before the budget: every later
+point is downstream of a request, and `--deep` sends each oversized file in full in its
+own call.
+
+The detectors are not equally trusted. Prefixes run everywhere; entropy is skipped on
+files classified `generated`, `vendor` and `binary`, where lockfile hashes and minified
+bundles live and where nearly every false positive would come from.
+
+Default **refuse**, exit **3**, so a wrapper can tell "you nearly leaked a key" from
+"your API key is not set"; the notice names file, line and detector, never the match.
+`--redact` masks and continues - protecting the wire, not the repository, and it must
+say so. `--no-scan` and `"scan": false` for the person who knows better; T20's
+`.clerkignore` lowers a false positive's cost later.
 
 ## Block E — Configuration & conventions
 
