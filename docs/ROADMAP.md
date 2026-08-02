@@ -15,14 +15,15 @@ Shipped tasks are *removed* from this file — they are not marked ✅ here.
 
 ## The thesis
 
-commitclerk today is a seven-module package, built into one ~1 400-line standalone file,
+commitclerk today is a seven-module package, built into one ~1 650-line standalone file,
 with one genuinely differentiated idea: **it refuses to describe documentation prose as
 work that was implemented.**
 Everything below is an answer to one of three questions:
 
 1. **Will it scale technically?** Provider portability is done (Block **A** shipped
-   in full). The tool still knows nothing about the repo beyond the staged diff, and
-   a large diff is only trimmed. Blocks **B** and **C** fix the rest of the ceiling.
+   in full), and the tool now reads the repository around the diff: its house style,
+   its own past commits about the same files, its workspace layout. What is left in
+   Block **B** needs a config file first; Block **C** is the commit no budget fits.
 2. **Can a team actually adopt it?** A tool that ships a raw diff to a third party
    with no redaction, no config file, no offline path and no `commit-msg`
    validation cannot be mandated by anyone. Blocks **D**, **E**, **F** and **G**
@@ -56,8 +57,10 @@ Everything below is an answer to one of three questions:
 
 ## Block B — Context beyond the diff
 
-*The tool's founding insight is that the diff alone misleads. That insight is
-under-exploited: the repository is full of cheap, local, zero-cost context.* → [§B](IMPROVEMENTS.md#b--context-beyond-the-diff)
+*The tool's founding insight is that the diff alone misleads. The history now
+answers "how does this repo write commits" and the tree answers "which package is
+this". What is left is intent — which lives in the branch name and in the author's
+head, and needs somewhere to configure it.* → [§B](IMPROVEMENTS.md#b--context-beyond-the-diff)
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
@@ -85,7 +88,8 @@ commit no budget can fit.* → [§C](IMPROVEMENTS.md#c--diff-intelligence)
 | T21 | 💭 | `--offline`: a deterministic, LLM-free message (type from file classes, scope from paths, bullets grouped by directory). No key, no network, no failure mode — so a hook or CI job can never hard-block a commit. → §D.3 | — |
 | T22 | 💭 | CI job that runs the suite with socket creation monkeypatched to raise, proving there is no accidental egress path outside the one documented call. → §D.4 | T53 |
 | T23 | 💭 | Opt-in `Assisted-by: commitclerk <version> (<model>)` trailer for teams that need AI-assistance provenance in history. Off by default. → §D.5 | T25 |
-| T24 | 💭 | A real data-flow / threat-model section in `SECURITY.md`: exactly what leaves the machine, what never does, what an attacker controlling the model output could attempt (prompt injection *from diff content* into the commit message is a genuine vector). → §D.1 | T19 |
+| T24 | 💭 | A real data-flow / threat-model section in `SECURITY.md`: exactly what leaves the machine, what never does, what an attacker controlling the model output could attempt. Two injection vectors now, not one — *diff content*, and *past commit messages* replayed verbatim as worked examples. → §D.1 | T19 |
+| T61 | 📋 | **Split the history kill switch.** `--no-house-style` disables two things with very different data-flow: the fingerprint (counts and shapes) and the worked examples (past message text, verbatim). A team can want the first without the second. Add `--no-examples`, keep the combined switch. → §D.6 | — |
 
 ## Block E — Configuration & conventions
 
@@ -115,6 +119,8 @@ is `git commit --amend`.* → [§F](IMPROVEMENTS.md#f--interaction--ux)
 | T34 | 💭 | `--amend`: build the diff from `HEAD` plus the staged changes and pass the existing message as context, instead of describing only the fixup. → §F.4 | — |
 | T35 | 💭 | Colour output (respecting `NO_COLOR` and non-TTY) and a documented error taxonomy with distinct exit codes per failure class. Today an API failure and a git failure are indistinguishable to a script. → §F.5 | — |
 | T59 | 💭 | `--max-output-tokens`: a provider-agnostic budget for the *reply*. Anthropic's is a hard-coded 8 192 and OpenAI's is unset, so a verbose model can burn the budget before writing prose and the run fails with "returned no message text". → §F.6 | — |
+| T62 | 📋 | **`--show-prompt`** — print the fully assembled request and exit, no API call. Eight sources now feed one prompt (rules, house style, examples, file classes, class mix, scope, summary, guard, diff) and there is no way to see what was actually sent. → §F.7 | — |
+| T63 | 💭 | Budget the whole *request*, not just the diff. `--max-chars` governs the diff alone; the change summary sits outside it by design, and rules, house style, examples and guard sit beside it. Nothing bounds their sum, so a small-context local model can be overrun by context the user never asked for. → §F.6 | T33 |
 
 ## Block G — Git-native integration
 
@@ -163,7 +169,9 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 | T53 | 💭 | A fake-provider test double so end-to-end paths (commit, hook, split) are testable with no API key and no network. → §J.3 | — |
 | T54 | 💭 | A `--help` snapshot test, so a CLI surface change is always a reviewed diff and never an accident. → §J.4 | — |
 | T57 | 💭 | Assert every user-facing string is ASCII. Two em dashes shipped in `--help` and a retry notice rendered as `?` on a cp1252 Windows console before being caught by hand. → §J.6 | — |
-| T58 | 💭 | Docs-drift test: every flag in `argparse` and every provider in `PROVIDERS` must appear in both READMEs and `docs/llms.txt`. Six documentation surfaces are updated by hand per shipped flag. → §J.7 | T54 |
+| T58 | 💭 | Docs-drift test: every flag in `argparse` and every provider in `PROVIDERS` must appear in both READMEs and `docs/llms.txt`, and the `dist/commitclerk.py` line count quoted in `README.md` must match the artifact. Six documentation surfaces are updated by hand per shipped flag; the line count went stale three times in one afternoon. → §J.7 | T54 |
+| T60 | 📋 | **Instruction examples leak into the output.** `_RULES` illustrates a rule with `("regenerated the lockfile")`, and the model emits that phrase verbatim — three generations out of three produced a false "Regenerated the lockfile" bullet on commits containing no lockfile. The tool's whole premise is not writing false history. → §J.8 | — |
+| T64 | 💭 | `.gitattributes` pinning text files to LF. Every `git add` on Windows warns "CRLF will be replaced by LF", and `build_single_file.py --check` compares artifact text — a line-ending difference between contributors is a CI failure nobody can reproduce locally. → §J.9 | — |
 
 ---
 
@@ -171,10 +179,13 @@ output got better or worse.* → [§J](IMPROVEMENTS.md#j--quality-engineering)
 
 If you want the highest value per unit of effort, roughly:
 
+0. **T60** — a one-line prompt fix for a reproducible defect that writes *false
+   statements* into git history. Everything else on this list is an improvement;
+   this one is the product failing at the thing it exists to do.
 1. **T49** — trivial, and it fixes the discovery problem.
 2. **T25, T28** — config plus lint; together they unlock team adoption.
 3. **T19, T21** — the two blockers for corporate approval.
-4. **T8** — the quality jump nobody else in this niche ships, now that the
-   fingerprint it builds on has landed.
+4. **T62** — `--show-prompt`; with eight context sources feeding one request,
+   every task above is easier to build and review once you can see what is sent.
 5. **T57, T58** — cheap guards for the two mistakes this project keeps making by hand.
 6. **T40, T41** — the product expansion.
