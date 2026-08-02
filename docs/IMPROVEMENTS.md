@@ -22,6 +22,30 @@ branch name, and the author's own intent.
 
 ## Block C — Diff intelligence
 
+### §T65 The removed line read as an accomplishment
+
+The founding insight is that the diff alone misleads, and the doc guard is the first
+place that was made concrete: prose describing shipped work is not work that was
+implemented. This is the same misreading one step further in — not prose that describes
+a change, but prose the change *deletes*.
+
+Measured on a real commit. The staged diff for a `docs/ROADMAP.md` was two deletions and
+no insertions, and the only occurrence of one project's name anywhere in it sat on a `-`
+line: the backlog entry being retired. The generated body read *"updates documentation
+to reflect the adoption of the new standard in ... and Cursarei"* — asserting as
+accomplished the one thing that commit recorded as abandoned. The author caught it and
+amended before pushing; a commit read less closely keeps it.
+
+What makes this a line rather than a prompt tweak is that the failure is directional. A
+unified diff marks a removed line with one character, and that character carries the
+whole difference between "we did this" and "we stopped doing this". Every other signal
+in the hunk — the words, the file, the block heading — reads identically either way, so
+nothing else in the input can correct it.
+
+The `-m` title was right throughout, because the author wrote it. So what needs the
+guard is the body: what a removed line contributes is the fact of its removal, and never
+its content as a claim.
+
 ## Block D — Trust & safety
 
 ### §T20 `.clerkignore`
@@ -31,20 +55,6 @@ appear to the model as `path/to/secret.env (excluded, 12 lines changed)` so the
 message can mention that they changed without their contents leaving the machine.
 This is what lets a security team say yes to a repo that has three sensitive files
 rather than no to the whole repo.
-
-### §T21 Offline mode makes the tool safe to depend on
-
-Once commitclerk is behind a `prepare-commit-msg` hook (T36), an API outage,
-an expired key or a flight without wifi becomes a *broken git workflow*. That is
-how a tool gets uninstalled.
-
-`--offline` produces a decent deterministic message with no network: type from the
-file-class mix narrowed to the types the house-style fingerprint found in this
-repo, scope from the workspace-manifest inference the online path already uses,
-and a body of grouped bullets (`- Update 3 files under src/api/`). Every input it
-needs is already computed locally on every run. It is not as good as the model,
-and it is infinitely better than an error at the moment someone is trying to
-commit — which is why the hook falls back to it automatically on any failure.
 
 ### §T22 Prove the no-egress claim
 
@@ -81,6 +91,26 @@ diff and history content are data and never instruction, and validate the output
 shape (T29) rather than trusting it. A corpus case in T50 should be a history
 containing a deliberately adversarial commit message. Nobody in this niche
 documents this. Doing so is a credibility asset, not an admission.
+
+### §T21 Offline mode makes the tool safe to depend on
+
+Once commitclerk is behind a `prepare-commit-msg` hook (T36), an API outage, an expired
+key or a flight without wifi becomes a *broken git workflow*. That is how a tool gets
+uninstalled.
+
+`--offline` composes what every run already computes -- the file classes, the
+workspace-manifest scope, the history's own type and scope vocabulary, `git --stat
+--summary` -- and adds no new git call and no second inference to keep in step with the
+first.
+
+**It never guesses `feat:` or `fix:`.** Those two state intent, which is the one thing no local signal carries, and writing history that did not happen is the failure this product exists to prevent. The type comes only from what the classes prove -- `docs:`, `test:`, `build:` -- narrowed to the types this repo's history actually uses, and otherwise falls to `chore:`, which claims nothing about behaviour. The body is bullets grouped by directory (`- Update 3 files under src/api/`), their verbs read off the summary's create, delete and rename markers, capped at the same 2-6 the prompt asks of the model.
+
+It resolves before the provider does, so a missing key is not an error. No `--deep`, and
+no secret scan: that scan exists to stop a transmission and there is none.
+
+The fallback is **not** automatic on the CLI path. Quietly substituting a worse message
+for the one the author asked for is the tool deciding for them; T36's hook is what opts
+in.
 
 ## Block E — Configuration & conventions
 
