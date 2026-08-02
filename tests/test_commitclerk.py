@@ -1068,6 +1068,239 @@ class TestTicketSettings(unittest.TestCase):
         self.assertIs(_wants_refs({"ticket_refs": False, "ticket_pattern": r"X-\d+"}), False)
 
 
+def _diff(path, *added, start=1):
+    """A minimal one-file diff whose hunk starts at `start` on the new side."""
+    body = "".join("+" + line + "\n" for line in added)
+    return (
+        f"diff --git a/{path} b/{path}\n"
+        f"--- a/{path}\n+++ b/{path}\n"
+        f"@@ -{start},0 +{start},{len(added)} @@\n" + body
+    )
+
+
+class TestShannonEntropy(unittest.TestCase):
+    def test_a_single_repeated_character_carries_no_information(self):
+        self.assertEqual(commitclerk.shannon_entropy("aaaaaaaa"), 0.0)
+
+    def test_an_empty_string_is_zero_rather_than_an_error(self):
+        self.assertEqual(commitclerk.shannon_entropy(""), 0.0)
+
+    def test_two_equally_frequent_symbols_are_one_bit(self):
+        self.assertAlmostEqual(commitclerk.shannon_entropy("abab"), 1.0)
+
+
+class TestLooksRandom(unittest.TestCase):
+    """The heuristic's whole job is not firing on the tokens a diff is full of."""
+
+    def test_a_mixed_case_alphanumeric_secret_fires(self):
+        self.assertTrue(commitclerk.looks_random("Xq7Bn2Vf9Kd4Lp1Zt6Ws3Yc8Hr5Jm0G"))
+
+    def test_a_lowercase_hex_digest_does_not(self):
+        # A git SHA and a checksum look exactly like a hex secret; firing on
+        # every one of them is what gets a scanner switched off for good.
+        self.assertFalse(commitclerk.looks_random("da39a3ee5e6b4b0d3255bfef95601890afd80709"))
+
+    def test_a_snake_case_identifier_does_not(self):
+        self.assertFalse(
+            commitclerk.looks_random("test_the_house_style_block_comes_before_the_diff")
+        )
+
+    def test_an_upper_snake_constant_does_not(self):
+        self.assertFalse(commitclerk.looks_random("MAX_EXAMPLE_BODY_CHARACTERS_ALLOWED"))
+
+    def test_a_path_like_token_does_not(self):
+        self.assertFalse(commitclerk.looks_random("commitclerk/scripts/build_single_file"))
+
+    def test_a_repetitive_token_is_below_the_threshold(self):
+        self.assertFalse(commitclerk.looks_random("Ab1Ab1Ab1Ab1Ab1Ab1Ab1Ab1Ab1Ab1"))
+
+
+class TestScanLine(unittest.TestCase):
+    def test_each_named_credential_shape_is_recognised(self):
+        cases = {
+            "openai-api-key": "OPENAI_API_KEY=sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6",
+            "github-token": "token: ghp_Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6Hj5Gy2",
+            "github-pat": "github_pat_11ABCDEFG0aB3kD9xQ2lM7pV4rT8zC1n",
+            "aws-access-key-id": "aws_access_key_id = AKIAIOSFODNN7EXAMPLE",
+            "slack-token": "SLACK=xoxb-2094-3841-Ab3Kd9Xq2Lm7",
+            "google-api-key": "key=AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r",
+            "private-key": "-----BEGIN RSA PRIVATE KEY-----",
+        }
+        for detector, line in cases.items():
+            with self.subTest(detector=detector):
+                found = [name for name, _s, _e in commitclerk.scan_line(line)]
+                self.assertIn(detector, found)
+
+    def test_ordinary_code_is_left_alone(self):
+        for line in (
+            "    return house_style(records, limit=MAX_HOUSE_STYLE_CHARS)",
+            "# See https://github.com/alegauss/commitclerk/blob/main/README.md",
+            "    self.assertEqual(commitclerk.prog_name('commitclerk.py'), 'commitclerk')",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(commitclerk.scan_line(line), [])
+
+    def test_a_jwt_is_reported_once_and_as_a_jwt(self):
+        # It is also a high-entropy string; the longest match starting earliest
+        # wins, so it is not reported twice.
+        line = (
+            "auth = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ."
+            "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+        )
+        hits = commitclerk.scan_line(line)
+        self.assertEqual([name for name, _s, _e in hits], ["json-web-token"])
+
+    def test_the_entropy_half_can_be_switched_off_on_its_own(self):
+        line = "SECRET = 'Xq7Bn2Vf9Kd4Lp1Zt6Ws3Yc8Hr5Jm0G'"
+        self.assertTrue(commitclerk.scan_line(line, entropy=True))
+        self.assertEqual(commitclerk.scan_line(line, entropy=False), [])
+
+    def test_a_prefix_still_fires_with_the_entropy_half_off(self):
+        line = "AKIAIOSFODNN7EXAMPLE"
+        self.assertTrue(commitclerk.scan_line(line, entropy=False))
+
+
+class TestAddedLines(unittest.TestCase):
+    def test_line_numbers_come_off_the_hunk_header(self):
+        diff = _diff("src/app.py", "first", "second", start=41)
+        self.assertEqual(
+            list(commitclerk.added_lines(diff)),
+            [("src/app.py", 41, "first"), ("src/app.py", 42, "second")],
+        )
+
+    def test_context_lines_advance_the_count_and_removals_do_not(self):
+        diff = (
+            "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n"
+            "@@ -10,3 +10,3 @@\n context\n-gone\n+arrived\n"
+        )
+        self.assertEqual(list(commitclerk.added_lines(diff)), [("a.py", 11, "arrived")])
+
+    def test_the_file_headers_are_never_mistaken_for_added_lines(self):
+        diff = _diff("a.py", "x")
+        self.assertEqual([text for _p, _l, text in commitclerk.added_lines(diff)], ["x"])
+
+    def test_every_file_in_a_multi_file_diff_is_walked(self):
+        diff = _diff("a.py", "one") + _diff("b.py", "two")
+        self.assertEqual(
+            [(path, text) for path, _l, text in commitclerk.added_lines(diff)],
+            [("a.py", "one"), ("b.py", "two")],
+        )
+
+
+class TestScanDiff(unittest.TestCase):
+    def test_a_finding_names_where_and_what_fired(self):
+        diff = _diff(".env", "OPENAI_API_KEY=sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6", start=4)
+        self.assertEqual(
+            commitclerk.scan_diff(diff),
+            [commitclerk.Finding(".env", 4, "openai-api-key")],
+        )
+
+    def test_a_removed_secret_is_already_in_history_and_is_not_a_finding(self):
+        diff = (
+            "diff --git a/.env b/.env\n--- a/.env\n+++ b/.env\n"
+            "@@ -1,1 +1,0 @@\n-KEY=sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6\n"
+        )
+        self.assertEqual(commitclerk.scan_diff(diff), [])
+
+    def test_entropy_is_skipped_in_the_classes_where_the_hashes_live(self):
+        diff = _diff("package-lock.json", '"integrity": "Xq7Bn2Vf9Kd4Lp1Zt6Ws3Yc8Hr5Jm0G"')
+        self.assertTrue(commitclerk.scan_diff(diff))
+        self.assertEqual(commitclerk.scan_diff(diff, {"package-lock.json": "generated"}), [])
+
+    def test_a_named_credential_still_fires_in_those_classes(self):
+        # An AKIA in a vendored file is a leak like any other; only the
+        # heuristic is held back there, never the high-precision patterns.
+        diff = _diff("vendor/aws.js", "var k = 'AKIAIOSFODNN7EXAMPLE';")
+        self.assertTrue(commitclerk.scan_diff(diff, {"vendor/aws.js": "vendor"}))
+
+    def test_a_clean_diff_finds_nothing(self):
+        diff = _diff("commitclerk/cli.py", "    return prog_name(sys.argv[0])")
+        self.assertEqual(commitclerk.scan_diff(diff), [])
+
+
+class TestRedactDiff(unittest.TestCase):
+    def test_the_secret_is_gone_and_the_diff_still_parses(self):
+        diff = _diff(".env", "KEY=sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6")
+        out, masked = commitclerk.redact_diff(diff)
+        self.assertEqual(masked, 1)
+        self.assertNotIn("sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6", out)
+        self.assertIn(commitclerk.MASK, out)
+        self.assertEqual(commitclerk.scan_diff(out), [])
+
+    def test_two_secrets_on_one_line_are_both_masked(self):
+        diff = _diff(".env", "A=AKIAIOSFODNN7EXAMPLE B=AKIAJPEXAMPLEKEY7XYZ")
+        out, masked = commitclerk.redact_diff(diff)
+        self.assertEqual(masked, 2)
+        self.assertNotIn("AKIA", out)
+
+    def test_surrounding_text_and_line_endings_survive(self):
+        diff = _diff(".env", "KEY=AKIAIOSFODNN7EXAMPLE  # do not commit")
+        out, _masked = commitclerk.redact_diff(diff)
+        self.assertIn("+KEY=" + commitclerk.MASK + "  # do not commit\n", out)
+
+    def test_removed_and_context_lines_are_never_rewritten(self):
+        diff = (
+            "diff --git a/.env b/.env\n--- a/.env\n+++ b/.env\n"
+            "@@ -1,2 +1,2 @@\n-OLD=AKIAIOSFODNN7EXAMPLE\n KEEP=AKIAJPEXAMPLEKEY7XYZ\n"
+        )
+        out, masked = commitclerk.redact_diff(diff)
+        self.assertEqual((out, masked), (diff, 0))
+
+    def test_a_clean_diff_comes_back_byte_for_byte(self):
+        diff = _diff("a.py", "x = 1")
+        self.assertEqual(commitclerk.redact_diff(diff), (diff, 0))
+
+
+class TestScanNotices(unittest.TestCase):
+    def test_the_refusal_names_the_place_and_never_the_secret(self):
+        diff = _diff(".env", "KEY=sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6", start=4)
+        notice = commitclerk.refusal_notice(commitclerk.scan_diff(diff))
+        self.assertIn(".env:4 (openai-api-key)", notice)
+        self.assertNotIn("sk-Ab3Kd9Xq2Lm7Pv4Rt8Zc1Nf6", notice)
+        self.assertIn("nothing was sent", notice)
+
+    def test_it_names_both_ways_out(self):
+        notice = commitclerk.refusal_notice([commitclerk.Finding(".env", 1, "x")])
+        self.assertIn("--redact", notice)
+        self.assertIn("--no-scan", notice)
+
+    def test_a_long_list_is_summarised_rather_than_scrolled(self):
+        findings = [commitclerk.Finding(".env", n, "x") for n in range(1, 26)]
+        notice = commitclerk.refusal_notice(findings)
+        self.assertIn("25 possible secrets", notice)
+        self.assertIn("... and 15 more.", notice)
+
+    def test_one_finding_is_not_reported_in_the_plural(self):
+        notice = commitclerk.refusal_notice([commitclerk.Finding(".env", 1, "x")])
+        self.assertIn("1 possible secret;", notice)
+
+    def test_nothing_found_produces_no_notice(self):
+        self.assertEqual(commitclerk.refusal_notice([]), "")
+        self.assertEqual(commitclerk.redaction_notice(0), "")
+
+    def test_the_redaction_notice_refuses_to_overpromise(self):
+        # It protects the request, not the repository, and has to say so.
+        notice = commitclerk.redaction_notice(2)
+        self.assertIn("2 possible secrets", notice)
+        self.assertIn("commit is unchanged and still contains them", notice)
+        self.assertIn("still contains it", commitclerk.redaction_notice(1))
+
+    def test_every_notice_is_ascii(self):
+        findings = [commitclerk.Finding(".env", n, "d") for n in range(30)]
+        commitclerk.refusal_notice(findings).encode("ascii")
+        commitclerk.redaction_notice(3).encode("ascii")
+
+
+class TestScanSetting(unittest.TestCase):
+    def test_the_key_is_a_recognised_setting(self):
+        self.assertIs(commitclerk.SETTINGS["scan"], bool)
+
+    def test_it_is_the_one_switch_whose_default_is_on_for_safety(self):
+        self.assertIs(commitclerk.layered(None, None, None, None, True), True)
+        self.assertIs(commitclerk.layered(False, None, None, None, True), False)
+
+
 class TestWantsExamples(unittest.TestCase):
     """One `git log`, two data flows, and a switch for each."""
 

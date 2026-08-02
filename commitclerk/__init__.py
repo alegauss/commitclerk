@@ -19,6 +19,7 @@ single-file build with `python commitclerk.py`):
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     clerk --no-house-style      # do not copy this repo's own commit conventions
     clerk --no-examples         # keep the fingerprint, send no past message text
+    clerk --redact              # mask a staged secret instead of refusing to send
     clerk --context "reverts the caching experiment"   # why, in one sentence
     git clerk                   # same tool, as a native git subcommand
 
@@ -34,8 +35,8 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style, examples, deep, ticket_refs, ticket_pattern). A setting is taken
-from the first place that has it:
+house_style, examples, scan, deep, ticket_refs, ticket_pattern). A setting is
+taken from the first place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
@@ -70,6 +71,12 @@ the smaller files' real diffs, so the tail of a 5 000-line change is described
 rather than trimmed away. One extra request per oversized file, none when the
 diff already fits, and a summary that fails leaves that file to be trimmed as
 usual - never invented.
+
+`secrets.py` reads the staged diff's added lines before any request is made and
+refuses (exit 3) when a line carries a known credential shape or a high-entropy
+token, naming the file, the line and the detector but never the match. `--redact`
+masks them in the request instead; the commit still contains them. `--no-scan`
+or `"scan": false` turns it off.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -178,6 +185,23 @@ from .history import (  # noqa: E402
     trailer_keys,
     worked_examples,
 )
+from .secrets import (  # noqa: E402
+    ENTROPY_TOKEN,
+    MASK,
+    MAX_REPORTED,
+    MIN_ENTROPY,
+    PREFIX_PATTERNS,
+    UNSCANNED_FOR_ENTROPY,
+    Finding,
+    added_lines,
+    looks_random,
+    redact_diff,
+    redaction_notice,
+    refusal_notice,
+    scan_diff,
+    scan_line,
+    shannon_entropy,
+)
 from .gitio import (  # noqa: E402
     MAX_SUMMARY_CHARS,
     get_branch_name,
@@ -275,4 +299,7 @@ __all__ = [
     "get_staged_files",
     "get_staged_summary",
     "post_json",
+    "scan_diff",
+    "redact_diff",
+    "refusal_notice",
 ]

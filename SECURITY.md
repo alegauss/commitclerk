@@ -35,6 +35,24 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 
 ## Where your data goes
 
+**Before any of it, the staged diff is scanned.** Every *added* line is checked
+against known credential shapes (`sk-`, `gh[pousr]_`, `github_pat_`,
+`AKIA`/`ASIA`, `xox[baprs]-`, `AIza`, `-----BEGIN ... PRIVATE KEY-----`, JWTs)
+and against a Shannon-entropy heuristic on long credential-shaped tokens. A hit
+**refuses the run** with exit `3` and makes no request at all; the notice names
+the file, the line and which detector fired, and never the matched text. The
+scan reads the diff **as staged** — before demotion, before the `--max-chars`
+budget and before `--deep`'s per-file calls — so there is no ordering in which
+something is sent and then checked. The heuristic half is skipped on files
+classified `generated`, `vendor` and `binary`; the credential shapes are not.
+
+`--redact` replaces each match with `[redacted]` in the request and continues.
+It protects **the request, not the repository**: the staged content is untouched
+and the resulting commit still contains the secret, which the notice states.
+`--no-scan`, or `"scan": false` in a config file, turns the scan off entirely —
+the one setting here whose default is on, because the cost of being wrong is a
+credential at a third party and cannot be undone.
+
 `commitclerk` makes exactly **one** network request per run: an HTTPS POST of the
 prompt (the staged diff, the staged file list, the rules, a measured summary of
 your recent commit *messages*, and two or three past commit messages as style
@@ -123,9 +141,9 @@ written by the tool:
 - `.clerk.json` at the repository root (`git rev-parse --show-toplevel`)
 - `~/.config/clerk/config.json`
 
-Only ten keys are recognised — `provider`, `model`, `base_url`, `timeout`,
-`max_chars`, `house_style`, `examples`, `deep`, `ticket_refs`, `ticket_pattern` —
-and each is type-checked before it takes effect; a
+Only eleven keys are recognised — `provider`, `model`, `base_url`, `timeout`,
+`max_chars`, `house_style`, `examples`, `scan`, `deep`, `ticket_refs`,
+`ticket_pattern` — and each is type-checked before it takes effect; a
 key that is not one of those is reported on stderr and ignored. **API keys are
 not settings and are never read from either file**, so a config file committed to
 a repository cannot carry, capture or redirect a credential. Nothing from these
@@ -143,6 +161,13 @@ goes into them.
   [Privacy and cost](README.md#privacy-and-cost). Do not use `commitclerk` on
   repositories whose contents may not leave your machine, unless you are running a
   local model (`--provider ollama`, or `--base-url` pointed at your own server).
+- **A secret the pre-flight scan did not recognise.** The scan is a mitigation,
+  not a guarantee: it matches known credential shapes and a deliberately
+  conservative entropy heuristic, and it is documented above as missing
+  lowercase-hex secrets on purpose, because they are indistinguishable from the
+  SHAs and checksums every diff carries. A miss is worth reporting as a **bug**
+  so the patterns improve, and it is not a vulnerability in the tool — the tool
+  sends the staged diff by design, which is the entry above this one.
 - **`run-commit.cmd` / `run-commit.sh` staging every change with `git add -A`.**
   This is documented behavior of the wrappers. Stage manually and call
   `commitclerk.py` directly if you need control over what is committed.

@@ -52,6 +52,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 💬 **Você pode dizer o porquê** | `--context "this reverts the caching experiment"` para um commit, e um `.clerk/context.md` commitado para os fatos permanentes do repositório. A única coisa que um diff nunca mostra, dita uma vez em vez de adivinhada. |
 | ⚙️ **Configuração por projeto** | Um `.clerk.json` commitado escolhe provedor, modelo, endpoint e orçamentos para o time inteiro, então a convenção deixa de ser flags que cada pessoa redigita. Flags e variáveis de ambiente continuam vencendo. |
 | 🎫 **Trailers de ticket** | Ligue o `ticket_refs` e a chave da issue no seu branch (`feat/PROJ-123-…`) vira um trailer `Refs: PROJ-123` — Jira, Linear e GitHub de fábrica. Desligado por padrão, e lido do branch em vez de pedido ao modelo, então não há como ser inventado. |
+| 🛡️ **Se recusa a vazar um segredo** | Um `.env` no stage é escaneado *antes* da primeira requisição, não depois: formatos conhecidos de chave e tokens de alta entropia em linhas adicionadas param a execução com o código de saída `3`, nomeando arquivo e linha e nunca o próprio trecho. Esta ferramenta fica a montante de todo hook de secret-scanning que você já tem, então era justamente o ponto cego. `--redact` mascara em vez de recusar; `--no-scan` desliga. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
 | 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit — e, se o modelo rejeitar um parâmetro, a requisição é corrigida e reenviada. |
 | 🗂️ **Classifica o que mudou** | Cada arquivo é tipado como `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, então um lockfile ou um bump de `vendor/` nunca vira o assunto da sua mensagem de commit. |
@@ -108,7 +109,7 @@ clerk             # ou: git clerk
 ```
 clerk [-m TÍTULO] [--context NOTA] [--dry-run] [--provider NOME] [--base-url URL]
       [--model MODELO] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
-      [--no-examples] [--version]
+      [--no-examples] [--redact] [--no-scan] [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -130,6 +131,8 @@ preferir rodar a partir de um clone do repositório, troque `clerk` por
 | `--deep` | desligado | Para o commit que não cabe em orçamento nenhum: resume cada arquivo **grande demais** em uma requisição barata só dele e depois escreve a mensagem a partir desses resumos mais os diffs reais dos arquivos menores. Custa uma requisição extra por arquivo grande — e nada quando o diff já cabe. |
 | `--no-house-style` | desligado | Pula o `git log` por trás tanto do fingerprint de house style quanto dos exemplos extraídos do histórico. Útil quando o histórico é importado ou gerado por máquina, ou para manter o texto de mensagens antigas fora da rede. |
 | `--no-examples` | desligado | Não envia **texto** de mensagens de commit antigas, mas mantém o fingerprint, que leva apenas contagens e formatos. É a metade estreita do `--no-house-style`, para um time que aceita compartilhar uma estatística sobre o próprio histórico, mas não o histórico. Implícito no `--no-house-style`. |
+| `--redact` | desligado | Quando o scan pré-envio encontra um suspeito de segredo, mascara na requisição e segue em frente em vez de recusar. **O commit não muda e continua contendo o segredo** — isto protege o que é enviado, não o que é commitado. |
+| `--no-scan` | desligado | Não escaneia o diff staged em busca de segredos antes de enviá-lo. Desliga o `--redact` junto, já que não sobra nada para mascarar. |
 | `--version` | — | Mostra a versão e sai. |
 
 Todo padrão dessa tabela também pode vir de um [arquivo de
@@ -170,6 +173,10 @@ clerk --no-house-style
 # Copie as convenções, mas mantenha o texto das mensagens antigas fora da rede
 clerk --no-examples
 
+# O scan apontou algo que você sabe ser um fixture: mascare e siga em frente
+# (o commit continua contendo — isto só protege a requisição)
+clerk --redact
+
 # Diga a única coisa que o diff não mostra
 clerk --context "this reverts the caching experiment we ran last sprint"
 
@@ -184,6 +191,7 @@ echo '{"provider": "anthropic", "timeout": 120}' > .clerk.json
 | `0` | Commit feito (ou `--dry-run` imprimiu a mensagem). |
 | `1` | Nada no stage — rode `git add` antes. |
 | `2` | Problema de configuração — a chave da API do provedor não está definida, `--provider` aponta para um provedor que não existe, ou um arquivo de configuração não pode ser lido como está escrito. |
+| `3` | O scan pré-envio encontrou um suspeito de segredo no diff staged. **Nada foi enviado.** Tem código próprio para que um wrapper consiga distinguir "você quase vazou uma chave" de "sua chave de API não está definida". |
 | outros | Repassados do `git commit`. |
 
 ## Wrappers
@@ -297,6 +305,7 @@ todos os repositórios, e qualquer projeto que discorde sobrescreve.
 | `base_url` | string | `--base-url` |
 | `timeout` | número | `--timeout` |
 | `max_chars` | número | `--max-chars` |
+| `scan` | booleano | `false` é `--no-scan` (a única configuração cujo padrão é **ligado**) |
 | `house_style` | booleano | `false` é `--no-house-style` |
 | `examples` | booleano | `false` é `--no-examples` (ignorado sob `"house_style": false`, que já recusa as duas coisas) |
 | `deep` | booleano | `true` é `--deep` |
@@ -439,6 +448,7 @@ aponte para algum lugar em que você confia.
 
 ## Privacidade e custo
 
+- **Nada é enviado antes de o diff staged ser escaneado em busca de segredos.** Antes da primeira requisição, toda linha *adicionada* é checada contra formatos conhecidos de credencial (`sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox…`, `AIza`, `-----BEGIN … PRIVATE KEY-----`, JWTs) e contra tokens de alta entropia. Um acerto **recusa a execução** com código de saída `3`, nomeando o arquivo, a linha e qual detector disparou — nunca o trecho em si, porque um terminal é justamente de onde um segredo acaba copiado. Isso roda sobre o diff *como está no stage*, antes do corte e antes das requisições extras do `--deep`, então não existe caminho que envie primeiro e cheque depois. `--redact` mascara e continua; `--no-scan` ou `"scan": false` desliga.
 - **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou a API da Anthropic com `--provider anthropic`, ou o que `--base-url` ou um `.clerk.json` do repositório apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, use `--provider ollama` (modelo local, sem chave, nada pela rede) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
 - **Algumas das suas *mensagens* de commit recentes também são enviadas.** O bloco de house style leva contagens e formatos medidos a partir dos últimos 200 títulos e corpos — tipos, escopos, formato do corpo, tamanho mediano do título, chaves de trailer, idioma —, não as mensagens em si, exceto nomes de escopo e chaves de trailer, que aparecem literalmente porque contá-los não serviria de nada. Além disso, os dois ou três commits passados que mexeram nos mesmos arquivos do seu diff staged são enviados **literalmente** como exemplos de estilo: título mais corpo cortado em 400 caracteres, com os blocos de trailer (e os e-mails dentro deles) removidos antes. Nenhum diff, autor, e-mail, data ou SHA do histórico é lido. São dois fluxos de dados diferentes e cada um tem a sua chave: `--no-examples` corta as mensagens literais e mantém as contagens, e `--no-house-style` pula o `git log` e as duas coisas.
 - Nada além disso é transmitido, armazenado ou registrado pela ferramenta: sem telemetria, sem analytics, sem configuração remota.

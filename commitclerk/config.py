@@ -31,6 +31,10 @@ SETTINGS = {
     # examples are past commit message text verbatim, and a team can refuse the
     # second while keeping the first. `"house_style": false` still refuses both.
     "examples": bool,
+    # On unless a file turns it off, unlike every other switch here: the scan is
+    # the one setting whose default has to be the safe answer, because the cost of
+    # being wrong is a credential at a third party and is not reversible.
+    "scan": bool,
     # Off unless asked for: it spends one extra request per oversized file, and a
     # setting that multiplies a bill has no business defaulting to on.
     "deep": bool,

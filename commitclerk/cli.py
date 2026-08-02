@@ -36,6 +36,7 @@ from .history import (
     known_scopes,
     worked_examples,
 )
+from .secrets import redact_diff, redaction_notice, refusal_notice, scan_diff
 from .trailers import (
     DEFAULT_TICKET_PATTERN,
     TICKET_TRAILER,
@@ -233,6 +234,21 @@ def main() -> int:
              "house-style fingerprint, which reports only counts and shapes. Implied "
              "by --no-house-style.",
     )
+    parser.add_argument(
+        "--redact",
+        action="store_true",
+        default=None,
+        help="Instead of refusing, mask every suspected secret in the request and "
+             "carry on. The commit is unchanged and still contains them: this "
+             "protects what is sent, not what is committed.",
+    )
+    parser.add_argument(
+        "--no-scan",
+        action="store_true",
+        default=None,
+        help="Do not scan the staged diff for secrets before sending it. Turns off "
+             "--redact along with it, there being nothing left to mask.",
+    )
     args = parser.parse_args()
 
     root = get_repo_root()
@@ -265,6 +281,10 @@ def main() -> int:
     examples_on = _wants_examples(
         house_style_on, False if args.no_examples else None,
         project.get("examples"), user.get("examples"),
+    )
+    scan_on = layered(
+        False if args.no_scan else None, None,
+        project.get("scan"), user.get("scan"), True,
     )
     deep_on = layered(
         True if args.deep else None, None, project.get("deep"), user.get("deep"), False,
@@ -316,6 +336,18 @@ def main() -> int:
         print(warning, file=sys.stderr)
 
     classes = classify_files(files, diff)
+
+    # Before every request, and on the diff as staged rather than as trimmed: a
+    # scan placed after demotion or the budget would clear a payload that
+    # `--deep`'s own calls have already carried.
+    findings = scan_diff(diff, classes) if scan_on else []
+    if findings:
+        if not args.redact:
+            print(refusal_notice(findings), file=sys.stderr)
+            return 3
+        diff, masked = redact_diff(diff, classes)
+        print(redaction_notice(masked), file=sys.stderr)
+
     summary = get_staged_summary()
     # Both read the raw diff: the guard's proportion must be measured before any
     # trimming, and demotion must happen before budgeting so the space a lockfile

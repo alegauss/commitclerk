@@ -54,6 +54,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 💬 **You can tell it why** | `--context "this reverts the caching experiment"` for one commit, and a committed `.clerk/context.md` for the standing facts about your repo. The one thing a diff can never show, said once instead of guessed at. |
 | ⚙️ **Config file per project** | A committed `.clerk.json` picks the provider, model, endpoint and budgets for everyone on the team, so a convention stops being flags each person retypes. Flags and environment variables still win over it. |
 | 🎫 **Ticket trailers** | Turn on `ticket_refs` and the issue key in your branch (`feat/PROJ-123-…`) becomes a `Refs: PROJ-123` trailer — Jira, Linear and GitHub out of the box. Off by default, and read off the branch rather than asked of the model, so it cannot be invented. |
+| 🛡️ **Refuses to leak a secret** | A staged `.env` is scanned *before* the first request, not after: known key shapes and high-entropy tokens on added lines stop the run with exit `3`, naming the file and line and never the match. This tool sits upstream of every secret-scanning hook you already have, so it was the blind spot. `--redact` masks instead of refusing; `--no-scan` opts out. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
 | 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
 | 🗂️ **Classifies what changed** | Each file is typed as `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, so a lockfile or a `vendor/` bump never becomes the subject of your commit message. |
@@ -110,7 +111,7 @@ clerk             # or: git clerk
 ```
 clerk [-m TITLE] [--context NOTE] [--dry-run] [--provider NAME] [--base-url URL]
       [--model MODEL] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
-      [--no-examples] [--version]
+      [--no-examples] [--redact] [--no-scan] [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -133,6 +134,8 @@ the tool from a repository checkout instead, replace `clerk` with
 | `--deep` | off | For a commit no budget can fit: summarise each **oversized** file in its own cheap request, then write the message from those summaries plus the smaller files' real diffs. Costs one extra request per oversized file — and nothing at all when the diff already fits. |
 | `--no-house-style` | off | Skip the `git log` behind both the house-style fingerprint and the worked examples. Use it when the history is imported or machine-generated, or to keep past commit message text off the wire. |
 | `--no-examples` | off | Send no past commit message **text**, but keep the fingerprint, which reports only counts and shapes. The narrow half of `--no-house-style`, for a team that will share a statistic about its history but not the history itself. Implied by `--no-house-style`. |
+| `--redact` | off | When the pre-flight scan finds a suspected secret, mask it in the request and carry on instead of refusing. **The commit is unchanged and still contains it** — this protects what is sent, not what is committed. |
+| `--no-scan` | off | Do not scan the staged diff for secrets before sending it. Turns off `--redact` along with it, there being nothing left to mask. |
 | `--version` | — | Print the version and exit. |
 
 Every default in that table can also come from a [config file](#configuration) —
@@ -173,6 +176,10 @@ clerk --no-house-style
 # Copy the conventions, but keep past commit message text off the wire
 clerk --no-examples
 
+# The scan flagged something you know is a fixture: mask it and carry on
+# (the commit still contains it — this only protects the request)
+clerk --redact
+
 # Tell it the one thing the diff cannot show
 clerk --context "this reverts the caching experiment we ran last sprint"
 
@@ -187,6 +194,7 @@ echo '{"provider": "anthropic", "timeout": 120}' > .clerk.json
 | `0` | Committed (or `--dry-run` printed the message). |
 | `1` | Nothing staged — run `git add` first. |
 | `2` | Configuration problem — the provider's API key is not set, `--provider` names a provider that does not exist, or a config file cannot be read as written. |
+| `3` | The pre-flight scan found a suspected secret in the staged diff. **Nothing was sent.** Its own code, so a wrapper can tell "you nearly leaked a key" apart from "your API key is not set". |
 | other | Passed through from `git commit`. |
 
 ## Wrappers
@@ -256,7 +264,8 @@ The same rule set also keeps titles imperative and under 72 characters, keeps bo
 ## How it works
 
 ```
-git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──┐
+git diff --staged ──▶ secret scan: refuse (exit 3), or --redact ────┐
+      └──▶ per-file budget (--max-chars) ──▶ doc-only? ─────────────┤
       └──▶ oversized files ──▶ one summary each (--deep) ───────────┤
 git diff --stat --summary ──▶ renames, modes, binary sizes ─────────┤
 git log -n200 ──▶ house style: types, scopes, body shape, language ─┤
@@ -268,11 +277,11 @@ nearest workspace manifest ──▶ inferred scope ─────────�
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The source is an eleven-module package under [`commitclerk/`](commitclerk/) — `config`,
-`context`, `diffing`, `deep`, `files`, `history`, `gitio`, `trailers`, `prompt`,
-`providers`, `cli` — and
+The source is a twelve-module package under [`commitclerk/`](commitclerk/) — `config`,
+`context`, `diffing`, `deep`, `files`, `secrets`, `history`, `gitio`, `trailers`,
+`prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (2330 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (2608 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -310,6 +319,7 @@ repository, and any project that disagrees overrides it.
 | `base_url` | string | `--base-url` |
 | `timeout` | number | `--timeout` |
 | `max_chars` | number | `--max-chars` |
+| `scan` | boolean | `false` is `--no-scan` (the one setting that defaults to **on**) |
 | `house_style` | boolean | `false` is `--no-house-style` |
 | `examples` | boolean | `false` is `--no-examples` (ignored under `"house_style": false`, which already refuses both) |
 | `deep` | boolean | `true` is `--deep` |
@@ -450,6 +460,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 
 ## Privacy and cost
 
+- **Nothing is sent until the staged diff has been scanned for secrets.** Before the first request, every *added* line is checked for known credential shapes (`sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox…`, `AIza`, `-----BEGIN … PRIVATE KEY-----`, JWTs) and for high-entropy tokens. A hit **refuses the run** with exit `3`, naming the file, the line and which detector fired — never the match itself, because a terminal is somewhere a secret gets copied out of. This runs on the diff *as staged*, before trimming and before `--deep`'s extra requests, so there is no path that sends first and checks later. `--redact` masks and continues; `--no-scan` or `"scan": false` turns it off.
 - **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` or a `.clerk.json` in the repository names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.
 - **Some of your recent commit *messages* are sent too.** The house-style block carries counts and shapes measured from the last 200 subjects and bodies — types, scopes, body shape, median subject length, trailer keys, language — not the messages themselves, except scope names and trailer keys, which appear verbatim because counting them would be useless. Separately, the two or three past commits that touched the same files as your staged diff are sent **verbatim** as style examples, subject plus body clipped to 400 characters, with trailer blocks (and the email addresses in them) stripped first. No diff, author, email, date or SHA from history is read. Those are two different data flows and each has its own switch: `--no-examples` drops the verbatim messages and keeps the counts, and `--no-house-style` skips the `git log` and both of them.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
@@ -463,6 +474,16 @@ is a **different destination for your diff**, so point it somewhere you trust.
 <summary><strong>"No staged changes. Run <code>git add &lt;files&gt;</code> first."</strong></summary>
 
 Nothing is staged. `commitclerk` deliberately never stages for you — run `git add` (or use `run-commit.cmd` / `run-commit.sh`, which stage everything).
+</details>
+
+<details>
+<summary><strong>"the staged diff contains N possible secrets; nothing was sent." (exit <code>3</code>)</strong></summary>
+
+The pre-flight scan matched a known credential shape or a high-entropy token on an added line. **Nothing left your machine.** Each line is named as `path:line (detector)`.
+
+If it is a real secret, unstage the file (`git restore --staged .env`) and add it to `.gitignore` — the scan is telling you about the commit, not just the request.
+
+If it is a fixture, an example key or a hash the heuristic misread, either `--redact` (masks it in the request and commits anyway, so the secret is still in your history) or `--no-scan` (sends it as-is). A repository whose history is full of legitimate high-entropy strings can set `"scan": false` in `.clerk.json`, but prefer `--no-scan` per run: the default is on because the cost of being wrong is not reversible.
 </details>
 
 <details>

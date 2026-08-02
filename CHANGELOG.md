@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A staged secret no longer leaves the machine before anything has looked at
+  it.** Stage a `.env` by accident and every other generator sends it: the
+  request goes out before the commit exists, and unlike the commit that cannot
+  be undone with `git reset`. This tool sat *upstream* of every secret-scanning
+  hook a team already runs, which made it their blind spot. Now every **added**
+  line of the staged diff is checked before the first request — known credential
+  shapes (OpenAI, GitHub tokens and PATs, AWS access key ids, Slack, Google API
+  keys, PEM private keys, JWTs) plus an entropy heuristic on long
+  credential-shaped tokens — and a hit **refuses the run** with the new exit code
+  `3`, so a wrapper can tell "you nearly leaked a key" apart from "your API key
+  is not set". The notice names the file, the line and which detector fired, and
+  never the match itself, because a terminal is somewhere a secret gets copied
+  out of. It reads the diff *as staged*, before trimming and before `--deep`'s
+  per-file calls, so there is no ordering in which something is sent and then
+  checked. The heuristic is held back on `generated`, `vendor` and `binary`
+  files, where lockfile hashes and minified bundles live, and it deliberately
+  ignores lowercase-hex tokens: a hex secret is indistinguishable from a git SHA,
+  and firing on every one of those is what gets a scanner switched off for good.
+  `--redact` masks each match and carries on — protecting the request, never the
+  repository, and the notice says so rather than letting the flag read as an
+  assurance it is not. `--no-scan` and `"scan": false` opt out; it is the one
+  setting whose default is on, because the cost of being wrong is not reversible.
 - **`--no-examples`: refuse the message text without refusing the statistic.**
   One `git log` feeds two very different things. The house-style fingerprint
   sends **counts and shapes** — how many `feat:` subjects, which scopes, the

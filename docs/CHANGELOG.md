@@ -29,6 +29,7 @@
 ## Block D — Trust & safety
 
 - ✅ **T61** **One switch hides two very different data flows** — `--no-examples` refuses past commit message text on its own, so a team can keep the counts-and-shapes fingerprint while `--no-house-style` still refuses both.
+- ✅ **T19** **A staged secret leaves the machine before anything has looked at it** — The staged diff is scanned for credential shapes and high-entropy tokens before the first request, refusing with exit 3 and naming the file and line but never the match.
 
 ## Block E — Configuration & conventions
 

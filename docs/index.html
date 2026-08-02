@@ -401,6 +401,11 @@
         <p>Standard library only — <code>urllib</code>, <code>subprocess</code>, <code>argparse</code>. Drop the file in and run it, or install it properly. Your call.</p>
       </div>
       <div class="card reveal">
+        <div class="ico">🛡️</div>
+        <h3>Refuses to leak a secret</h3>
+        <p>Stage a <code>.env</code> by accident and the request goes out before the commit exists. Known key shapes and high-entropy tokens stop the run with exit <code>3</code> — nothing sent, the file and line named, the secret never printed.</p>
+      </div>
+      <div class="card reveal">
         <div class="ico">🔗</div>
         <h3>Git-native</h3>
         <p>Installs as <code>git clerk</code> too, so it lives where the rest of your git muscle memory already is: <code>git add -A &amp;&amp; git clerk</code>.</p>
@@ -487,7 +492,7 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <div class="eyebrow">Command line</div>
-      <h2>Five flags, and you'll mostly use one</h2>
+      <h2>A handful of flags, and you'll mostly use one</h2>
       <p>Installing gives you three identical entry points: <code>clerk</code>, <code>commitclerk</code>, and <code>git clerk</code>.</p>
     </div>
 
@@ -504,6 +509,8 @@
           <tr><td><code>--model MODEL</code></td><td><code>gpt-4o-mini</code></td><td>Model to call — the provider's default, or set <code>$OPENAI_MODEL</code>.</td></tr>
           <tr><td><code>--timeout S</code></td><td><code>60</code></td><td>Seconds to wait for each API request. Raise it for a slow local model; transient failures are retried twice with backoff.</td></tr>
           <tr><td><code>--max-chars N</code></td><td><code>60000</code></td><td>Character budget for the diff. A larger diff is trimmed <b>per file</b>, so every changed file still reaches the model; lockfiles and vendored files collapse to one line first.</td></tr>
+          <tr><td><code>--redact</code></td><td>off</td><td>When the pre-flight scan finds a suspected secret, mask it in the request and carry on instead of refusing. <b>The commit still contains it</b> — this protects what is sent, not what is committed.</td></tr>
+          <tr><td><code>--no-scan</code></td><td>off</td><td>Skip the pre-flight secret scan entirely.</td></tr>
           <tr><td><code>--version</code></td><td>—</td><td>Print the version and exit.</td></tr>
         </tbody>
       </table>
@@ -538,6 +545,7 @@ clerk <span class="g">--provider</span> anthropic</div>
               <tr><td><code>0</code></td><td>Committed (or <code>--dry-run</code> printed the message).</td></tr>
               <tr><td><code>1</code></td><td>Nothing staged — run <code>git add</code> first.</td></tr>
               <tr><td><code>2</code></td><td>Configuration problem — the provider's API key is not set, or the provider does not exist.</td></tr>
+              <tr><td><code>3</code></td><td>A suspected secret in the staged diff — <b>nothing was sent</b>.</td></tr>
               <tr><td>other</td><td>Passed through from <code>git commit</code>.</td></tr>
             </tbody>
           </table>
@@ -626,6 +634,13 @@ alias ac='git add -A &amp;&amp; clerk'</div>
     <div class="privacy">
       <div class="lock">🔒</div>
       <h2>Know what leaves your machine</h2>
+      <p>
+        <b>Nothing is sent until the staged diff has been scanned for secrets.</b> Every added line is
+        checked against known credential shapes and a high-entropy heuristic before the first request.
+        A hit stops the run with exit <code>3</code> and names the file and line — never the secret itself.
+        This runs on the diff as staged, before any trimming, so there is no ordering in which something
+        is sent and then checked.
+      </p>
       <p>
         <b>Your staged diff is sent to the API you configured</b> — <code>api.openai.com</code> by
         default, or <code>api.anthropic.com</code> with <code>--provider anthropic</code>. That is the whole point, and it is the one thing to be deliberate about. On a
