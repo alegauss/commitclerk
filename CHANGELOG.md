@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **You can finally tell it why.** A diff shows what changed and never why, so
+  there are now two ways to say it: `--context "this reverts the caching
+  experiment"` for one commit, and `.clerk/context.md` at the repository root —
+  a few lines, read verbatim on every run, committed with the repo — for the
+  standing facts a diff can never carry, like the product's name, which binary
+  the CLI installs as, or that `docs/` is internal. Both are strictly additive to
+  the prompt: they can inform the message and cannot change what the tool does,
+  so the worst a bad note can do is spend part of the diff budget. Both are
+  placed before the diff and explicitly framed as facts to explain the *why*,
+  never as work this commit performed — the same guard the rest of the prompt
+  uses, because a note in the prompt is prose in the prompt. They come out of the
+  `--max-chars` budget, truncated at 2 000 characters with the one-off note
+  served first, and an unreadable file is simply empty: a note must never be the
+  reason a commit cannot be written.
 - **The issue key in your branch name becomes a `Refs:` trailer.** Your branch
   usually already says which ticket you are on, and the diff never does — so with
   `ticket_refs` set in a config file, `feat/PROJ-123-retry-webhooks` produces a

@@ -20,17 +20,6 @@ fingerprint, and by the worked examples drawn from commits about the same files.
 What is left is context the repository holds but the *history* does not: the
 branch name, and the author's own intent.
 
-### §T12 Standing and one-off context
-
-`--context "this reverts the caching experiment"` handles the case that no amount
-of diff-reading can recover: *why*. A `.clerk/context.md` file (a few lines, read
-verbatim, committed to the repo) handles standing facts — the product's name, that
-`clerk` is the binary, that this repo's `docs/` is internal. Both are strictly
-additive to the prompt and cannot break existing behaviour, which makes them
-excellent early tasks.
-
----
-
 ## Block C — Diff intelligence
 
 ### §T17 Map-reduce for the diffs no budget can fit

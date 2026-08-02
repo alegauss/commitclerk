@@ -693,6 +693,90 @@ class TestLoadConfig(unittest.TestCase):
         self.assertEqual(user["timeout"], 90)
 
 
+class TestContextNote(unittest.TestCase):
+    def test_neither_kind_of_context_produces_nothing(self):
+        self.assertEqual(commitclerk.context_note(), "")
+        self.assertEqual(commitclerk.context_note("", ""), "")
+        self.assertEqual(commitclerk.context_note("   ", "\n\n"), "")
+
+    def test_a_one_off_note_is_marked_as_being_about_this_change(self):
+        block = commitclerk.context_note("", "this reverts the caching experiment")
+        self.assertIn("About this change specifically:", block)
+        self.assertIn("this reverts the caching experiment", block)
+
+    def test_a_standing_file_appears_without_that_marker(self):
+        block = commitclerk.context_note("The CLI installs as `clerk`.", "")
+        self.assertIn("The CLI installs as `clerk`.", block)
+        self.assertNotIn("About this change specifically:", block)
+
+    def test_both_appear_with_the_one_off_note_last(self):
+        block = commitclerk.context_note("standing fact", "one-off note")
+        self.assertLess(block.index("standing fact"), block.index("one-off note"))
+
+    def test_the_model_is_told_not_to_restate_it_as_work_done(self):
+        # The founding failure: prose in the prompt read back as a shipped feature.
+        block = commitclerk.context_note("", "we are migrating to the new queue")
+        self.assertIn("never restate it as work this commit did", block)
+
+    def test_the_block_is_bounded(self):
+        block = commitclerk.context_note("x" * 50_000, "", limit=100)
+        self.assertLess(len(block), 400)
+
+    def test_the_one_off_note_is_served_first_when_the_budget_is_tight(self):
+        # `z` and `q` appear in neither the header nor the marker, so the counts
+        # are the two inputs and nothing else.
+        block = commitclerk.context_note("z" * 90, "q" * 90, limit=100)
+        self.assertEqual(block.count("q"), 90)
+        self.assertEqual(block.count("z"), 10)
+
+
+class TestReadContextFile(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def test_the_path_sits_under_the_repository_root(self):
+        self.assertEqual(
+            commitclerk.context_path("repo"),
+            os.path.normpath(os.path.join("repo", ".clerk", "context.md")),
+        )
+        self.assertIsNone(commitclerk.context_path(None))
+
+    def test_a_missing_file_is_empty_not_an_error(self):
+        self.assertEqual(commitclerk.read_context_file(commitclerk.context_path(self.dir)), "")
+        self.assertEqual(commitclerk.read_context_file(None), "")
+
+    def test_the_file_is_read_verbatim_and_stripped(self):
+        path = commitclerk.context_path(self.dir)
+        os.makedirs(os.path.dirname(path))
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n`clerk` is the binary.\ndocs/ is internal.\n\n")
+        self.assertEqual(
+            commitclerk.read_context_file(path),
+            "`clerk` is the binary.\ndocs/ is internal.",
+        )
+
+    def test_a_directory_where_the_file_should_be_is_not_a_crash(self):
+        # An unreadable note must never be the reason a commit cannot be written.
+        path = commitclerk.context_path(self.dir)
+        os.makedirs(path)
+        self.assertEqual(commitclerk.read_context_file(path), "")
+
+
+class TestContextInPrompt(unittest.TestCase):
+    def test_the_block_lands_before_the_diff(self):
+        prompt = commitclerk.build_user_prompt(
+            "diff --git a/f.py b/f.py\n", ["f.py"],
+            context=commitclerk.context_note("", "reverting the caching experiment"),
+        )
+        self.assertIn("reverting the caching experiment", prompt)
+        self.assertLess(prompt.index("reverting"), prompt.index("Unified diff:"))
+
+    def test_no_context_adds_nothing_to_the_prompt(self):
+        bare = commitclerk.build_user_prompt("diff\n", ["f.py"])
+        self.assertEqual(commitclerk.build_user_prompt("diff\n", ["f.py"], context=""), bare)
+
+
 class TestTicketKey(unittest.TestCase):
     def test_the_shapes_the_default_pattern_is_for(self):
         for branch, expected in (

@@ -9,6 +9,7 @@ import sys
 
 from . import __version__
 from .config import PROJECT_CONFIG, ConfigError, env_value, layered, load_config
+from .context import CONTEXT_FILE, context_note, context_path, read_context_file
 from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff
 from .files import classify_files, doc_guard_note, scope_note
 from .gitio import (
@@ -93,6 +94,14 @@ def main() -> int:
         default=None,
         help="Authoritative commit title. When set, it is used verbatim as the title and the AI "
              "writes only the body bullets (most reliable way to avoid a misread of intent).",
+    )
+    parser.add_argument(
+        "--context",
+        default=None,
+        metavar="NOTE",
+        help="One sentence of intent the diff cannot show, e.g. \"this reverts the "
+             f"caching experiment\". Standing facts about the repository belong in "
+             f"{CONTEXT_FILE} instead, which is read on every run.",
     )
     parser.add_argument(
         "--provider",
@@ -228,6 +237,7 @@ def main() -> int:
     vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
     scope = scope_note(files, vocabulary)
     examples = worked_examples(records, files)
+    author = context_note(read_context_file(context_path(root)), args.context)
 
     context = {
         "guard": guard,
@@ -236,6 +246,7 @@ def main() -> int:
         "house_style": house,
         "examples": examples,
         "scope": scope,
+        "context": author,
     }
     if args.message:
         context["title"] = args.message
@@ -243,7 +254,7 @@ def main() -> int:
     # Subtracted from the diff budget, not added on top of it: the extra context is
     # worth a couple of thousand characters of diff, but it must not silently raise
     # what the user asked to send.
-    spent = len(house) + len(scope) + len(examples)
+    spent = len(house) + len(scope) + len(examples) + len(author)
     diff = budget_diff(demote_diff(diff, classes), max(0, max_chars - spent))
 
     message = call_model(

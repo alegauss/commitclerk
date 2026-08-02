@@ -2,8 +2,8 @@
 
 > A command-line tool that writes your git commit messages. It reads the staged diff,
 > asks an LLM (OpenAI Chat Completions or the Anthropic Messages API) for a Conventional Commits message, prints it,
-> and commits. Implemented as a nine-module package (`config`, `diffing`, `files`, `history`,
-> `gitio`, `trailers`, `prompt`, `providers`, `cli`) that is also built into a single standalone ~1 950-line script,
+> and commits. Implemented as a ten-module package (`config`, `context`, `diffing`, `files`,
+> `history`, `gitio`, `trailers`, `prompt`, `providers`, `cli`) that is also built into a single standalone ~2 040-line script,
 > `dist/commitclerk.py`, with **zero third-party dependencies** — standard library only
 > (`urllib`, `subprocess`, `argparse`), Python 3.8+.
 > Installs three identical entry points: `clerk`, `commitclerk`, and `git clerk`.
@@ -34,14 +34,16 @@ Anthropic or GitHub. By default it calls the OpenAI Chat Completions API using t
 - **Model agnostic**: any OpenAI Chat Completions model via `--model` or `$OPENAI_MODEL` (default `gpt-4o-mini`). The provider is chosen with `--provider` / `$CLERK_PROVIDER` from an adapter table (URL, headers, payload, response extractor). Three entries: `openai` (Chat Completions, `OPENAI_API_KEY`, default `gpt-4o-mini`), `anthropic` (Messages API, `ANTHROPIC_API_KEY`, default `claude-haiku-4-5`), and `ollama` (local Chat Completions at `http://localhost:11434/v1`, no API key, default `qwen2.5-coder`).
 - **Any OpenAI-compatible endpoint**: `--base-url` / `$OPENAI_BASE_URL` points the same adapter at Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together or Azure. With a local server the staged diff never leaves the machine.
 - **Config file with documented precedence**: every setting resolves through one fixed ladder — command-line flag, then environment variable, then `.clerk.json` at the repository root, then `~/.config/clerk/config.json`, then the built-in default. The project file is meant to be committed, so a team convention stops being flags each person retypes; the user file sets personal defaults across every repository. JSON rather than TOML because `tomllib` needs Python 3.11 and the floor here is 3.8, and a parser of its own would cost the zero-dependency rule. Recognised keys: `provider`, `model`, `base_url`, `timeout`, `max_chars`, `house_style` (`false` is `--no-house-style`). Discovery starts at `git rev-parse --show-toplevel`, not the working directory, so behaviour does not change with the subdirectory you are standing in. API keys are never read from a file. An unknown key is reported on stderr and ignored so a config written for a newer version still works; invalid JSON or a wrongly typed value exits `2` rather than being silently dropped.
+- **Author context, the one thing a diff cannot carry**: `--context "<note>"` adds one sentence of intent for this commit, and `.clerk/context.md` at the repository root carries the standing facts (the product's name, which binary the CLI installs as, that `docs/` is internal), read verbatim on every run. Both are strictly additive to the prompt and cannot change what the tool does. They sit after the file list and change summary and before the diff, framed as facts to explain the WHY and explicitly not to be restated as work this commit performed. Both come out of the `--max-chars` diff budget and are truncated at 2 000 characters, the one-off note served first. An unreadable or missing context file is silently empty: a note must never be the reason a commit cannot be written.
 - **Ticket trailers from the branch name**: with `ticket_refs` set in a config file, the issue key in the current branch (`feat/PROJ-123-retry-webhooks`) is appended to the finished message as a `Refs: PROJ-123` trailer. The built-in pattern is `[A-Z]{2,10}-\d+|#\d+`, covering Jira, Linear and GitHub; `ticket_pattern` replaces it and turns the feature on by itself. **Off by default** — a `Refs:` trailer on a repository with no tracker is noise. The key is read from `git rev-parse --abbrev-ref HEAD` and appended after the model has answered, never included in the prompt, so it cannot be paraphrased, dropped or invented. A detached HEAD or a branch with no key produces no trailer; an existing trailer block is joined rather than duplicated, and a `Refs:` already in the message is not repeated.
 - **Wrappers**: `run-commit.cmd` (Windows) and `run-commit.sh` (POSIX) check the API key, stage everything with `git add -A`, then pass arguments through. The Python script itself never stages anything.
 
 ## Usage
 
-`clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL] [--timeout S] [--max-chars N] [--no-house-style] [--version]`
+`clerk [-m TITLE] [--context NOTE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL] [--timeout S] [--max-chars N] [--no-house-style] [--version]`
 
 - `-m`, `--message TITLE` — use TITLE verbatim as the commit title; the AI writes only the body.
+- `--context NOTE` — one sentence of intent the diff cannot show; standing facts belong in `.clerk/context.md`.
 - `--dry-run` — print the message and exit without committing.
 - `--provider NAME` — provider to call: `openai`, `anthropic`, or `ollama` (default `openai`, or `$CLERK_PROVIDER`). `ollama` needs no API key and calls a local server.
 - `--base-url URL` — base URL of an OpenAI-compatible endpoint (default `https://api.openai.com/v1`, or `$OPENAI_BASE_URL`). Must be http:// or https://.

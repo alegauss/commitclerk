@@ -46,6 +46,7 @@ def build_user_prompt(
     house_style: str = "",
     examples: str = "",
     scope: str = "",
+    context: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -71,6 +72,11 @@ def build_user_prompt(
         # Before the diff, and outside its budget: when a large diff is trimmed
         # this is the part that still describes the whole change.
         parts += ["", "Change summary (git --stat --summary):", summary]
+    if context:
+        # After the facts about the change, before the diff: it explains what the
+        # diff is for, so it has to be read as a frame around the diff rather
+        # than as one more thing the diff mentions.
+        parts += ["", context]
     if title is not None:
         parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
     parts += ["", "Unified diff:", diff]

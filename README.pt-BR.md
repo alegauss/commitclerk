@@ -49,6 +49,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📦 **Escopo ciente de monorepo** | Cada arquivo no stage é rastreado até o manifesto de workspace mais próximo, então uma mudança contida em um pacote vira `fix(billing-api): …`. Espalhada por vários pacotes, ela se recusa a nomear um e esconder o resto. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
+| 💬 **Você pode dizer o porquê** | `--context "this reverts the caching experiment"` para um commit, e um `.clerk/context.md` commitado para os fatos permanentes do repositório. A única coisa que um diff nunca mostra, dita uma vez em vez de adivinhada. |
 | ⚙️ **Configuração por projeto** | Um `.clerk.json` commitado escolhe provedor, modelo, endpoint e orçamentos para o time inteiro, então a convenção deixa de ser flags que cada pessoa redigita. Flags e variáveis de ambiente continuam vencendo. |
 | 🎫 **Trailers de ticket** | Ligue o `ticket_refs` e a chave da issue no seu branch (`feat/PROJ-123-…`) vira um trailer `Refs: PROJ-123` — Jira, Linear e GitHub de fábrica. Desligado por padrão, e lido do branch em vez de pedido ao modelo, então não há como ser inventado. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
@@ -104,8 +105,8 @@ clerk             # ou: git clerk
 ## Uso
 
 ```
-clerk [-m TÍTULO] [--dry-run] [--provider NOME] [--base-url URL] [--model MODELO]
-      [--timeout S] [--max-chars N] [--no-house-style] [--version]
+clerk [-m TÍTULO] [--context NOTA] [--dry-run] [--provider NOME] [--base-url URL]
+      [--model MODELO] [--timeout S] [--max-chars N] [--no-house-style] [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -117,6 +118,7 @@ preferir rodar a partir de um clone do repositório, troque `clerk` por
 | Flag | Padrão | O que faz |
 |---|---|---|
 | `-m`, `--message TÍTULO` | — | Usa `TÍTULO` literalmente como título do commit; a IA escreve apenas os bullets do corpo. |
+| `--context NOTA` | — | Uma frase de intenção que o diff não mostra, por exemplo `"this reverts the caching experiment"`. Fatos permanentes do repositório vão no `.clerk/context.md`. |
 | `--dry-run` | desligado | Imprime a mensagem gerada e sai sem commitar. |
 | `--provider NOME` | `openai` (ou `$CLERK_PROVIDER`) | Qual provedor chamar: `openai`, `anthropic` ou `ollama` (local, sem chave). |
 | `--base-url URL` | `https://api.openai.com/v1` (ou `$OPENAI_BASE_URL`) | Aponta para qualquer endpoint **compatível com a OpenAI** — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
@@ -156,6 +158,9 @@ clerk --provider ollama --timeout 300
 
 # Fork recente, com um histórico importado que você não quer copiar
 clerk --no-house-style
+
+# Diga a única coisa que o diff não mostra
+clerk --context "this reverts the caching experiment we ran last sprint"
 
 # Fixe a escolha do time uma vez, no repositório, em vez de a cada commit
 echo '{"provider": "anthropic", "timeout": 120}' > .clerk.json
@@ -284,6 +289,31 @@ ajuste descartado em silêncio.
 > Um `.clerk.json` commitado pode definir `base_url`, que é **para onde o seu diff
 > é enviado**. Leia-o como leria qualquer outro arquivo de onde você executa
 > código — veja o [SECURITY.md](SECURITY.md).
+
+### Dizendo o que o diff não mostra
+
+Um diff mostra *o que* mudou. Ele nunca mostra o porquê, e nenhuma leitura o
+recupera. Duas formas de dizer:
+
+```bash
+# Desta vez
+clerk --context "this reverts the caching experiment we ran last sprint"
+```
+
+```
+.clerk/context.md   — fatos permanentes, commitados junto com o repositório
+
+  A CLI instala como `clerk`; o produto se chama commitclerk.
+  Tudo em docs/ é interno e não é publicado.
+  A gente faz deploy às quintas, então um hotfix na sexta é incomum.
+```
+
+O `--context` é para este commit; o `.clerk/context.md` é para todos, lido
+literalmente a cada execução. Os dois são estritamente aditivos ao prompt — só
+informam a mensagem, nunca mudam o que a ferramenta faz — e ambos vêm com a
+instrução de explicar o *porquê* em vez de virarem trabalho que este commit teria
+feito. Mantenha o arquivo com poucas linhas: ele sai do mesmo orçamento do
+`--max-chars` que o diff, e é cortado em 2 000 caracteres.
 
 ### Trailers de ticket
 

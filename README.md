@@ -51,6 +51,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 📦 **Monorepo-aware scopes** | Staged files are walked up to the nearest workspace manifest, so a change confined to one package becomes `fix(billing-api): …`. Spread across packages, it refuses to name one and hide the rest. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
+| 💬 **You can tell it why** | `--context "this reverts the caching experiment"` for one commit, and a committed `.clerk/context.md` for the standing facts about your repo. The one thing a diff can never show, said once instead of guessed at. |
 | ⚙️ **Config file per project** | A committed `.clerk.json` picks the provider, model, endpoint and budgets for everyone on the team, so a convention stops being flags each person retypes. Flags and environment variables still win over it. |
 | 🎫 **Ticket trailers** | Turn on `ticket_refs` and the issue key in your branch (`feat/PROJ-123-…`) becomes a `Refs: PROJ-123` trailer — Jira, Linear and GitHub out of the box. Off by default, and read off the branch rather than asked of the model, so it cannot be invented. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
@@ -106,8 +107,8 @@ clerk             # or: git clerk
 ## Usage
 
 ```
-clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL]
-      [--timeout S] [--max-chars N] [--no-house-style] [--version]
+clerk [-m TITLE] [--context NOTE] [--dry-run] [--provider NAME] [--base-url URL]
+      [--model MODEL] [--timeout S] [--max-chars N] [--no-house-style] [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -120,6 +121,7 @@ the tool from a repository checkout instead, replace `clerk` with
 | Flag | Default | What it does |
 |---|---|---|
 | `-m`, `--message TITLE` | — | Use `TITLE` verbatim as the commit title; the AI writes only the body bullets. |
+| `--context NOTE` | — | One sentence of intent the diff cannot show, e.g. `"this reverts the caching experiment"`. Standing facts about the repository belong in `.clerk/context.md` instead. |
 | `--dry-run` | off | Print the generated message and exit without committing. |
 | `--provider NAME` | `openai` (or `$CLERK_PROVIDER`) | Which provider to call: `openai`, `anthropic`, or `ollama` (local, no key). |
 | `--base-url URL` | `https://api.openai.com/v1` (or `$OPENAI_BASE_URL`) | Point at any **OpenAI-compatible** endpoint — Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Groq, Together, Azure. |
@@ -159,6 +161,9 @@ clerk --provider ollama --timeout 300
 
 # Fresh fork with an imported history you do not want copied
 clerk --no-house-style
+
+# Tell it the one thing the diff cannot show
+clerk --context "this reverts the caching experiment we ran last sprint"
 
 # Set the team's choice once, in the repository, instead of on every commit
 echo '{"provider": "anthropic", "timeout": 120}' > .clerk.json
@@ -251,10 +256,11 @@ nearest workspace manifest ──▶ inferred scope ─────────�
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The source is a nine-module package under [`commitclerk/`](commitclerk/) — `config`,
-`diffing`, `files`, `history`, `gitio`, `trailers`, `prompt`, `providers`, `cli` — and
+The source is a ten-module package under [`commitclerk/`](commitclerk/) — `config`,
+`context`, `diffing`, `files`, `history`, `gitio`, `trailers`, `prompt`, `providers`,
+`cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (1960 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (2043 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -306,6 +312,31 @@ is an error (exit `2`) rather than a setting silently dropped.
 > A committed `.clerk.json` can set `base_url`, which is **where your diff is
 > sent**. Read it as you would any other file you run code from — see
 > [SECURITY.md](SECURITY.md).
+
+### Telling it what the diff cannot show
+
+A diff shows *what* changed. It never shows why, and no amount of reading it
+recovers that. Two ways to say it:
+
+```bash
+# This once
+clerk --context "this reverts the caching experiment we ran last sprint"
+```
+
+```
+.clerk/context.md   — standing facts, committed with the repo
+
+  The CLI installs as `clerk`; the product is called commitclerk.
+  Everything under docs/ is internal and not published.
+  We deploy on Thursdays, so a Friday hotfix is unusual.
+```
+
+`--context` is for this commit; `.clerk/context.md` is for every commit, read
+verbatim on each run. Both are strictly additive to the prompt — they can only
+inform the message, never change what the tool does — and both are told to
+explain the *why* rather than be restated as work this commit performed. Keep the
+file to a few lines: it comes out of the same `--max-chars` budget as the diff,
+and is truncated at 2 000 characters.
 
 ### Ticket trailers
 

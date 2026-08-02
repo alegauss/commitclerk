@@ -32,6 +32,7 @@ single-file build with `python commitclerk.py`):
     clerk --timeout 180         # give a slow local model more room
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     clerk --no-house-style      # do not copy this repo's own commit conventions
+    clerk --context "reverts the caching experiment"   # why, in one sentence
     git clerk                   # same tool, as a native git subcommand
 
 Environment:
@@ -53,6 +54,10 @@ place that has it:
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
 from any subdirectory, and is meant to be committed: it is how a team stops
 retyping its own convention. API keys are read from the environment only.
+
+`.clerk/context.md` under the repository root carries standing facts the diff
+cannot show, read verbatim on every run; `--context "<note>"` says the same
+thing for one commit. Both only add to the prompt - see `context.py`.
 
 With ticket_refs on, the issue key in the branch name (feat/PROJ-123-thing)
 is appended to the finished message as a `Refs: PROJ-123` trailer. Off by
@@ -208,6 +213,68 @@ def layered(cli, env, project, user, default):
         if value is not None:
             return value
     return None
+
+
+# --- from commitclerk/context.py --------------------------------------
+
+# under the repository root, beside `.clerk.json`. Spelled with a forward slash
+# because it is shown to the user in `--help` and written that way in every
+# document; Windows opens it just the same.
+CONTEXT_FILE = ".clerk/context.md"
+
+# A few lines, as documented. Generous enough for a paragraph of standing facts
+# and far too small to be a second README - which is the point, because every
+# character here is a character of diff the model does not see.
+MAX_CONTEXT_CHARS = 2_000
+
+
+def context_path(root: str | None) -> str | None:
+    """`<repo root>/.clerk/context.md`, or None outside a repository."""
+    return os.path.normpath(os.path.join(root, CONTEXT_FILE)) if root else None
+
+
+def read_context_file(path: str | None) -> str:
+    """The standing context, or "" when there is no readable file.
+
+    Unlike the config file this never raises: a config file states what the tool
+    must do, so a broken one has to stop it, while this only adds a paragraph to
+    a prompt. Failing a commit over an unreadable note would be the wrong trade.
+    """
+    if not path or not os.path.isfile(path):
+        return ""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except (OSError, UnicodeDecodeError):
+        return ""
+    return text.strip()
+
+
+def context_note(standing: str = "", one_off: str = "",
+                 limit: int = MAX_CONTEXT_CHARS) -> str:
+    """The prompt block for both kinds of context, or "" when there is neither.
+
+    The one-off note comes last because it is about *this* commit, and it is
+    given the whole budget first: a standing file is a convenience, but the note
+    the author typed for this run is the thing they most expect to be honoured.
+    """
+    one_off = (one_off or "").strip()
+    standing = (standing or "").strip()
+    if not one_off and not standing:
+        return ""
+
+    one_off = one_off[:limit]
+    standing = standing[:max(0, limit - len(one_off))]
+
+    lines = [
+        "Context from the author (facts the diff cannot show; use it to explain "
+        "WHY, never restate it as work this commit did):",
+    ]
+    if standing:
+        lines += ["", standing]
+    if one_off:
+        lines += ["", "About this change specifically: " + one_off]
+    return "\n".join(lines)
 
 
 # --- from commitclerk/diffing.py --------------------------------------
@@ -1279,6 +1346,7 @@ def build_user_prompt(
     house_style: str = "",
     examples: str = "",
     scope: str = "",
+    context: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -1304,6 +1372,11 @@ def build_user_prompt(
         # Before the diff, and outside its budget: when a large diff is trimmed
         # this is the part that still describes the whole change.
         parts += ["", "Change summary (git --stat --summary):", summary]
+    if context:
+        # After the facts about the change, before the diff: it explains what the
+        # diff is for, so it has to be read as a frame around the diff rather
+        # than as one more thing the diff mentions.
+        parts += ["", context]
     if title is not None:
         parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
     parts += ["", "Unified diff:", diff]
@@ -1769,6 +1842,14 @@ def main() -> int:
              "writes only the body bullets (most reliable way to avoid a misread of intent).",
     )
     parser.add_argument(
+        "--context",
+        default=None,
+        metavar="NOTE",
+        help="One sentence of intent the diff cannot show, e.g. \"this reverts the "
+             f"caching experiment\". Standing facts about the repository belong in "
+             f"{CONTEXT_FILE} instead, which is read on every run.",
+    )
+    parser.add_argument(
         "--provider",
         default=None,
         choices=sorted(PROVIDERS),
@@ -1902,6 +1983,7 @@ def main() -> int:
     vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
     scope = scope_note(files, vocabulary)
     examples = worked_examples(records, files)
+    author = context_note(read_context_file(context_path(root)), args.context)
 
     context = {
         "guard": guard,
@@ -1910,6 +1992,7 @@ def main() -> int:
         "house_style": house,
         "examples": examples,
         "scope": scope,
+        "context": author,
     }
     if args.message:
         context["title"] = args.message
@@ -1917,7 +2000,7 @@ def main() -> int:
     # Subtracted from the diff budget, not added on top of it: the extra context is
     # worth a couple of thousand characters of diff, but it must not silently raise
     # what the user asked to send.
-    spent = len(house) + len(scope) + len(examples)
+    spent = len(house) + len(scope) + len(examples) + len(author)
     diff = budget_diff(demote_diff(diff, classes), max(0, max_chars - spent))
 
     message = call_model(

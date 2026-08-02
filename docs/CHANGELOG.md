@@ -20,6 +20,7 @@
 ## Block B — Context beyond the diff
 
 - ✅ **T9** **The issue key is in the branch name and never reaches the message** — a config-gated regex over the branch name appends a `Refs: PROJ-123` trailer to the finished message, after the model rather than through it, so the key cannot be paraphrased or invented.
+- ✅ **T12** **Intent lives in the author's head and the tool has nowhere to read it** — a one-off `--context "<note>"` and a standing `.clerk/context.md` both reach the prompt ahead of the diff, strictly additive and framed as the WHY rather than as work this commit performed.
 
 ## Block C — Diff intelligence
 

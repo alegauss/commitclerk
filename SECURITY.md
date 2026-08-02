@@ -93,6 +93,13 @@ choose the endpoint your diff is sent to. It is plain JSON at the top level, mea
 to be reviewed like any other file you run code from, and `--base-url` or the
 environment overrides it — but read it first in a repository you did not write.
 
+One file's contents *are* sent when it exists: `.clerk/context.md` at the
+repository root, the standing note the author wrote for the model. It is read
+verbatim, truncated at 2 000 characters, and included in the prompt — which is
+the entire point of it, and the reason not to put anything in it you would not
+send to your provider. `--context "<note>"` is the same channel, typed once. With
+neither, nothing extra is read or sent.
+
 ## The config files
 
 `commitclerk` reads two files, both optional, both plain JSON, and neither ever

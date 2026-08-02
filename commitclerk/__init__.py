@@ -17,6 +17,7 @@ single-file build with `python commitclerk.py`):
     clerk --timeout 180         # give a slow local model more room
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     clerk --no-house-style      # do not copy this repo's own commit conventions
+    clerk --context "reverts the caching experiment"   # why, in one sentence
     git clerk                   # same tool, as a native git subcommand
 
 Environment:
@@ -38,6 +39,10 @@ place that has it:
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
 from any subdirectory, and is meant to be committed: it is how a team stops
 retyping its own convention. API keys are read from the environment only.
+
+`.clerk/context.md` under the repository root carries standing facts the diff
+cannot show, read verbatim on every run; `--context "<note>"` says the same
+thing for one commit. Both only add to the prompt - see `context.py`.
 
 With ticket_refs on, the issue key in the branch name (feat/PROJ-123-thing)
 is appended to the finished message as a `Refs: PROJ-123` trailer. Off by
@@ -92,6 +97,13 @@ from .config import (  # noqa: E402
     project_config_path,
     read_config,
     user_config_path,
+)
+from .context import (  # noqa: E402
+    CONTEXT_FILE,
+    MAX_CONTEXT_CHARS,
+    context_note,
+    context_path,
+    read_context_file,
 )
 from .diffing import (  # noqa: E402
     DEMOTE_MIN_CHARS,
@@ -215,6 +227,8 @@ __all__ = [
     "add_trailer",
     "ticket_key",
     "get_branch_name",
+    "context_note",
+    "read_context_file",
     "call_model",
     "classify",
     "classify_files",
