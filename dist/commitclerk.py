@@ -46,12 +46,17 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style). A setting is taken from the first place that has it:
+house_style, ticket_refs, ticket_pattern). A setting is taken from the first
+place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
 from any subdirectory, and is meant to be committed: it is how a team stops
 retyping its own convention. API keys are read from the environment only.
+
+With ticket_refs on, the issue key in the branch name (feat/PROJ-123-thing)
+is appended to the finished message as a `Refs: PROJ-123` trailer. Off by
+default, and never sent to the model - see `trailers.py`.
 
 Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
@@ -105,6 +110,11 @@ SETTINGS = {
     "timeout": int,
     "max_chars": int,
     "house_style": bool,
+    # Off unless a project asks for it: a `Refs:` trailer on a repository with no
+    # tracker is noise, and this tool does not add ceremony to other people's
+    # history uninvited. Setting `ticket_pattern` turns it on too.
+    "ticket_refs": bool,
+    "ticket_pattern": str,
 }
 
 _TYPE_NAMES = {str: "a string", int: "a whole number", bool: "true or false"}
@@ -1058,6 +1068,19 @@ def get_repo_root() -> str | None:
     return root or None
 
 
+def get_branch_name() -> str | None:
+    """The current branch, or None outside a repository.
+
+    A detached HEAD answers with the literal `HEAD`, which is passed through
+    rather than special-cased: it carries no issue key, so it finds none.
+    """
+    try:
+        result = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], check=False)
+    except (OSError, UnicodeDecodeError):
+        return None
+    return result.stdout.strip() or None
+
+
 def get_staged_diff() -> str:
     return run(["git", "diff", "--staged"], check=False).stdout
 
@@ -1142,6 +1165,79 @@ def get_recent_commits(depth: int = HISTORY_DEPTH) -> list[str]:
 def get_staged_files() -> list[str]:
     result = run(["git", "diff", "--staged", "--name-only"], check=False)
     return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+# --- from commitclerk/trailers.py -------------------------------------
+
+# Jira and Linear (`PROJ-123`), and GitHub (`#123`). Deliberately narrow: two to
+# ten capitals before the dash, so an ISO date or a `v2-3` suffix in a branch
+# name is not read as a ticket.
+DEFAULT_TICKET_PATTERN = r"[A-Z]{2,10}-\d+|#\d+"
+
+TICKET_TRAILER = "Refs"
+
+# A git trailer line: `Key: value`, where the key is a word, possibly hyphenated.
+# `feat(api):` does not match, which is what keeps a title-only message from
+# being mistaken for a trailer block. Not `_TRAILER_RE`: the single-file build
+# concatenates every module into one namespace, so a name history.py already
+# uses would silently replace it.
+_TRAILER_LINE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]*:\s")
+
+
+def compile_ticket_pattern(pattern: str):
+    """The pattern as a compiled regex, or None when it does not compile.
+
+    The caller decides what an unusable pattern means; here it is only reported,
+    because this module has no opinion about exit codes.
+    """
+    try:
+        return re.compile(pattern)
+    except re.error:
+        return None
+
+
+def ticket_key(branch: str | None, pattern: str = DEFAULT_TICKET_PATTERN) -> str | None:
+    """The first issue key in `branch`, or None when there is none to find.
+
+    `feat/PROJ-123-retry-webhooks` yields `PROJ-123`. A detached HEAD arrives
+    here as the literal `HEAD`, which matches nothing, so it needs no case.
+    """
+    if not branch:
+        return None
+    compiled = compile_ticket_pattern(pattern)
+    if compiled is None:
+        return None
+    found = compiled.search(branch)
+    return found.group(0) if found else None
+
+
+def add_trailer(message: str, key: str, value: str) -> str:
+    """`message` with `key: value` in its trailer block.
+
+    Idempotent: a message that already states this trailer is returned unchanged,
+    so a re-run and a hand-written `Refs:` do not produce it twice. An existing
+    trailer block is joined rather than duplicated, because git only reads the
+    last paragraph and a second block would put the first out of reach.
+    """
+    body = message.rstrip("\n")
+    if not body.strip():
+        return message
+    line = "{}: {}".format(key, value)
+    if any(existing.strip() == line for existing in body.splitlines()):
+        return message
+
+    paragraphs = body.split("\n\n")
+    last = paragraphs[-1].splitlines()
+    # A one-paragraph message is a bare title, never a trailer block - and
+    # attaching `Refs:` to the title line is exactly the wrong place for it.
+    joins_existing = len(paragraphs) > 1 and last and all(
+        _TRAILER_LINE_RE.match(existing) for existing in last
+    )
+    if joins_existing:
+        paragraphs[-1] += "\n" + line
+    else:
+        paragraphs.append(line)
+    return "\n\n".join(paragraphs) + "\n"
 
 
 # --- from commitclerk/prompt.py ---------------------------------------
@@ -1641,6 +1737,19 @@ def prog_name(argv0: str) -> str:
         return "git clerk"
     return stem or "clerk"
 
+def _wants_refs(settings: dict) -> bool | None:
+    """Whether one config file asks for the `Refs:` trailer, or None if it is silent.
+
+    Naming a `ticket_pattern` is asking for the trailer, so a file does not have
+    to say so twice; `ticket_refs` alone is for a project that wants the built-in
+    pattern and nothing to configure. Either can be set to `false` to turn off
+    what the file below it in the ladder turned on.
+    """
+    if "ticket_refs" in settings:
+        return settings["ticket_refs"]
+    return True if "ticket_pattern" in settings else None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog=prog_name(sys.argv[0]),
@@ -1734,6 +1843,19 @@ def main() -> int:
         False if args.no_house_style else None, None,
         project.get("house_style"), user.get("house_style"), True,
     )
+    ticket_pattern = layered(
+        None, None,
+        project.get("ticket_pattern"), user.get("ticket_pattern"), DEFAULT_TICKET_PATTERN,
+    )
+    ticket_refs = layered(
+        None, None, _wants_refs(project), _wants_refs(user), False,
+    )
+    if ticket_refs and compile_ticket_pattern(ticket_pattern) is None:
+        print(
+            f"Error: 'ticket_pattern' is not a valid regular expression: {ticket_pattern}.",
+            file=sys.stderr,
+        )
+        return 2
 
     spec = resolve_provider(provider)
     if spec is None:
@@ -1805,6 +1927,13 @@ def main() -> int:
     if args.message:
         # The model was asked for the body only, so the author's title leads.
         message = f"{args.message}\n\n{message}".rstrip() + "\n"
+
+    # After the model, never through it: the key is read off the branch, so the
+    # one thing that could go wrong is a paraphrase, and this way there is none.
+    if ticket_refs:
+        key = ticket_key(get_branch_name(), ticket_pattern)
+        if key:
+            message = add_trailer(message, TICKET_TRAILER, key)
 
     if args.dry_run:
         print(message)

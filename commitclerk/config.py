@@ -27,6 +27,11 @@ SETTINGS = {
     "timeout": int,
     "max_chars": int,
     "house_style": bool,
+    # Off unless a project asks for it: a `Refs:` trailer on a repository with no
+    # tracker is noise, and this tool does not add ceremony to other people's
+    # history uninvited. Setting `ticket_pattern` turns it on too.
+    "ticket_refs": bool,
+    "ticket_pattern": str,
 }
 
 _TYPE_NAMES = {str: "a string", int: "a whole number", bool: "true or false"}

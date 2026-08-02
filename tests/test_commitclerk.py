@@ -693,6 +693,105 @@ class TestLoadConfig(unittest.TestCase):
         self.assertEqual(user["timeout"], 90)
 
 
+class TestTicketKey(unittest.TestCase):
+    def test_the_shapes_the_default_pattern_is_for(self):
+        for branch, expected in (
+            ("feat/PROJ-123-retry-webhooks", "PROJ-123"),
+            ("PROJ-1", "PROJ-1"),
+            ("bugfix/ABCDEFGHIJ-9999", "ABCDEFGHIJ-9999"),
+            ("fix/#42-crash-on-empty", "#42"),
+            ("users/ana/AB-7", "AB-7"),
+        ):
+            with self.subTest(branch=branch):
+                self.assertEqual(commitclerk.ticket_key(branch), expected)
+
+    def test_a_branch_with_no_key_yields_none(self):
+        for branch in ("main", "develop", "feat/retry-webhooks", "release/2026-08-02", None, ""):
+            with self.subTest(branch=branch):
+                self.assertIsNone(commitclerk.ticket_key(branch))
+
+    def test_a_detached_head_carries_no_key(self):
+        # `git rev-parse --abbrev-ref HEAD` answers with the literal string.
+        self.assertIsNone(commitclerk.ticket_key("HEAD"))
+
+    def test_a_version_suffix_is_not_a_ticket(self):
+        # One capital before the dash is below the floor, on purpose.
+        self.assertIsNone(commitclerk.ticket_key("chore/bump-v2-3"))
+
+    def test_the_first_key_wins_when_a_branch_names_two(self):
+        self.assertEqual(commitclerk.ticket_key("feat/AB-1-and-CD-2"), "AB-1")
+
+    def test_a_project_pattern_replaces_the_default(self):
+        self.assertEqual(
+            commitclerk.ticket_key("feat/ticket_4821_thing", r"ticket_\d+"), "ticket_4821"
+        )
+
+    def test_a_pattern_that_does_not_compile_finds_nothing(self):
+        self.assertIsNone(commitclerk.ticket_key("feat/PROJ-1", "[unclosed"))
+        self.assertIsNone(commitclerk.compile_ticket_pattern("[unclosed"))
+
+
+class TestAddTrailer(unittest.TestCase):
+    def test_a_title_and_body_gain_a_trailer_paragraph(self):
+        message = "fix: reject expired tokens\n\n- because they were accepted\n"
+        self.assertEqual(
+            commitclerk.add_trailer(message, "Refs", "PROJ-1"),
+            "fix: reject expired tokens\n\n- because they were accepted\n\nRefs: PROJ-1\n",
+        )
+
+    def test_a_title_only_message_does_not_gain_it_on_the_title_line(self):
+        # `fix: x` looks like a trailer line; attaching to it would be wrong.
+        self.assertEqual(
+            commitclerk.add_trailer("fix: reject expired tokens\n", "Refs", "PROJ-1"),
+            "fix: reject expired tokens\n\nRefs: PROJ-1\n",
+        )
+
+    def test_an_existing_trailer_block_is_joined_not_duplicated(self):
+        # git reads only the last paragraph, so a second block hides the first.
+        message = "feat: add X\n\n- why\n\nCo-authored-by: Ana <ana@example.com>\n"
+        self.assertEqual(
+            commitclerk.add_trailer(message, "Refs", "PROJ-1"),
+            "feat: add X\n\n- why\n\nCo-authored-by: Ana <ana@example.com>\nRefs: PROJ-1\n",
+        )
+
+    def test_it_is_idempotent(self):
+        once = commitclerk.add_trailer("feat: add X\n\n- why\n", "Refs", "PROJ-1")
+        self.assertEqual(commitclerk.add_trailer(once, "Refs", "PROJ-1"), once)
+
+    def test_a_trailer_the_author_already_wrote_is_not_repeated(self):
+        message = "feat: add X\n\n- why\n\nRefs: PROJ-1\n"
+        self.assertEqual(commitclerk.add_trailer(message, "Refs", "PROJ-1"), message)
+
+    def test_a_different_key_for_the_same_trailer_is_still_added(self):
+        message = "feat: add X\n\n- why\n\nRefs: PROJ-1\n"
+        self.assertIn("Refs: PROJ-2", commitclerk.add_trailer(message, "Refs", "PROJ-2"))
+
+    def test_an_empty_message_is_left_alone(self):
+        self.assertEqual(commitclerk.add_trailer("", "Refs", "PROJ-1"), "")
+        self.assertEqual(commitclerk.add_trailer("\n\n", "Refs", "PROJ-1"), "\n\n")
+
+
+class TestTicketSettings(unittest.TestCase):
+    """The trailer is off until a config file asks for it."""
+
+    def test_the_keys_are_recognised_settings(self):
+        self.assertIs(commitclerk.SETTINGS["ticket_refs"], bool)
+        self.assertIs(commitclerk.SETTINGS["ticket_pattern"], str)
+
+    def test_naming_a_pattern_is_asking_for_the_trailer(self):
+        _wants_refs = commitclerk._wants_refs
+        self.assertIs(_wants_refs({"ticket_pattern": r"X-\d+"}), True)
+
+    def test_a_silent_file_says_nothing_so_the_ladder_moves_on(self):
+        _wants_refs = commitclerk._wants_refs
+        self.assertIsNone(_wants_refs({}))
+        self.assertIsNone(_wants_refs({"model": "gpt-4o"}))
+
+    def test_false_turns_off_what_the_file_below_turned_on(self):
+        _wants_refs = commitclerk._wants_refs
+        self.assertIs(_wants_refs({"ticket_refs": False, "ticket_pattern": r"X-\d+"}), False)
+
+
 class TestResolveBase(unittest.TestCase):
     def setUp(self):
         self.spec = commitclerk.PROVIDERS["openai"]
@@ -1866,6 +1965,16 @@ class TestRepoRoot(unittest.TestCase):
     def test_outside_a_repository_there_is_no_root(self):
         os.chdir(self.dir)
         self.assertIsNone(commitclerk.get_repo_root())
+
+    def test_the_branch_name_is_read_and_carries_its_issue_key(self):
+        _git(self.dir, "init", "-q", ".")
+        pathlib.Path(self.dir, "f.py").write_text("x = 1\n")
+        _git(self.dir, "add", "-A")
+        _git(self.dir, "commit", "-qm", "chore: first")
+        _git(self.dir, "checkout", "-q", "-b", "feat/PROJ-123-retry-webhooks")
+        os.chdir(self.dir)
+        self.assertEqual(commitclerk.get_branch_name(), "feat/PROJ-123-retry-webhooks")
+        self.assertEqual(commitclerk.ticket_key(commitclerk.get_branch_name()), "PROJ-123")
 
 
 if __name__ == "__main__":

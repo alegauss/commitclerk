@@ -30,7 +30,7 @@ OUTPUT = ROOT / "dist" / "commitclerk.py"
 # `__init__.py` and `__main__.py` are deliberately absent — the artifact needs no
 # re-export layer and gets its own entry point at the bottom.
 MODULES = ("config.py", "diffing.py", "files.py", "history.py", "gitio.py",
-           "prompt.py", "providers.py", "cli.py")
+           "trailers.py", "prompt.py", "providers.py", "cli.py")
 
 BANNER = """#!/usr/bin/env python
 # ---------------------------------------------------------------------------

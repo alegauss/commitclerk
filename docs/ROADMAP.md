@@ -30,7 +30,6 @@
 repo write commits" and the tree answers "which package is this". What is left is intent,
 which lives in the branch name and in the author's head.*
 
-- 💭 **T9** (deps: T25 ✅) **The issue key is in the branch name and never reaches the message** — a configurable regex over `feat/PROJ-123-thing` emits a `Refs: PROJ-123` trailer, so the link between a commit and its ticket stops being retyped. → §T9
 - 💭 **T12** (deps: T25 ✅) **Intent lives in the author's head and the tool has nowhere to read it** — a one-off `--context "<note>"` and a standing `.clerk/context.md` are the two shapes intent arrives in, and neither is derivable from a diff. → §T12
 
 ## Block C — Diff intelligence

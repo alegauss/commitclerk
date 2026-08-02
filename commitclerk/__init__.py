@@ -31,12 +31,17 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style). A setting is taken from the first place that has it:
+house_style, ticket_refs, ticket_pattern). A setting is taken from the first
+place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
 from any subdirectory, and is meant to be committed: it is how a team stops
 retyping its own convention. API keys are read from the environment only.
+
+With ticket_refs on, the issue key in the branch name (feat/PROJ-123-thing)
+is appended to the finished message as a `Refs: PROJ-123` trailer. Off by
+default, and never sent to the model - see `trailers.py`.
 
 Why the doc-only handling: this tool only sees the staged diff, so when a
 commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
@@ -141,6 +146,7 @@ from .history import (  # noqa: E402
 )
 from .gitio import (  # noqa: E402
     MAX_SUMMARY_CHARS,
+    get_branch_name,
     get_recent_commits,
     get_repo_root,
     get_staged_diff,
@@ -152,6 +158,13 @@ from .gitio import (  # noqa: E402
     unstaged_warning,
 )
 from .prompt import _system_prompt, build_user_prompt  # noqa: E402
+from .trailers import (  # noqa: E402
+    DEFAULT_TICKET_PATTERN,
+    TICKET_TRAILER,
+    add_trailer,
+    compile_ticket_pattern,
+    ticket_key,
+)
 from .providers import (  # noqa: E402
     ANTHROPIC_MAX_TOKENS,
     ANTHROPIC_VERSION,
@@ -186,7 +199,7 @@ from .providers import (  # noqa: E402
     suggested_replacement,
 )
 
-from .cli import main, prog_name  # noqa: E402  (last: it imports the rest)
+from .cli import _wants_refs, main, prog_name  # noqa: E402  (last: it imports the rest)
 
 __all__ = [
     "__version__",
@@ -199,6 +212,9 @@ __all__ = [
     "load_config",
     "read_config",
     "user_config_path",
+    "add_trailer",
+    "ticket_key",
+    "get_branch_name",
     "call_model",
     "classify",
     "classify_files",

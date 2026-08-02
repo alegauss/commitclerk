@@ -38,6 +38,19 @@ def get_repo_root() -> str | None:
     return root or None
 
 
+def get_branch_name() -> str | None:
+    """The current branch, or None outside a repository.
+
+    A detached HEAD answers with the literal `HEAD`, which is passed through
+    rather than special-cased: it carries no issue key, so it finds none.
+    """
+    try:
+        result = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], check=False)
+    except (OSError, UnicodeDecodeError):
+        return None
+    return result.stdout.strip() or None
+
+
 def get_staged_diff() -> str:
     return run(["git", "diff", "--staged"], check=False).stdout
 

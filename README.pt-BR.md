@@ -50,6 +50,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
 | ⚙️ **Configuração por projeto** | Um `.clerk.json` commitado escolhe provedor, modelo, endpoint e orçamentos para o time inteiro, então a convenção deixa de ser flags que cada pessoa redigita. Flags e variáveis de ambiente continuam vencendo. |
+| 🎫 **Trailers de ticket** | Ligue o `ticket_refs` e a chave da issue no seu branch (`feat/PROJ-123-…`) vira um trailer `Refs: PROJ-123` — Jira, Linear e GitHub de fábrica. Desligado por padrão, e lido do branch em vez de pedido ao modelo, então não há como ser inventado. |
 | 🔒 **Funciona offline, se você quiser** | `--provider ollama` não precisa de chave de API e fala com o `localhost` — seu diff nunca sai da máquina. |
 | 🔁 **Sobrevive a um rate limit** | Respostas transitórias (`429`/`5xx`) são repetidas com backoff e jitter, respeitando o `Retry-After`, em vez de perder o commit — e, se o modelo rejeitar um parâmetro, a requisição é corrigida e reenviada. |
 | 🗂️ **Classifica o que mudou** | Cada arquivo é tipado como `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, então um lockfile ou um bump de `vendor/` nunca vira o assunto da sua mensagem de commit. |
@@ -269,6 +270,8 @@ todos os repositórios, e qualquer projeto que discorde sobrescreve.
 | `timeout` | número | `--timeout` |
 | `max_chars` | número | `--max-chars` |
 | `house_style` | booleano | `false` é `--no-house-style` |
+| `ticket_refs` | booleano | — (desligado por padrão; veja abaixo) |
+| `ticket_pattern` | string | — (implica `ticket_refs`) |
 
 O arquivo é procurado a partir da raiz do repositório, não do diretório em que
 você está, então a ferramenta se comporta igual três níveis abaixo. Chaves de API
@@ -281,6 +284,37 @@ ajuste descartado em silêncio.
 > Um `.clerk.json` commitado pode definir `base_url`, que é **para onde o seu diff
 > é enviado**. Leia-o como leria qualquer outro arquivo de onde você executa
 > código — veja o [SECURITY.md](SECURITY.md).
+
+### Trailers de ticket
+
+O nome do seu branch quase sempre já diz em qual ticket você está, e o diff nunca
+diz. Ligue o `ticket_refs` e a chave da issue no branch vira um trailer `Refs:`,
+para o vínculo entre o commit e o ticket deixar de ser redigitado:
+
+```json
+{ "ticket_refs": true }
+```
+
+```
+Branch:  feat/PROJ-123-retry-webhooks
+
+feat(webhooks): retry a failed delivery three times
+
+- because a single 5xx should not drop the event
+
+Refs: PROJ-123
+```
+
+O padrão embutido é `[A-Z]{2,10}-\d+|#\d+`, que cobre Jira, Linear e GitHub.
+Defina `ticket_pattern` com a sua própria regex para qualquer outro formato —
+fazer isso já liga o recurso, então não há uma segunda chave para lembrar. Isso
+vem **desligado até você pedir**: um `Refs:` num repositório sem rastreador é
+ruído, e a ferramenta não acrescenta cerimônia ao seu histórico sem ser chamada.
+
+A chave é lida do branch e anexada à mensagem pronta, nunca enviada ao modelo, então
+não há como ser parafraseada ou inventada. Um branch sem chave não gera trailer, um
+trailer que você já escreveu não é repetido, e um bloco de trailers existente é
+completado em vez de duplicado.
 
 ### Variáveis de ambiente
 

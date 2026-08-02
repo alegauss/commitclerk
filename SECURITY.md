@@ -59,6 +59,12 @@ No diff, patch, author, email, date or SHA from history is read or sent. Pass
 `--no-house-style` to skip the `git log` entirely — that is the switch to use if
 past commit message text must not leave the machine.
 
+When ticket trailers are enabled, the **current branch name** is read as well
+(`git rev-parse --abbrev-ref HEAD`) and matched against a regular expression. It
+is **not** sent to the model: the matched key is appended to the finished message
+locally, so the branch name never appears in the request. With the feature off,
+which is the default, the branch is not read at all.
+
 Scope inference is the only part of the tool that touches files outside the staged
 diff, and it never **reads** one: it asks whether a manifest (`package.json`,
 `pyproject.toml`, `go.mod`, …) *exists* in each ancestor directory of a staged
@@ -95,8 +101,9 @@ written by the tool:
 - `.clerk.json` at the repository root (`git rev-parse --show-toplevel`)
 - `~/.config/clerk/config.json`
 
-Only six keys are recognised — `provider`, `model`, `base_url`, `timeout`,
-`max_chars`, `house_style` — and each is type-checked before it takes effect; a
+Only eight keys are recognised — `provider`, `model`, `base_url`, `timeout`,
+`max_chars`, `house_style`, `ticket_refs`, `ticket_pattern` — and each is
+type-checked before it takes effect; a
 key that is not one of those is reported on stderr and ignored. **API keys are
 not settings and are never read from either file**, so a config file committed to
 a repository cannot carry, capture or redirect a credential. Nothing from these

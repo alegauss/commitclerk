@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The issue key in your branch name becomes a `Refs:` trailer.** Your branch
+  usually already says which ticket you are on, and the diff never does — so with
+  `ticket_refs` set in a config file, `feat/PROJ-123-retry-webhooks` produces a
+  `Refs: PROJ-123` trailer and the link between a commit and its ticket stops
+  being retyped. The built-in pattern (`[A-Z]{2,10}-\d+|#\d+`) covers Jira, Linear
+  and GitHub, and `ticket_pattern` replaces it with your own regex, turning the
+  feature on by itself. It is **off until you ask for it**: a `Refs:` trailer on a
+  repository with no tracker is noise, and this tool does not add ceremony to your
+  history uninvited. The key is read off the branch and appended to the finished
+  message rather than put in the prompt, so it is the one part of the message that
+  cannot be paraphrased or invented. A branch with no key produces no trailer, an
+  existing trailer block is joined rather than duplicated, and a `Refs:` you wrote
+  yourself is never repeated.
 - **A config file, so a team convention stops being flags everyone retypes.**
   `.clerk.json` at the root of the repository sets `provider`, `model`,
   `base_url`, `timeout`, `max_chars` and `house_style` for everyone who clones it;

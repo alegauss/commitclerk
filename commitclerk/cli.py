@@ -12,6 +12,7 @@ from .config import PROJECT_CONFIG, ConfigError, env_value, layered, load_config
 from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff
 from .files import classify_files, doc_guard_note, scope_note
 from .gitio import (
+    get_branch_name,
     get_recent_commits,
     get_repo_root,
     get_staged_diff,
@@ -27,6 +28,13 @@ from .history import (
     house_style,
     known_scopes,
     worked_examples,
+)
+from .trailers import (
+    DEFAULT_TICKET_PATTERN,
+    TICKET_TRAILER,
+    add_trailer,
+    compile_ticket_pattern,
+    ticket_key,
 )
 from .providers import (
     DEFAULT_MODEL,
@@ -54,6 +62,19 @@ def prog_name(argv0: str) -> str:
     if stem == "git-clerk":
         return "git clerk"
     return stem or "clerk"
+
+def _wants_refs(settings: dict) -> bool | None:
+    """Whether one config file asks for the `Refs:` trailer, or None if it is silent.
+
+    Naming a `ticket_pattern` is asking for the trailer, so a file does not have
+    to say so twice; `ticket_refs` alone is for a project that wants the built-in
+    pattern and nothing to configure. Either can be set to `false` to turn off
+    what the file below it in the ladder turned on.
+    """
+    if "ticket_refs" in settings:
+        return settings["ticket_refs"]
+    return True if "ticket_pattern" in settings else None
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -148,6 +169,19 @@ def main() -> int:
         False if args.no_house_style else None, None,
         project.get("house_style"), user.get("house_style"), True,
     )
+    ticket_pattern = layered(
+        None, None,
+        project.get("ticket_pattern"), user.get("ticket_pattern"), DEFAULT_TICKET_PATTERN,
+    )
+    ticket_refs = layered(
+        None, None, _wants_refs(project), _wants_refs(user), False,
+    )
+    if ticket_refs and compile_ticket_pattern(ticket_pattern) is None:
+        print(
+            f"Error: 'ticket_pattern' is not a valid regular expression: {ticket_pattern}.",
+            file=sys.stderr,
+        )
+        return 2
 
     spec = resolve_provider(provider)
     if spec is None:
@@ -219,6 +253,13 @@ def main() -> int:
     if args.message:
         # The model was asked for the body only, so the author's title leads.
         message = f"{args.message}\n\n{message}".rstrip() + "\n"
+
+    # After the model, never through it: the key is read off the branch, so the
+    # one thing that could go wrong is a paraphrase, and this way there is none.
+    if ticket_refs:
+        key = ticket_key(get_branch_name(), ticket_pattern)
+        if key:
+            message = add_trailer(message, TICKET_TRAILER, key)
 
     if args.dry_run:
         print(message)

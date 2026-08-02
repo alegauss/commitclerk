@@ -20,14 +20,6 @@ fingerprint, and by the worked examples drawn from commits about the same files.
 What is left is context the repository holds but the *history* does not: the
 branch name, and the author's own intent.
 
-### §T9 Ticket trailers
-
-Branch names carry intent the diff cannot: `feat/PROJ-123-retry-webhooks`. A
-configurable regex (default matching `[A-Z]{2,10}-\d+` and `#\d+`) with a `Refs:`
-trailer covers Jira, Linear and GitHub. It must be *config-gated and off by
-default* — a spurious `Refs:` on a repo with no tracker is noise, and this project
-does not add ceremony to other people's history uninvited.
-
 ### §T12 Standing and one-off context
 
 `--context "this reverts the caching experiment"` handles the case that no amount

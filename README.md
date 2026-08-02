@@ -52,6 +52,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
 | ⚙️ **Config file per project** | A committed `.clerk.json` picks the provider, model, endpoint and budgets for everyone on the team, so a convention stops being flags each person retypes. Flags and environment variables still win over it. |
+| 🎫 **Ticket trailers** | Turn on `ticket_refs` and the issue key in your branch (`feat/PROJ-123-…`) becomes a `Refs: PROJ-123` trailer — Jira, Linear and GitHub out of the box. Off by default, and read off the branch rather than asked of the model, so it cannot be invented. |
 | 🔒 **Runs offline if you want** | `--provider ollama` needs no API key and talks to `localhost` — your diff never leaves the machine. |
 | 🔁 **Survives a rate limit** | Transient `429`/`5xx` replies are retried with backoff and jitter, honouring `Retry-After`, instead of losing the commit — and a model that rejects a parameter gets the request repaired and resent. |
 | 🗂️ **Classifies what changed** | Each file is typed as `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, so a lockfile or a `vendor/` bump never becomes the subject of your commit message. |
@@ -250,10 +251,10 @@ nearest workspace manifest ──▶ inferred scope ─────────�
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The source is an eight-module package under [`commitclerk/`](commitclerk/) — `config`,
-`diffing`, `files`, `history`, `gitio`, `prompt`, `providers`, `cli` — and
+The source is a nine-module package under [`commitclerk/`](commitclerk/) — `config`,
+`diffing`, `files`, `history`, `gitio`, `trailers`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (1831 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (1960 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -292,6 +293,8 @@ repository, and any project that disagrees overrides it.
 | `timeout` | number | `--timeout` |
 | `max_chars` | number | `--max-chars` |
 | `house_style` | boolean | `false` is `--no-house-style` |
+| `ticket_refs` | boolean | — (off by default; see below) |
+| `ticket_pattern` | string | — (implies `ticket_refs`) |
 
 The file is found from the repository root, not the directory you are standing
 in, so the tool behaves the same three levels down. API keys are **not** settings:
@@ -303,6 +306,37 @@ is an error (exit `2`) rather than a setting silently dropped.
 > A committed `.clerk.json` can set `base_url`, which is **where your diff is
 > sent**. Read it as you would any other file you run code from — see
 > [SECURITY.md](SECURITY.md).
+
+### Ticket trailers
+
+Your branch name usually already says which ticket you are on, and the diff never
+does. Turn `ticket_refs` on and the issue key in the branch becomes a `Refs:`
+trailer, so the link between a commit and its ticket stops being retyped:
+
+```json
+{ "ticket_refs": true }
+```
+
+```
+Branch:  feat/PROJ-123-retry-webhooks
+
+feat(webhooks): retry a failed delivery three times
+
+- because a single 5xx should not drop the event
+
+Refs: PROJ-123
+```
+
+The built-in pattern is `[A-Z]{2,10}-\d+|#\d+`, which covers Jira, Linear and
+GitHub. Set `ticket_pattern` to your own regex for anything else — doing so turns
+the feature on by itself, so there is no second key to remember. This is **off
+until you ask for it**: a `Refs:` trailer on a repository with no tracker is
+noise, and the tool does not add ceremony to your history uninvited.
+
+The key is read off the branch and appended to the finished message, never sent
+to the model, so it cannot be paraphrased or invented. A branch with no key
+produces no trailer, a trailer you already wrote is not repeated, and an existing
+trailer block is joined rather than duplicated.
 
 ### Environment variables
 
