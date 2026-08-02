@@ -15,7 +15,7 @@ Shipped tasks are *removed* from this file — they are not marked ✅ here.
 
 ## The thesis
 
-commitclerk today is a six-module package, built into one ~1 100-line standalone file,
+commitclerk today is a seven-module package, built into one ~1 400-line standalone file,
 with one genuinely differentiated idea: **it refuses to describe documentation prose as
 work that was implemented.**
 Everything below is an answer to one of three questions:
@@ -61,8 +61,7 @@ under-exploited: the repository is full of cheap, local, zero-cost context.* →
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T7 | 💭 | **House-style fingerprint** — sample the last N commit subjects, derive the types and scopes this repo actually uses, its body style (bullets? paragraphs? none?), and its language, then inject a compact "house style" block. Makes output match *this* repo instead of a generic ideal. → §B.1 | — |
-| T8 | 💭 | **Few-shot from your own history** — pick the 2–3 past commits whose touched paths overlap the current diff most and include their title+body as examples. Local, free, no telemetry, and it improves with the repo's age. → §B.1 | T7 |
+| T8 | 💭 | **Few-shot from your own history** — pick the 2–3 past commits whose touched paths overlap the current diff most and include their title+body as examples. Local, free, no telemetry, and it improves with the repo's age. → §B.1 | — |
 | T9 | 💭 | Branch/ticket context: parse an issue key out of the branch name (`feat/PROJ-123-thing`) via a configurable regex and emit a `Refs: PROJ-123` trailer. → §B.2 | T25 |
 | T10 | 💭 | Monorepo scope inference: derive the Conventional Commits scope from the common path prefix or the nearest workspace manifest (`package.json`, `pyproject.toml`, `pom.xml`, `go.mod`). → §B.3 | — |
 | T12 | 💭 | `--context "<note>"` for one-off intent, plus `.clerk/context.md` for standing repo facts ("this repo ships a CLI; `clerk` is the binary name"). → §B.5 | T25 |
@@ -177,6 +176,7 @@ If you want the highest value per unit of effort, roughly:
 1. **T49** — trivial, and it fixes the discovery problem.
 2. **T25, T28** — config plus lint; together they unlock team adoption.
 3. **T19, T21** — the two blockers for corporate approval.
-4. **T7, T8** — the quality jump nobody else in this niche ships.
+4. **T8** — the quality jump nobody else in this niche ships, now that the
+   fingerprint it builds on has landed.
 5. **T57, T58** — cheap guards for the two mistakes this project keeps making by hand.
 6. **T40, T41** — the product expansion.

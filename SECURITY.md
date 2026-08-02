@@ -36,9 +36,18 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 ## Where your data goes
 
 `commitclerk` makes exactly **one** network request per run: an HTTPS POST of the
-prompt (the staged diff, the staged file list, and the rules) to the endpoint you
-configured. Nothing else is transmitted — no telemetry, no analytics, no remote
-config, no second call.
+prompt (the staged diff, the staged file list, the rules, and a measured summary
+of your recent commit *messages*) to the endpoint you configured. Nothing else is
+transmitted — no telemetry, no analytics, no remote config, no second call.
+
+The commit-message summary is the "house style" block: `commitclerk` reads the
+subjects and bodies of the last 200 non-merge commits locally and sends only
+**counts and shapes** derived from them — the types and scopes in use, the body
+shape, the median subject length, the trailer keys, the language. No commit
+message text is transmitted, with one exception: **scope names** (the `api` in
+`feat(api):`) and **trailer keys** (`Refs`) appear verbatim, because a count of
+them would be useless. No diff, patch, author, email, date or SHA from history is
+read or sent. `--no-house-style` skips the `git log` entirely.
 
 That endpoint is `https://api.openai.com/v1/chat/completions` by default, and it
 is under your control:
@@ -59,7 +68,8 @@ before the request is built.
 
 ## What is out of scope
 
-- **The staged diff being sent to the configured API endpoint.** This is the
+- **The staged diff, and the house-style summary of past commit messages, being
+  sent to the configured API endpoint.** This is the
   documented, intentional behavior of the tool — see
   [Privacy and cost](README.md#privacy-and-cost). Do not use `commitclerk` on
   repositories whose contents may not leave your machine, unless you are running a

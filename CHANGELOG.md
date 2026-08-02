@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The message now matches your repository's own house style.** Before writing
+  anything, the tool reads the last 200 non-merge commit subjects and bodies with a
+  single `git log` and measures what this repo actually does: which Conventional
+  Commits types and scopes are in use (and whether prefixes are used at all),
+  whether bodies are bulleted, prose or absent, which bullet character, the median
+  subject length, which trailers appear, and — when the evidence is unambiguous —
+  which human language the subjects are written in. That becomes a ~600-character
+  "house style" block at the top of the prompt, so the output stops fighting the
+  repo's conventions instead of producing a generic well-formed message. It is
+  measured locally on every run, costs no extra API call, and is subtracted from
+  the `--max-chars` diff budget rather than added on top of it. Silence is the
+  default when the evidence is thin: fewer than five commits produces no block at
+  all, and the language is named only when one language both doubles its runner-up
+  and is supported by a quarter of the subjects — telling the model a Portuguese
+  repo writes Spanish is worse than saying nothing. `--no-house-style` turns the
+  whole thing off.
 - **A note when a staged file also has unstaged changes.** `git add -p` makes this
   routine and the consequence is easy to miss: the message describes the staged
   version of the code, which is not the version on disk. One line on stderr names the

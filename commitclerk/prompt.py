@@ -43,9 +43,16 @@ def build_user_prompt(
     guard: str = "",
     summary: str = "",
     classes: dict | None = None,
+    house_style: str = "",
 ) -> str:
     classes = classes or {}
-    parts = ["Files changed:"] + [
+    parts = []
+    if house_style:
+        # First: it is the frame everything below is read through, and unlike the
+        # guard it is not competing with the diff for the model's attention — it
+        # describes the shape of the answer, not what the answer is about.
+        parts += [house_style, ""]
+    parts += ["Files changed:"] + [
         f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
     ]
     if classes:

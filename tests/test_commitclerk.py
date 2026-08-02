@@ -1040,6 +1040,177 @@ class TestBuildUserPrompt(unittest.TestCase):
         self.assertIn("- app.py\n", prompt)
         self.assertNotIn("Class mix", prompt)
 
+    def test_the_house_style_block_comes_before_the_diff(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFFBODY", ["a.py"], house_style="House style, measured from X:"
+        )
+        self.assertIn("House style", prompt)
+        self.assertLess(prompt.index("House style"), prompt.index("DIFFBODY"))
+
+    def test_no_history_means_no_house_style_heading(self):
+        self.assertNotIn("House style", commitclerk.build_user_prompt("d", ["a.py"]))
+
+
+def _record(subject: str, body: str = "") -> str:
+    return f"{subject}\n{body}"
+
+
+class TestSubjectTypeScope(unittest.TestCase):
+    def test_type_and_scope_are_lowercased(self):
+        self.assertEqual(
+            commitclerk.subject_type_scope("Feat(API): add retry"), ("feat", "api")
+        )
+
+    def test_a_breaking_marker_does_not_hide_the_type(self):
+        self.assertEqual(commitclerk.subject_type_scope("feat!: drop v1"), ("feat", None))
+
+    def test_a_plain_subject_has_neither(self):
+        self.assertEqual(commitclerk.subject_type_scope("Update the readme"), (None, None))
+
+    def test_a_colon_in_prose_is_not_a_prefix(self):
+        # "Fixes" is 5 chars of letters, but the space before the colon rules it out.
+        self.assertEqual(commitclerk.subject_type_scope("Note : something"), (None, None))
+
+
+class TestBodyShape(unittest.TestCase):
+    def test_dashes_are_bullets(self):
+        self.assertEqual(commitclerk.body_shape("- one\n- two"), "bullets")
+
+    def test_asterisks_are_bullets_too(self):
+        self.assertEqual(commitclerk.body_shape("* one\n* two"), "bullets")
+        self.assertEqual(commitclerk.bullet_marker("* one"), "*")
+
+    def test_a_paragraph_is_prose(self):
+        self.assertEqual(commitclerk.body_shape("This explains why.\nOn two lines."), "prose")
+        self.assertIsNone(commitclerk.bullet_marker("This explains why."))
+
+    def test_an_empty_body_is_none(self):
+        self.assertEqual(commitclerk.body_shape("\n  \n"), "none")
+
+
+class TestTrailerKeys(unittest.TestCase):
+    def test_the_last_paragraph_is_read_as_trailers(self):
+        body = "- did a thing\n\nRefs: PROJ-1\nCo-authored-by: Someone <s@example.com>"
+        self.assertEqual(
+            commitclerk.trailer_keys(body), {"Refs", "Co-authored-by"}
+        )
+
+    def test_prose_that_merely_contains_a_colon_is_not_a_trailer(self):
+        self.assertEqual(commitclerk.trailer_keys("Note: this is temporary\nand ugly"), set())
+
+    def test_a_body_without_trailers_yields_nothing(self):
+        self.assertEqual(commitclerk.trailer_keys("- one\n- two"), set())
+
+
+class TestDominantLanguage(unittest.TestCase):
+    def test_english_subjects_are_recognised(self):
+        subjects = [
+            "add retry with backoff to the client",
+            "fix the crash when the file is empty",
+            "remove the unused helper and its test",
+            "update the readme with the new flag",
+            "make the timeout configurable",
+        ]
+        self.assertEqual(commitclerk.dominant_language(subjects), "English")
+
+    def test_portuguese_is_not_mistaken_for_spanish(self):
+        subjects = [
+            "adiciona novo arquivo de configuracao",
+            "corrige a mensagem quando nao ha alteracoes",
+            "atualiza a versao dos pacotes",
+            "melhora o texto do arquivo de ajuda",
+            "ajusta o titulo para caber em 72 caracteres",
+        ]
+        self.assertEqual(commitclerk.dominant_language(subjects), "Portuguese")
+
+    def test_accents_do_not_change_the_answer(self):
+        subjects = [
+            "adiciona novo arquivo de configuração",
+            "corrige a mensagem quando não há alterações",
+            "atualiza a versão dos pacotes",
+            "melhora o texto do arquivo de ajuda",
+            "ajusta o título para caber em 72 caracteres",
+        ]
+        self.assertEqual(commitclerk.dominant_language(subjects), "Portuguese")
+
+    def test_the_conventional_prefix_is_not_scored(self):
+        # Every repo on earth writes `fix:`; counting it makes every history English.
+        subjects = ["fix: corrige a mensagem quando nao ha alteracoes"] * 6
+        self.assertEqual(commitclerk.dominant_language(subjects), "Portuguese")
+
+    def test_it_abstains_when_there_is_no_clear_winner(self):
+        self.assertIsNone(commitclerk.dominant_language(["x", "y", "z", "w", "v"]))
+
+    def test_it_abstains_on_no_subjects(self):
+        self.assertIsNone(commitclerk.dominant_language([]))
+
+
+class TestHouseStyle(unittest.TestCase):
+    records = [
+        _record("feat(api): add retry with backoff", "- one\n- two"),
+        _record("feat(api): support a second endpoint", "- one"),
+        _record("fix(ui): correct the empty state", "- one\n\nRefs: PROJ-9"),
+        _record("fix: handle a missing file", "- one"),
+        _record("docs: document the new flag", "- one"),
+        _record("chore: bump the pinned version", "- one"),
+    ]
+
+    def setUp(self):
+        self.block = commitclerk.house_style(self.records)
+
+    def test_it_reports_the_types_the_repo_actually_uses(self):
+        self.assertIn("feat 2", self.block)
+        self.assertIn("fix 2", self.block)
+        self.assertIn("100% of subjects use a Conventional Commits prefix", self.block)
+
+    def test_it_reports_the_scopes_the_repo_actually_uses(self):
+        self.assertIn("Scopes in use: api 2, ui 1.", self.block)
+
+    def test_it_reports_the_body_shape_and_bullet_marker(self):
+        self.assertIn("Bodies are usually bullets", self.block)
+        self.assertIn("bulleted with '-'", self.block)
+
+    def test_it_reports_trailers_that_are_really_used(self):
+        self.assertIn("Trailers in use: Refs.", self.block)
+
+    def test_a_repo_without_prefixes_is_told_not_to_invent_them(self):
+        plain = [_record(f"Rewrite the {n}th thing", "prose about it") for n in range(8)]
+        block = commitclerk.house_style(plain)
+        self.assertIn("do NOT use Conventional Commits prefixes", block)
+        self.assertIn("Bodies are usually prose", block)
+
+    def test_too_little_history_produces_nothing(self):
+        self.assertEqual(commitclerk.house_style(self.records[:4]), "")
+        self.assertEqual(commitclerk.house_style([]), "")
+
+    def test_the_block_stays_inside_its_budget(self):
+        wide = [
+            _record(f"feat(scope-number-{n}): a fairly long subject line here", "- x")
+            for n in range(60)
+        ]
+        block = commitclerk.house_style(wide)
+        self.assertLessEqual(len(block), commitclerk.MAX_HOUSE_STYLE_CHARS)
+        # Truncation drops whole facts from the end, never half a sentence.
+        self.assertTrue(block.endswith("only when none fits."))
+
+    def test_a_budget_too_small_for_any_fact_yields_nothing(self):
+        self.assertEqual(commitclerk.house_style(self.records, limit=120), "")
+
+
+class TestSplitRecords(unittest.TestCase):
+    def test_records_are_split_on_the_separator_not_on_newlines(self):
+        raw = (
+            f"feat: one\n- body line\n{commitclerk.RECORD_SEP}"
+            f"fix: two\n\n{commitclerk.RECORD_SEP}"
+        )
+        records = commitclerk.split_records(raw)
+        self.assertEqual(len(records), 2)
+        self.assertEqual(commitclerk.parse_commit(records[0]), ("feat: one", "- body line"))
+        self.assertEqual(commitclerk.parse_commit(records[1]), ("fix: two", ""))
+
+    def test_empty_output_yields_no_records(self):
+        self.assertEqual(commitclerk.split_records(""), [])
+
 
 def _git(repo, *args):
     subprocess.run(
@@ -1102,6 +1273,47 @@ class TestStagedSummary(unittest.TestCase):
         capped = commitclerk.truncate("x" * 5_000, commitclerk.MAX_SUMMARY_CHARS)
         self.assertLessEqual(len(capped), commitclerk.MAX_SUMMARY_CHARS + 60)
         self.assertIn("truncated", capped)
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
+class TestRecentCommits(unittest.TestCase):
+    """Reading the history the house-style fingerprint is measured from."""
+
+    @classmethod
+    def setUpClass(cls):
+        repo = tempfile.mkdtemp()
+        cls.addClassCleanup(shutil.rmtree, repo, True)
+        cls.addClassCleanup(os.chdir, os.getcwd())
+        _git(repo, "init", "-q", ".")
+        for n in range(6):
+            pathlib.Path(repo, f"f{n}.py").write_text(f"x = {n}\n")
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-qm", f"feat(core): add f{n}\n\n- because\n- and why")
+        os.chdir(repo)
+        cls.records = commitclerk.get_recent_commits()
+
+    def test_every_commit_becomes_one_record_with_its_body(self):
+        self.assertEqual(len(self.records), 6)
+        subject, body = commitclerk.parse_commit(self.records[0])
+        self.assertEqual(subject, "feat(core): add f5")
+        self.assertIn("- because", body)
+
+    def test_the_depth_limit_is_honoured(self):
+        self.assertEqual(len(commitclerk.get_recent_commits(2)), 2)
+
+    def test_the_fingerprint_of_a_real_repo(self):
+        block = commitclerk.house_style(self.records)
+        self.assertIn("feat 6", block)
+        self.assertIn("Scopes in use: core 6.", block)
+        self.assertLessEqual(len(block), commitclerk.MAX_HOUSE_STYLE_CHARS)
+
+    def test_a_directory_outside_a_repo_yields_no_records(self):
+        outside = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, outside, True)
+        here = os.getcwd()
+        self.addCleanup(os.chdir, here)
+        os.chdir(outside)
+        self.assertEqual(commitclerk.get_recent_commits(), [])
 
 
 if __name__ == "__main__":

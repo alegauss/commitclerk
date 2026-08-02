@@ -2,8 +2,8 @@
 
 > A command-line tool that writes your git commit messages. It reads the staged diff,
 > asks an LLM (OpenAI Chat Completions or the Anthropic Messages API) for a Conventional Commits message, prints it,
-> and commits. Implemented as a six-module package (`diffing`, `files`, `gitio`, `prompt`,
-> `providers`, `cli`) that is also built into a single standalone ~1 100-line script,
+> and commits. Implemented as a seven-module package (`diffing`, `files`, `history`, `gitio`,
+> `prompt`, `providers`, `cli`) that is also built into a single standalone ~1 400-line script,
 > `dist/commitclerk.py`, with **zero third-party dependencies** — standard library only
 > (`urllib`, `subprocess`, `argparse`), Python 3.8+.
 > Installs three identical entry points: `clerk`, `commitclerk`, and `git clerk`.
@@ -21,6 +21,7 @@ Anthropic or GitHub. By default it calls the OpenAI Chat Completions API using t
 - **Title override**: `-m "<title>"` uses your title verbatim and limits the model to writing the body bullets. The most reliable mode, and the recommended default when the intent isn't obvious from the diff alone.
 - **Mixed doc+code detection**: when documentation changes alongside code, the prompt names the documentation files, reports documentation's share of the changed lines, and instructs the model to take the type prefix only from the non-documentation diff lines (so a docstring tweak beside a large changelog entry is `docs:`, while a commit that really implements the documented feature is still `feat:`). The note is placed after the diff, where it is not outweighed by the prose it warns about.
 - **Documentation-only detection**: if every staged file is documentation (`.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, anything under `docs/`, or a known name like CHANGELOG / README / ROADMAP / CONTRIBUTING), the prompt switches to a docs-only framing — use the `docs:` prefix and describe the documentation change itself ("record X in the changelog"), never "implement X". This exists because a diff-only generator reading changelog prose about already-shipped work will mislabel a Markdown-only commit as `feat:`, and `git log --grep` plus release tooling then inherit the lie.
+- **House-style fingerprint**: before writing, a single `git log -n200 --no-merges` measures what this repository actually does — the Conventional Commits types and scopes in use (or whether prefixes are used at all), whether bodies are bulleted, prose or absent and with which bullet character, the median subject length, the trailer keys, and the subject language when it is unambiguous. The result is a ~600-character "house style" block at the top of the prompt, subtracted from the `--max-chars` diff budget rather than added on top. Fewer than five commits produces no block; the language is named only when one language doubles its runner-up and is supported by a quarter of the subjects. Only counts and shapes are transmitted, never message text — scope names and trailer keys excepted. `--no-house-style` disables it.
 - **Conventional Commits**: emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes; imperative titles under 72 characters; bodies of 2–6 bullets about *why*; no emojis, headers, or code fences.
 - **File-class taxonomy**: every staged file is classified as `code`, `test`, `docs`, `generated`, `config`, `vendor` or `binary` (path signals plus the diff's binary markers). The class is attached to each filename in the prompt, with a one-line mix, and the rules take the Conventional Commits type from the classes that are the point of the commit — generated, vendored and binary files are never the subject and their contents are never narrated.
 - **Generated files are demoted, not dropped**: a `generated` or `vendor` file's diff body is replaced by `[... generated file, +N -M, contents not shown ...]` beneath its `diff --git` header, before the per-file budget is applied, so the reclaimed characters go to the code files. Bodies under 500 characters are left as-is.
@@ -34,7 +35,7 @@ Anthropic or GitHub. By default it calls the OpenAI Chat Completions API using t
 
 ## Usage
 
-`clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL] [--timeout S] [--max-chars N] [--version]`
+`clerk [-m TITLE] [--dry-run] [--provider NAME] [--base-url URL] [--model MODEL] [--timeout S] [--max-chars N] [--no-house-style] [--version]`
 
 - `-m`, `--message TITLE` — use TITLE verbatim as the commit title; the AI writes only the body.
 - `--dry-run` — print the message and exit without committing.
@@ -43,6 +44,7 @@ Anthropic or GitHub. By default it calls the OpenAI Chat Completions API using t
 - `--model MODEL` — model to call (default: the provider's default; `gpt-4o-mini` or `$OPENAI_MODEL` for `openai`).
 - `--timeout S` — seconds to wait for each API request (default `60`).
 - `--max-chars N` — character budget for the diff; a larger diff is trimmed per file so every changed file still reaches the model (default `60000`).
+- `--no-house-style` — skip the `git log` that measures the repository's own commit conventions.
 - `--version` — print the version and exit.
 
 Exit codes: `0` committed (or dry-run printed), `1` nothing staged, `2` configuration problem

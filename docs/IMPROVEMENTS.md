@@ -14,35 +14,27 @@ shipped in full and its section is gone; letters are never reused.
 
 This block is where commitclerk can be *better than its competitors rather than
 merely different from them*. Its founding insight — the diff alone misleads — is
-currently exploited exactly once, for documentation-only commits. The repository
-is full of further context that is local, free, private, and unused.
+exploited twice so far: for documentation-only commits, and by the house-style
+fingerprint. The repository is full of further context that is local, free,
+private, and still unused.
 
 ### B.1 — The repo already knows what a good commit looks like here
 
-Every generator in this niche writes a *generic* well-formed commit message. None
-of them writes a message that looks like it belongs in **your** history.
-
-**T7, the style fingerprint,** is cheap: `git log -n 200 --format=%s%n%b`, then
-count. Which types actually appear (does this repo use `chore:` or `build:`?).
-Which scopes are real (`feat(api):`, `feat(ui):` — the set is finite and
-discoverable). Whether bodies are bulleted, prose, or absent. Whether subjects are
-English or Portuguese. Whether ticket trailers appear. Fifteen lines of counting,
-compressed into a ~10-line "house style" block in the prompt, and the output stops
-fighting the repo's conventions.
-
-**T8, few-shot from your own history,** is the same data used harder. Score recent
-commits by path overlap with the current diff (Jaccard over touched directories is
-enough), take the top two or three, and include their title+body as worked
-examples. This is the classic few-shot quality jump, except the examples are
+The house-style fingerprint measures *how* this repo writes commits. **T8,
+few-shot from your own history,** is the same `git log` data used harder: score
+recent commits by path overlap with the current diff (Jaccard over touched
+directories is enough), take the top two or three, and include their title+body as
+worked examples. This is the classic few-shot quality jump, except the examples are
 *perfectly* on-distribution because the same team wrote them about the same code.
-It gets better as the repo ages, costs one extra `git log` call, and — importantly
-for this project's identity — involves **no telemetry and no server**: the model
-that adapts to your team is the prompt, and it is rebuilt locally every run.
+It gets better as the repo ages, costs no extra API call, and — importantly for
+this project's identity — involves **no telemetry and no server**: the model that
+adapts to your team is the prompt, and it is rebuilt locally every run.
 
-Budget note: cap the fingerprint at ~600 characters and each example body at ~400,
-and subtract that from the diff budget (§C.1) rather than adding it on top.
-Interaction with `--offline` (T21): the fingerprint alone is enough to make even
-the LLM-free path pick a plausible type and scope.
+Budget note: cap each example body at ~400 characters and subtract that from the
+diff budget (§C.1) rather than adding it on top, as the fingerprint already does.
+Unlike the fingerprint, the examples are past commit message **text** sent
+verbatim, so `README.md` → *Privacy and cost* and `SECURITY.md` → *Where your data
+goes* both have to say so.
 
 ### B.2 — Ticket trailers
 
@@ -131,8 +123,9 @@ an expired key or a flight without wifi becomes a *broken git workflow*. That is
 how a tool gets uninstalled.
 
 `--offline` produces a decent deterministic message with no network: type from the
-file-class mix (§C.2), scope from path inference (§B.3), and a body of grouped
-bullets (`- Update 3 files under src/api/`). It is not as good as the model. It is
+file-class mix (§C.2) narrowed to the types the house-style fingerprint found in
+this repo, scope from path inference (§B.3), and a body of grouped bullets
+(`- Update 3 files under src/api/`). It is not as good as the model. It is
 infinitely better than an error at the moment someone is trying to commit, and it
 is what the hook falls back to automatically on any failure.
 

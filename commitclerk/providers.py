@@ -368,6 +368,7 @@ def call_model(
     guard: str = "",
     summary: str = "",
     classes: dict | None = None,
+    house_style: str = "",
     base: str | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> str:
@@ -375,7 +376,8 @@ def call_model(
         model,
         _system_prompt(body_only=title is not None),
         build_user_prompt(
-            diff, files, title=title, guard=guard, summary=summary, classes=classes
+            diff, files, title=title, guard=guard, summary=summary, classes=classes,
+            house_style=house_style,
         ),
     )
 

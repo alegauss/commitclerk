@@ -16,6 +16,7 @@ single-file build with `python commitclerk.py`):
     clerk --provider ollama     # local model, no API key, nothing leaves the box
     clerk --timeout 180         # give a slow local model more room
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
+    clerk --no-house-style      # do not copy this repo's own commit conventions
     git clerk                   # same tool, as a native git subcommand
 
 Environment:
@@ -34,6 +35,10 @@ commit just adds prose to CHANGELOG/ROADMAP/README that *describes* a feature,
 the model used to echo it as "feat: implement <feature>" even though the feature
 shipped in an earlier commit. The rules in `prompt.py` (and the -m override)
 keep the message about what THIS commit actually changes.
+
+`history.py` reads the last 200 commit subjects and bodies and measures the types,
+scopes, body shape and language this repo actually uses, so the message written
+belongs in this history rather than being generically correct.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -55,6 +60,7 @@ import re  # noqa: E402, F401
 import subprocess  # noqa: E402, F401
 import sys  # noqa: E402, F401
 import time  # noqa: E402, F401
+import unicodedata  # noqa: E402, F401
 import urllib.error  # noqa: E402, F401
 import urllib.request  # noqa: E402, F401
 
@@ -80,8 +86,24 @@ from .files import (  # noqa: E402
     doc_line_share,
     is_doc_only,
 )
+from .history import (  # noqa: E402
+    HISTORY_DEPTH,
+    MAX_HOUSE_STYLE_CHARS,
+    MIN_COMMITS,
+    RECORD_SEP,
+    body_shape,
+    bullet_marker,
+    dominant_language,
+    house_style,
+    parse_commit,
+    split_records,
+    strip_prefix,
+    subject_type_scope,
+    trailer_keys,
+)
 from .gitio import (  # noqa: E402
     MAX_SUMMARY_CHARS,
+    get_recent_commits,
     get_staged_diff,
     get_staged_files,
     get_staged_summary,
@@ -136,6 +158,8 @@ __all__ = [
     "classify",
     "classify_files",
     "doc_guard_note",
+    "house_style",
+    "get_recent_commits",
     "budget_diff",
     "demote_diff",
     "get_staged_diff",
