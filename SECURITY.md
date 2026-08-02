@@ -41,6 +41,17 @@ your recent commit *messages*, and two or three past commit messages as style
 examples) to the endpoint you configured. Nothing else is transmitted — no
 telemetry, no analytics, no remote config, no second call.
 
+**`--deep` is the one exception to "exactly one request", and it is opt-in.**
+When it is on (by flag, or `"deep": true` in a config file), every file too large
+for the `--max-chars` budget is first sent on its own, to the **same** endpoint
+with the same key, to be summarised in two lines. Two things change: there are
+now N+1 requests rather than one, and each of those N carries that file's diff
+**in full** (up to 60 000 characters) instead of the smaller share the budget
+would have trimmed it to — so a run with `--deep` sends *more* of your code than
+the same run without it. No new destination, no new file read, and nothing extra
+happens at all when the staged diff already fits the budget. It is off by default
+for this reason.
+
 `commitclerk` reads the subjects, bodies and touched file paths of the last 200
 non-merge commits locally, with one `git log`, and uses them in two ways:
 
@@ -108,20 +119,22 @@ written by the tool:
 - `.clerk.json` at the repository root (`git rev-parse --show-toplevel`)
 - `~/.config/clerk/config.json`
 
-Only eight keys are recognised — `provider`, `model`, `base_url`, `timeout`,
-`max_chars`, `house_style`, `ticket_refs`, `ticket_pattern` — and each is
+Only nine keys are recognised — `provider`, `model`, `base_url`, `timeout`,
+`max_chars`, `house_style`, `deep`, `ticket_refs`, `ticket_pattern` — and each is
 type-checked before it takes effect; a
 key that is not one of those is reported on stderr and ignored. **API keys are
 not settings and are never read from either file**, so a config file committed to
 a repository cannot carry, capture or redirect a credential. Nothing from these
 files is transmitted: they only choose what the tool does with the request it was
-already going to make.
+already going to make — though `base_url` chooses **where** it is made, and
+`deep` chooses **how many** requests it becomes and how much of each large file
+goes into them.
 
 ## What is out of scope
 
-- **The staged diff, the house-style summary of past commit messages, and the past
-  commit messages used as style examples, being sent to the configured API
-  endpoint.** This is the
+- **The staged diff, the house-style summary of past commit messages, the past
+  commit messages used as style examples, and — with `--deep` — the full diff of
+  each oversized file, being sent to the configured API endpoint.** This is the
   documented, intentional behavior of the tool — see
   [Privacy and cost](README.md#privacy-and-cost). Do not use `commitclerk` on
   repositories whose contents may not leave your machine, unless you are running a

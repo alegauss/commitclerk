@@ -10,7 +10,13 @@ import sys
 from . import __version__
 from .config import PROJECT_CONFIG, ConfigError, env_value, layered, load_config
 from .context import CONTEXT_FILE, context_note, context_path, read_context_file
-from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff
+from .deep import (
+    DEEP_NOTE,
+    SUMMARY_SYSTEM_PROMPT,
+    summarize_diff,
+    summary_user_prompt,
+)
+from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff, over_budget_paths
 from .files import classify_files, doc_guard_note, scope_note
 from .gitio import (
     get_branch_name,
@@ -46,6 +52,7 @@ from .providers import (
     api_key_for,
     base_url_error,
     call_model,
+    complete,
     missing_key_env,
     resolve_base,
     resolve_model,
@@ -75,6 +82,52 @@ def _wants_refs(settings: dict) -> bool | None:
     if "ticket_refs" in settings:
         return settings["ticket_refs"]
     return True if "ticket_pattern" in settings else None
+
+
+def deepen(
+    diff: str,
+    budget: int,
+    spec: dict,
+    api_key: str | None,
+    model: str,
+    *,
+    base: str | None = None,
+    timeout: int = REQUEST_TIMEOUT,
+) -> tuple[str, str]:
+    """The map half of `--deep`: (diff with summaries, the note that explains them).
+
+    Asked of the already-demoted diff and against the real budget, so the
+    question is the exact one the allocator is about to answer -- which files
+    would lose their tail. A commit that already fits names none of them and
+    spends nothing, which is what makes the flag safe to leave on in a config
+    file. The note comes back empty when no summary was obtained, because a
+    notation nothing uses is only budget spent on confusing the model.
+    """
+    oversized = over_budget_paths(diff, budget)
+    if not oversized:
+        return diff, ""
+    print(
+        f"Summarizing {len(oversized)} oversized file(s) "
+        f"in {len(oversized)} extra request(s).",
+        file=sys.stderr,
+    )
+
+    def summarize(path: str, chunk: str) -> str:
+        try:
+            return complete(
+                spec, api_key, model,
+                SUMMARY_SYSTEM_PROMPT, summary_user_prompt(path, chunk),
+                base=base, timeout=timeout,
+            )
+        # `post_json` reports a fatal API error by raising this. One file's
+        # summary is not worth the commit: say so, and let the file be trimmed
+        # exactly as it would have been without the flag.
+        except SystemExit as exc:
+            print(f"Could not summarize {path} ({exc}).", file=sys.stderr)
+            return ""
+
+    diff, summarized = summarize_diff(diff, oversized, summarize)
+    return diff, DEEP_NOTE if summarized else ""
 
 
 def main() -> int:
@@ -140,6 +193,15 @@ def main() -> int:
              "generated or vendored files are replaced by a one-line placeholder.",
     )
     parser.add_argument(
+        "--deep",
+        action="store_true",
+        default=None,
+        help="Summarize each file too large for the diff budget in its own cheap request, "
+             "then write the message from those summaries plus the smaller files' real "
+             "diffs. Costs one extra request per oversized file, and nothing at all when "
+             "the whole diff already fits.",
+    )
+    parser.add_argument(
         "--no-house-style",
         action="store_true",
         default=None,
@@ -177,6 +239,9 @@ def main() -> int:
     house_style_on = layered(
         False if args.no_house_style else None, None,
         project.get("house_style"), user.get("house_style"), True,
+    )
+    deep_on = layered(
+        True if args.deep else None, None, project.get("deep"), user.get("deep"), False,
     )
     ticket_pattern = layered(
         None, None,
@@ -255,7 +320,18 @@ def main() -> int:
     # worth a couple of thousand characters of diff, but it must not silently raise
     # what the user asked to send.
     spent = len(house) + len(scope) + len(examples) + len(author)
-    diff = budget_diff(demote_diff(diff, classes), max(0, max_chars - spent))
+    budget = max(0, max_chars - spent)
+    diff = demote_diff(diff, classes)
+
+    if deep_on:
+        diff, note = deepen(
+            diff, budget, spec, api_key, model, base=base, timeout=timeout,
+        )
+        if note:
+            context["deep"] = note
+            budget = max(0, budget - len(note))
+
+    diff = budget_diff(diff, budget)
 
     message = call_model(
         spec, api_key, model, diff, files,

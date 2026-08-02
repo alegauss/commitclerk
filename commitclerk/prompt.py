@@ -47,6 +47,7 @@ def build_user_prompt(
     examples: str = "",
     scope: str = "",
     context: str = "",
+    deep: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -79,6 +80,10 @@ def build_user_prompt(
         parts += ["", context]
     if title is not None:
         parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
+    if deep:
+        # Immediately above the diff, because it is the key to a notation that
+        # only appears inside it: read anywhere else it explains nothing.
+        parts += ["", deep]
     parts += ["", "Unified diff:", diff]
     if guard:
         # Last, on purpose. Measured against gpt-4o-mini: with the guard placed

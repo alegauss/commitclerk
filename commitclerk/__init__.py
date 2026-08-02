@@ -15,6 +15,7 @@ single-file build with `python commitclerk.py`):
     clerk --provider anthropic  # select the API provider
     clerk --provider ollama     # local model, no API key, nothing leaves the box
     clerk --timeout 180         # give a slow local model more room
+    clerk --deep                # summarize each file too big for the budget
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     clerk --no-house-style      # do not copy this repo's own commit conventions
     clerk --context "reverts the caching experiment"   # why, in one sentence
@@ -32,8 +33,8 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style, ticket_refs, ticket_pattern). A setting is taken from the first
-place that has it:
+house_style, deep, ticket_refs, ticket_pattern). A setting is taken from the
+first place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
@@ -61,6 +62,13 @@ message written belongs in this history rather than being generically correct.
 `files.py` walks
 each staged file up to its nearest workspace manifest, so a monorepo change
 confined to one package is scoped to it.
+
+For a commit no budget can fit, `--deep` (`deep.py`) summarizes each oversized
+file in its own cheap request and writes the message from those summaries plus
+the smaller files' real diffs, so the tail of a 5 000-line change is described
+rather than trimmed away. One extra request per oversized file, none when the
+diff already fits, and a summary that fails leaves that file to be trimmed as
+usual - never invented.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -113,8 +121,21 @@ from .diffing import (  # noqa: E402
     chunk_path,
     count_changes,
     demote_diff,
+    over_budget_paths,
     split_diff,
     truncate,
+)
+from .deep import (  # noqa: E402
+    DEEP_NOTE,
+    SUMMARY_INPUT_CHARS,
+    SUMMARY_LINE_CHARS,
+    SUMMARY_MARK,
+    SUMMARY_MAX_LINES,
+    SUMMARY_SYSTEM_PROMPT,
+    clean_summary,
+    summarize_diff,
+    summary_block,
+    summary_user_prompt,
 )
 from .files import (  # noqa: E402
     FILE_CLASSES,
@@ -199,6 +220,7 @@ from .providers import (  # noqa: E402
     api_key_for,
     base_url_error,
     call_model,
+    complete,
     missing_key_env,
     post_json,
     provider_url,
@@ -211,7 +233,7 @@ from .providers import (  # noqa: E402
     suggested_replacement,
 )
 
-from .cli import _wants_refs, main, prog_name  # noqa: E402  (last: it imports the rest)
+from .cli import _wants_refs, deepen, main, prog_name  # noqa: E402  (last: it imports the rest)
 
 __all__ = [
     "__version__",
@@ -240,6 +262,8 @@ __all__ = [
     "get_recent_commits",
     "budget_diff",
     "demote_diff",
+    "over_budget_paths",
+    "summarize_diff",
     "get_staged_diff",
     "get_staged_files",
     "get_staged_summary",

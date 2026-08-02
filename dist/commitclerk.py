@@ -30,6 +30,7 @@ single-file build with `python commitclerk.py`):
     clerk --provider anthropic  # select the API provider
     clerk --provider ollama     # local model, no API key, nothing leaves the box
     clerk --timeout 180         # give a slow local model more room
+    clerk --deep                # summarize each file too big for the budget
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     clerk --no-house-style      # do not copy this repo's own commit conventions
     clerk --context "reverts the caching experiment"   # why, in one sentence
@@ -47,8 +48,8 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style, ticket_refs, ticket_pattern). A setting is taken from the first
-place that has it:
+house_style, deep, ticket_refs, ticket_pattern). A setting is taken from the
+first place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
@@ -76,6 +77,13 @@ message written belongs in this history rather than being generically correct.
 `files.py` walks
 each staged file up to its nearest workspace manifest, so a monorepo change
 confined to one package is scoped to it.
+
+For a commit no budget can fit, `--deep` (`deep.py`) summarizes each oversized
+file in its own cheap request and writes the message from those summaries plus
+the smaller files' real diffs, so the tail of a 5 000-line change is described
+rather than trimmed away. One extra request per oversized file, none when the
+diff already fits, and a summary that fails leaves that file to be trimmed as
+usual - never invented.
 
 The source is a package; `dist/commitclerk.py` is the same code concatenated into
 one file by `scripts/build_single_file.py`, for people who would rather read and
@@ -115,6 +123,9 @@ SETTINGS = {
     "timeout": int,
     "max_chars": int,
     "house_style": bool,
+    # Off unless asked for: it spends one extra request per oversized file, and a
+    # setting that multiplies a bill has no business defaulting to on.
+    "deep": bool,
     # Off unless a project asks for it: a `Refs:` trailer on a repository with no
     # tracker is noise, and this tool does not add ceremony to other people's
     # history uninvited. Setting `ticket_pattern` turns it on too.
@@ -426,6 +437,47 @@ def _allocate_round_robin(bodies: list[list[str]], remaining: int) -> list[int]:
     return taken
 
 
+def _headers_and_bodies(chunks: list[str]) -> tuple[list[list[str]], list[list[str]]]:
+    headers, bodies = [], []
+    for chunk in chunks:
+        header, body = _split_header(chunk)
+        headers.append(header)
+        bodies.append(body)
+    return headers, bodies
+
+
+def _shares(headers: list[list[str]], bodies: list[list[str]], limit: int) -> list[int]:
+    reserved = sum(len("".join(h)) + _MARKER_RESERVE for h in headers)
+    return _allocate_round_robin(bodies, limit - reserved)
+
+
+def over_budget_paths(diff: str, limit: int) -> list[str]:
+    """The files `budget_diff` would have to cut, in diff order.
+
+    Asked *before* the trim, because "which files does the model never see the
+    end of" is the only question worth asking of a commit no budget can fit —
+    and the honest answer is the one the allocator itself would give. A file
+    named here is a file whose tail would otherwise go undescribed.
+    """
+    if len(diff) <= limit:
+        return []
+    chunks = split_diff(diff)
+    if len(chunks) <= 1:
+        # One file over budget: head-truncation is about to eat its tail, and
+        # there is no allocation to consult.
+        path = chunk_path(chunks[0]) if chunks else None
+        return [path] if path else []
+
+    headers, bodies = _headers_and_bodies(chunks)
+    taken = _shares(headers, bodies, limit)
+    out = []
+    for i, chunk in enumerate(chunks):
+        path = chunk_path(chunk) if taken[i] < len(bodies[i]) else None
+        if path:
+            out.append(path)
+    return out
+
+
 def budget_diff(diff: str, limit: int) -> str:
     """Fit `diff` into `limit` chars while keeping every file visible.
 
@@ -443,14 +495,8 @@ def budget_diff(diff: str, limit: int) -> str:
         # One file: there is nothing to be fair between.
         return truncate(diff, limit)
 
-    headers, bodies = [], []
-    for chunk in chunks:
-        header, body = _split_header(chunk)
-        headers.append(header)
-        bodies.append(body)
-
-    reserved = sum(len("".join(h)) + _MARKER_RESERVE for h in headers)
-    taken = _allocate_round_robin(bodies, limit - reserved)
+    headers, bodies = _headers_and_bodies(chunks)
+    taken = _shares(headers, bodies, limit)
 
     out = []
     for i in range(len(chunks)):
@@ -466,6 +512,121 @@ def budget_diff(diff: str, limit: int) -> str:
     # Only reachable when the headers alone overrun the budget (a commit with a
     # very large number of files); the caller's limit still wins.
     return result if len(result) <= limit else truncate(result, limit)
+
+
+# --- from commitclerk/deep.py -----------------------------------------
+
+# What one file may show its summarizer. The same number as the whole-commit
+# default, which is the point: a file too big to share a budget is given one.
+SUMMARY_INPUT_CHARS = 60_000
+
+# Two lines, as commissioned. A summarizer that writes an essay is spending the
+# budget the summary exists to save, so the cap is enforced here rather than
+# hoped for in the prompt.
+SUMMARY_MAX_LINES = 2
+SUMMARY_LINE_CHARS = 220
+
+# Marks a summarized line inside the diff. Unmistakable on sight, and the note
+# below tells the model what it means -- a summary that read like diff content
+# would be prose the model could mistake for the file's own text.
+SUMMARY_MARK = "[summary] "
+
+SUMMARY_SYSTEM_PROMPT = (
+    "You summarize the diff of ONE file from a large commit, for another model that "
+    "will write the commit message and will never see this diff.\n\n"
+    "Rules:\n"
+    "- At most two lines of plain prose. No bullets, no markdown, no code fences.\n"
+    "- Say what changed in this file: the behaviour, the structure, the intent. Not a "
+    "line-by-line replay, and not the file name, which the reader already has.\n"
+    "- Only what this diff shows. Never guess at the rest of the commit, and never "
+    "mention files you were not given.\n"
+    "- If the change is prose added to documentation, say that the documentation was "
+    "edited and what it now covers. Never restate documented features as work this "
+    "commit implemented.\n"
+    "- If nothing meaningful changed (whitespace, reformatting, a mechanical rename), "
+    "say exactly that in one line."
+)
+
+# Sits with the diff it describes, because it is the key to a notation that
+# appears inside it.
+DEEP_NOTE = (
+    "Some files were too large to include. Their diff body is replaced by lines marked "
+    "[summary], each written by a reader that saw that file's complete diff. Treat a "
+    "[summary] line as an accurate account of what changed in that file and weigh it "
+    "exactly as you weigh the files whose real diff is shown."
+)
+
+
+def summary_user_prompt(path: str, chunk: str, limit: int = SUMMARY_INPUT_CHARS) -> str:
+    """The request for one file's summary."""
+    return "\n".join([f"File: {path}", "", "Unified diff for this file:", truncate(chunk, limit)])
+
+
+def clean_summary(
+    text: str,
+    max_lines: int = SUMMARY_MAX_LINES,
+    line_chars: int = SUMMARY_LINE_CHARS,
+) -> list[str]:
+    """The usable lines of a summarizer's answer, stripped of any formatting.
+
+    The prompt asks for two plain lines; models answer with bullets, fences and
+    a preamble anyway. Everything downstream depends on this being short, so it
+    is cut here instead of being asked for twice.
+    """
+    lines = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("```"):
+            continue
+        line = line.lstrip("-*#> ").strip()
+        if not line:
+            continue
+        lines.append(line[:line_chars])
+        if len(lines) >= max_lines:
+            break
+    return lines
+
+
+def summary_block(chunk: str, lines: list[str]) -> str:
+    """One file's header, the counts, and its summary in place of its body.
+
+    Shaped like `demote_diff`'s placeholder on purpose: the header survives, the
+    counts survive, and what is missing says so. The difference is that this one
+    knows what was in there.
+    """
+    header, body = _split_header(chunk)
+    added, removed = count_changes("".join(body))
+    out = "".join(header)
+    if out and not out.endswith("\n"):
+        out += "\n"
+    out += f"[... file too large to show, +{added} -{removed}, summarized below ...]\n"
+    return out + "".join(SUMMARY_MARK + line + "\n" for line in lines)
+
+
+def summarize_diff(diff: str, paths: list[str], summarize) -> tuple[str, int]:
+    """`diff` with each named file's body replaced by a summary, and how many.
+
+    `summarize(path, chunk)` returns the model's text for one file, or "" when
+    it could not be had. An empty answer leaves the real body alone, to be
+    trimmed as it would have been: a file with no summary is a budget problem,
+    and a summary the tool made up instead would be the one failure this tool
+    exists to prevent.
+    """
+    wanted = set(paths)
+    if not wanted:
+        return diff, 0
+
+    out = []
+    done = 0
+    for chunk in split_diff(diff):
+        path = chunk_path(chunk)
+        lines = clean_summary(summarize(path, chunk)) if path in wanted else []
+        if lines:
+            out.append(summary_block(chunk, lines))
+            done += 1
+        else:
+            out.append(chunk)
+    return "".join(out), done
 
 
 # --- from commitclerk/files.py ----------------------------------------
@@ -1347,6 +1508,7 @@ def build_user_prompt(
     examples: str = "",
     scope: str = "",
     context: str = "",
+    deep: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -1379,6 +1541,10 @@ def build_user_prompt(
         parts += ["", context]
     if title is not None:
         parts += ["", f"Commit title (already chosen by the author, do not repeat it): {title}"]
+    if deep:
+        # Immediately above the diff, because it is the key to a notation that
+        # only appears inside it: read anywhere else it explains nothing.
+        parts += ["", deep]
     parts += ["", "Unified diff:", diff]
     if guard:
         # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
@@ -1751,6 +1917,35 @@ def post_json(
         time.sleep(delay)
 
 
+def complete(
+    spec: dict,
+    api_key: str | None,
+    model: str,
+    system: str,
+    user: str,
+    *,
+    base: str | None = None,
+    timeout: int = REQUEST_TIMEOUT,
+) -> str:
+    """One request: build the payload, post it, return the text.
+
+    Split out from `call_model` because `--deep` makes a second kind of call --
+    a per-file summary — and a second copy of the payload/headers/extract dance
+    is a second place for a provider quirk to be fixed only once.
+    """
+    payload = spec["payload"](model, system, user)
+    headers = {"Content-Type": "application/json"}
+    headers.update(spec["headers"](api_key))
+    data = post_json(
+        provider_url(spec, base),
+        payload,
+        headers,
+        label=spec["label"],
+        timeout=timeout,
+    )
+    return spec["extract"](data).strip()
+
+
 def call_model(
     spec: dict,
     api_key: str | None,
@@ -1767,24 +1962,16 @@ def call_model(
     # otherwise widen this signature and every call site along with it. The keys are
     # `build_user_prompt`'s keyword arguments, which is the only contract there is.
     context = context or {}
-    payload = spec["payload"](
+    label = spec["label"]
+    text = complete(
+        spec,
+        api_key,
         model,
         _system_prompt(body_only=context.get("title") is not None),
         build_user_prompt(diff, files, **context),
-    )
-
-    headers = {"Content-Type": "application/json"}
-    headers.update(spec["headers"](api_key))
-    label = spec["label"]
-    data = post_json(
-        provider_url(spec, base),
-        payload,
-        headers,
-        label=label,
+        base=base,
         timeout=timeout,
     )
-
-    text = spec["extract"](data).strip()
     if not text:
         # Better to fail than to hand `git commit` an empty message. The usual
         # cause is a reasoning model that spent the whole output budget before
@@ -1821,6 +2008,52 @@ def _wants_refs(settings: dict) -> bool | None:
     if "ticket_refs" in settings:
         return settings["ticket_refs"]
     return True if "ticket_pattern" in settings else None
+
+
+def deepen(
+    diff: str,
+    budget: int,
+    spec: dict,
+    api_key: str | None,
+    model: str,
+    *,
+    base: str | None = None,
+    timeout: int = REQUEST_TIMEOUT,
+) -> tuple[str, str]:
+    """The map half of `--deep`: (diff with summaries, the note that explains them).
+
+    Asked of the already-demoted diff and against the real budget, so the
+    question is the exact one the allocator is about to answer -- which files
+    would lose their tail. A commit that already fits names none of them and
+    spends nothing, which is what makes the flag safe to leave on in a config
+    file. The note comes back empty when no summary was obtained, because a
+    notation nothing uses is only budget spent on confusing the model.
+    """
+    oversized = over_budget_paths(diff, budget)
+    if not oversized:
+        return diff, ""
+    print(
+        f"Summarizing {len(oversized)} oversized file(s) "
+        f"in {len(oversized)} extra request(s).",
+        file=sys.stderr,
+    )
+
+    def summarize(path: str, chunk: str) -> str:
+        try:
+            return complete(
+                spec, api_key, model,
+                SUMMARY_SYSTEM_PROMPT, summary_user_prompt(path, chunk),
+                base=base, timeout=timeout,
+            )
+        # `post_json` reports a fatal API error by raising this. One file's
+        # summary is not worth the commit: say so, and let the file be trimmed
+        # exactly as it would have been without the flag.
+        except SystemExit as exc:
+            print(f"Could not summarize {path} ({exc}).", file=sys.stderr)
+            return ""
+
+    diff, summarized = summarize_diff(diff, oversized, summarize)
+    return diff, DEEP_NOTE if summarized else ""
 
 
 def main() -> int:
@@ -1886,6 +2119,15 @@ def main() -> int:
              "generated or vendored files are replaced by a one-line placeholder.",
     )
     parser.add_argument(
+        "--deep",
+        action="store_true",
+        default=None,
+        help="Summarize each file too large for the diff budget in its own cheap request, "
+             "then write the message from those summaries plus the smaller files' real "
+             "diffs. Costs one extra request per oversized file, and nothing at all when "
+             "the whole diff already fits.",
+    )
+    parser.add_argument(
         "--no-house-style",
         action="store_true",
         default=None,
@@ -1923,6 +2165,9 @@ def main() -> int:
     house_style_on = layered(
         False if args.no_house_style else None, None,
         project.get("house_style"), user.get("house_style"), True,
+    )
+    deep_on = layered(
+        True if args.deep else None, None, project.get("deep"), user.get("deep"), False,
     )
     ticket_pattern = layered(
         None, None,
@@ -2001,7 +2246,18 @@ def main() -> int:
     # worth a couple of thousand characters of diff, but it must not silently raise
     # what the user asked to send.
     spent = len(house) + len(scope) + len(examples) + len(author)
-    diff = budget_diff(demote_diff(diff, classes), max(0, max_chars - spent))
+    budget = max(0, max_chars - spent)
+    diff = demote_diff(diff, classes)
+
+    if deep_on:
+        diff, note = deepen(
+            diff, budget, spec, api_key, model, base=base, timeout=timeout,
+        )
+        if note:
+            context["deep"] = note
+            budget = max(0, budget - len(note))
+
+    diff = budget_diff(diff, budget)
 
     message = call_model(
         spec, api_key, model, diff, files,

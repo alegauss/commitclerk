@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--deep`: the 5 000-line commit stops being described from its first 5%.**
+  A vendored upgrade, a formatter run or a large refactor is bigger than any
+  budget worth paying for, and trimming it fairly still means every big file
+  arrives as a few lines and a truncation marker — so the tail of the change was
+  never described at all. With `--deep`, each file too large for the budget gets
+  its own cheap request and answers in at most two lines, and the message is then
+  written from those summaries plus the smaller files' **real** diffs. The files
+  it picks are exactly the ones the per-file allocator was about to cut, so a
+  commit that already fits triggers nothing and costs nothing; otherwise it is
+  one extra request per oversized file, which is why it is off by default and
+  why it also sends more of your code than a trimmed run would — see *Privacy
+  and cost*. It can also be set once per project as `"deep": true` in
+  `.clerk.json`. A summary that cannot be obtained is never invented: that file
+  simply falls back to the ordinary trim, and the failure is reported on stderr.
 - **You can finally tell it why.** A diff shows what changed and never why, so
   there are now two ways to say it: `--context "this reverts the caching
   experiment"` for one commit, and `.clerk/context.md` at the repository root —

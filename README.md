@@ -59,6 +59,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🗂️ **Classifies what changed** | Each file is typed as `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, so a lockfile or a `vendor/` bump never becomes the subject of your commit message. |
 | 🧭 **Sees what the diff hides** | Renames, mode changes, deletions and binary file *sizes* come from `git --stat --summary`, so a `git mv` is described as a move rather than a rewrite. |
 | 📐 **Fair on big commits** | Oversized diffs are trimmed per file, not cut off at the end, so the last file changed is never invisible to the model — and lockfiles and `vendor/` bumps are collapsed to one line so they stop crowding out your actual change. |
+| 🔬 **Scales past the context window** | For the 5 000-line commit that fits in no budget, `--deep` summarises each oversized file in its own cheap request and writes the message from those summaries plus the smaller files' real diffs — so the tail of the change is *described* instead of trimmed away. Opt-in, because it costs a request per big file. |
 
 ## Requirements
 
@@ -108,7 +109,8 @@ clerk             # or: git clerk
 
 ```
 clerk [-m TITLE] [--context NOTE] [--dry-run] [--provider NAME] [--base-url URL]
-      [--model MODEL] [--timeout S] [--max-chars N] [--no-house-style] [--version]
+      [--model MODEL] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
+      [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -128,6 +130,7 @@ the tool from a repository checkout instead, replace `clerk` with
 | `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
 | `--timeout S` | `60` | Seconds to wait for each API request. Raise it for a slow local model. |
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model; generated and vendored files are collapsed to a one-line placeholder first. |
+| `--deep` | off | For a commit no budget can fit: summarise each **oversized** file in its own cheap request, then write the message from those summaries plus the smaller files' real diffs. Costs one extra request per oversized file — and nothing at all when the diff already fits. |
 | `--no-house-style` | off | Skip the `git log` behind both the house-style fingerprint and the worked examples. Use it when the history is imported or machine-generated, or to keep past commit message text off the wire. |
 | `--version` | — | Print the version and exit. |
 
@@ -152,6 +155,10 @@ clerk --model gpt-4o
 
 # Very large diff: raise the budget so less of each file is trimmed
 clerk --max-chars 120000
+
+# A 5000-line commit no budget can fit: summarise the big files instead of
+# trimming them away, so the tail of the change is described too
+clerk --deep
 
 # A local model, so the diff never leaves your machine — no API key needed
 clerk --provider ollama
@@ -246,6 +253,7 @@ The same rule set also keeps titles imperative and under 72 characters, keeps bo
 
 ```
 git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──┐
+      └──▶ oversized files ──▶ one summary each (--deep) ───────────┤
 git diff --stat --summary ──▶ renames, modes, binary sizes ─────────┤
 git log -n200 ──▶ house style: types, scopes, body shape, language ─┤
             └──▶ past commits about these files ──▶ worked examples ─┤
@@ -256,11 +264,11 @@ nearest workspace manifest ──▶ inferred scope ─────────�
                               message ──▶ print ──▶ git commit -F -
 ```
 
-The source is a ten-module package under [`commitclerk/`](commitclerk/) — `config`,
-`context`, `diffing`, `files`, `history`, `gitio`, `trailers`, `prompt`, `providers`,
-`cli` — and
+The source is an eleven-module package under [`commitclerk/`](commitclerk/) — `config`,
+`context`, `diffing`, `deep`, `files`, `history`, `gitio`, `trailers`, `prompt`,
+`providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (2043 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (2299 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -299,6 +307,7 @@ repository, and any project that disagrees overrides it.
 | `timeout` | number | `--timeout` |
 | `max_chars` | number | `--max-chars` |
 | `house_style` | boolean | `false` is `--no-house-style` |
+| `deep` | boolean | `true` is `--deep` |
 | `ticket_refs` | boolean | — (off by default; see below) |
 | `ticket_pattern` | string | — (implies `ticket_refs`) |
 
@@ -441,6 +450,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
 - Cost is a single API call per commit. With either provider's default model and a typical diff, that is a fraction of a cent.
+- **`--deep` changes both of those numbers.** It spends one extra request per file too large for the budget, and each of those requests carries that file's diff **in full** rather than the trimmed share `--max-chars` would have sent. Same endpoint, same key, same provider — more of your code, and N+1 calls instead of one. It is off by default for exactly that reason, and a commit that already fits the budget triggers none of it.
 
 ## Troubleshooting
 

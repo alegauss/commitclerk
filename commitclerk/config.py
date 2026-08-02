@@ -27,6 +27,9 @@ SETTINGS = {
     "timeout": int,
     "max_chars": int,
     "house_style": bool,
+    # Off unless asked for: it spends one extra request per oversized file, and a
+    # setting that multiplies a bill has no business defaulting to on.
+    "deep": bool,
     # Off unless a project asks for it: a `Refs:` trailer on a repository with no
     # tracker is noise, and this tool does not add ceremony to other people's
     # history uninvited. Setting `ticket_pattern` turns it on too.

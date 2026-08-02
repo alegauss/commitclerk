@@ -378,6 +378,35 @@ def post_json(
         time.sleep(delay)
 
 
+def complete(
+    spec: dict,
+    api_key: str | None,
+    model: str,
+    system: str,
+    user: str,
+    *,
+    base: str | None = None,
+    timeout: int = REQUEST_TIMEOUT,
+) -> str:
+    """One request: build the payload, post it, return the text.
+
+    Split out from `call_model` because `--deep` makes a second kind of call --
+    a per-file summary — and a second copy of the payload/headers/extract dance
+    is a second place for a provider quirk to be fixed only once.
+    """
+    payload = spec["payload"](model, system, user)
+    headers = {"Content-Type": "application/json"}
+    headers.update(spec["headers"](api_key))
+    data = post_json(
+        provider_url(spec, base),
+        payload,
+        headers,
+        label=spec["label"],
+        timeout=timeout,
+    )
+    return spec["extract"](data).strip()
+
+
 def call_model(
     spec: dict,
     api_key: str | None,
@@ -394,24 +423,16 @@ def call_model(
     # otherwise widen this signature and every call site along with it. The keys are
     # `build_user_prompt`'s keyword arguments, which is the only contract there is.
     context = context or {}
-    payload = spec["payload"](
+    label = spec["label"]
+    text = complete(
+        spec,
+        api_key,
         model,
         _system_prompt(body_only=context.get("title") is not None),
         build_user_prompt(diff, files, **context),
-    )
-
-    headers = {"Content-Type": "application/json"}
-    headers.update(spec["headers"](api_key))
-    label = spec["label"]
-    data = post_json(
-        provider_url(spec, base),
-        payload,
-        headers,
-        label=label,
+        base=base,
         timeout=timeout,
     )
-
-    text = spec["extract"](data).strip()
     if not text:
         # Better to fail than to hand `git commit` an empty message. The usual
         # cause is a reasoning model that spent the whole output budget before

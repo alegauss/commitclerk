@@ -153,6 +153,47 @@ def _allocate_round_robin(bodies: list[list[str]], remaining: int) -> list[int]:
     return taken
 
 
+def _headers_and_bodies(chunks: list[str]) -> tuple[list[list[str]], list[list[str]]]:
+    headers, bodies = [], []
+    for chunk in chunks:
+        header, body = _split_header(chunk)
+        headers.append(header)
+        bodies.append(body)
+    return headers, bodies
+
+
+def _shares(headers: list[list[str]], bodies: list[list[str]], limit: int) -> list[int]:
+    reserved = sum(len("".join(h)) + _MARKER_RESERVE for h in headers)
+    return _allocate_round_robin(bodies, limit - reserved)
+
+
+def over_budget_paths(diff: str, limit: int) -> list[str]:
+    """The files `budget_diff` would have to cut, in diff order.
+
+    Asked *before* the trim, because "which files does the model never see the
+    end of" is the only question worth asking of a commit no budget can fit —
+    and the honest answer is the one the allocator itself would give. A file
+    named here is a file whose tail would otherwise go undescribed.
+    """
+    if len(diff) <= limit:
+        return []
+    chunks = split_diff(diff)
+    if len(chunks) <= 1:
+        # One file over budget: head-truncation is about to eat its tail, and
+        # there is no allocation to consult.
+        path = chunk_path(chunks[0]) if chunks else None
+        return [path] if path else []
+
+    headers, bodies = _headers_and_bodies(chunks)
+    taken = _shares(headers, bodies, limit)
+    out = []
+    for i, chunk in enumerate(chunks):
+        path = chunk_path(chunk) if taken[i] < len(bodies[i]) else None
+        if path:
+            out.append(path)
+    return out
+
+
 def budget_diff(diff: str, limit: int) -> str:
     """Fit `diff` into `limit` chars while keeping every file visible.
 
@@ -170,14 +211,8 @@ def budget_diff(diff: str, limit: int) -> str:
         # One file: there is nothing to be fair between.
         return truncate(diff, limit)
 
-    headers, bodies = [], []
-    for chunk in chunks:
-        header, body = _split_header(chunk)
-        headers.append(header)
-        bodies.append(body)
-
-    reserved = sum(len("".join(h)) + _MARKER_RESERVE for h in headers)
-    taken = _allocate_round_robin(bodies, limit - reserved)
+    headers, bodies = _headers_and_bodies(chunks)
+    taken = _shares(headers, bodies, limit)
 
     out = []
     for i in range(len(chunks)):

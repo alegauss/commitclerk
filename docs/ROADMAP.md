@@ -36,8 +36,6 @@ which lives in the branch name and in the author's head.*
 honest on mixed commits, and partial staging called out. What is left is the commit no
 budget can fit.*
 
-- 💭 **T17** (deps: —) **A commit larger than any budget is only trimmed, so its tail is never described** — summarizing each oversized file separately and writing the message from the summaries is the one path that scales past a context window. → §T17
-
 ## Block D — Trust & safety
 
 *This block is what turns "a neat script" into "a tool a company can approve".*

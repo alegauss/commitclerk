@@ -22,18 +22,6 @@ branch name, and the author's own intent.
 
 ## Block C — Diff intelligence
 
-### §T17 Map-reduce for the diffs no budget can fit
-
-For a genuinely enormous change (a vendored upgrade, a formatter run, a large
-refactor), even a fair budget shows the model 5% of each file. Opt-in `--deep`:
-one cheap call per oversized file producing a two-line summary, then one final
-call writing the message from the summaries plus the small files' real diffs. It
-costs N+1 requests, so it must never be the default — but it is the only correct
-answer for the 5 000-line commit, and it composes cleanly with the per-file budget
-split the allocator already does.
-
----
-
 ## Block D — Trust & safety
 
 ### §T19 The scan is the difference between "neat" and "approved"

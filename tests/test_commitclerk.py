@@ -459,6 +459,196 @@ class TestDemoteDiff(unittest.TestCase):
         self.assertLessEqual(len(with_demotion), budget)
 
 
+class TestOverBudgetPaths(unittest.TestCase):
+    """Which files the allocator is about to cut — the question `--deep` asks."""
+
+    def test_a_diff_that_fits_names_nobody(self):
+        diff = _file_chunk("a.py", 2) + _file_chunk("b.py", 2)
+        self.assertEqual(commitclerk.over_budget_paths(diff, 10_000), [])
+
+    def test_only_the_files_that_lose_their_tail_are_named(self):
+        diff = _file_chunk("huge.py", 2_000) + _file_chunk("tiny.py", 2)
+        self.assertEqual(commitclerk.over_budget_paths(diff, 3_000), ["huge.py"])
+
+    def test_the_answer_matches_what_budget_diff_actually_cuts(self):
+        diff = _file_chunk("a.py", 500) + _file_chunk("m.py", 3) + _file_chunk("z.py", 500)
+        named = commitclerk.over_budget_paths(diff, 2_000)
+        result = commitclerk.budget_diff(diff, 2_000)
+        for name in ("a.py", "m.py", "z.py"):
+            with self.subTest(name=name):
+                cut = f"diff --git a/{name} b/{name}" in result and "truncated ...]" in (
+                    result.split(f"diff --git a/{name} b/{name}")[1].split("diff --git ")[0]
+                )
+                self.assertEqual(cut, name in named)
+
+    def test_diff_order_is_kept(self):
+        diff = _file_chunk("z.py", 500) + _file_chunk("a.py", 500)
+        self.assertEqual(commitclerk.over_budget_paths(diff, 600), ["z.py", "a.py"])
+
+    def test_one_oversized_file_is_named_even_though_there_is_no_allocation(self):
+        # `budget_diff` head-truncates a lone file, which eats its tail just the same.
+        self.assertEqual(
+            commitclerk.over_budget_paths(_file_chunk("a.py", 500), 400), ["a.py"]
+        )
+
+
+class TestCleanSummary(unittest.TestCase):
+    def test_two_plain_lines_survive_untouched(self):
+        self.assertEqual(
+            commitclerk.clean_summary("Adds retry handling.\nRenames send to post."),
+            ["Adds retry handling.", "Renames send to post."],
+        )
+
+    def test_bullets_fences_and_blank_lines_are_stripped(self):
+        text = "```\n- Adds retry handling.\n\n* Renames send to post.\n```"
+        self.assertEqual(
+            commitclerk.clean_summary(text),
+            ["Adds retry handling.", "Renames send to post."],
+        )
+
+    def test_an_essay_is_cut_to_the_cap(self):
+        text = "\n".join(f"line {i}" for i in range(20))
+        self.assertEqual(commitclerk.clean_summary(text), ["line 0", "line 1"])
+
+    def test_a_very_long_line_is_cut(self):
+        line = commitclerk.clean_summary("x" * 1_000)[0]
+        self.assertEqual(len(line), commitclerk.SUMMARY_LINE_CHARS)
+
+    def test_an_empty_answer_yields_nothing(self):
+        self.assertEqual(commitclerk.clean_summary(""), [])
+        self.assertEqual(commitclerk.clean_summary("```\n```"), [])
+
+
+class TestSummaryUserPrompt(unittest.TestCase):
+    def test_names_the_file_and_carries_its_diff(self):
+        prompt = commitclerk.summary_user_prompt("src/app.py", _file_chunk("src/app.py", 2))
+        self.assertIn("File: src/app.py", prompt)
+        self.assertIn("line 0 in src/app.py", prompt)
+
+    def test_even_one_file_cannot_be_unbounded(self):
+        prompt = commitclerk.summary_user_prompt("a.py", _file_chunk("a.py", 20_000), limit=500)
+        self.assertIn("truncated", prompt)
+        self.assertLess(len(prompt), 1_000)
+
+
+class TestSummaryBlock(unittest.TestCase):
+    def test_the_header_and_the_counts_survive_the_body(self):
+        chunk = _file_chunk("app.py", 40)
+        block = commitclerk.summary_block(chunk, ["Adds retry handling."])
+        self.assertIn("diff --git a/app.py b/app.py", block)
+        self.assertIn("+40 -0", block)
+        self.assertNotIn("line 39 in app.py", block)
+
+    def test_each_summary_line_is_marked(self):
+        block = commitclerk.summary_block(_file_chunk("app.py", 4), ["one", "two"])
+        self.assertIn("[summary] one\n", block)
+        self.assertIn("[summary] two\n", block)
+
+
+class TestSummarizeDiff(unittest.TestCase):
+    def test_only_the_named_files_are_summarized(self):
+        diff = _file_chunk("huge.py", 400) + _file_chunk("tiny.py", 2)
+        asked = []
+
+        def summarize(path, chunk):
+            asked.append(path)
+            return "Rewrites the parser."
+
+        result, done = commitclerk.summarize_diff(diff, ["huge.py"], summarize)
+        self.assertEqual(asked, ["huge.py"])
+        self.assertEqual(done, 1)
+        self.assertIn("[summary] Rewrites the parser.", result)
+        # The small file keeps its real diff.
+        self.assertIn("line 1 in tiny.py", result)
+        self.assertNotIn("line 399 in huge.py", result)
+
+    def test_a_summary_that_could_not_be_had_leaves_the_real_body_alone(self):
+        # The alternative would be inventing one, which is the failure this tool exists
+        # to prevent; a missing summary is only a budget problem.
+        diff = _file_chunk("huge.py", 400)
+        result, done = commitclerk.summarize_diff(diff, ["huge.py"], lambda p, c: "")
+        self.assertEqual((result, done), (diff, 0))
+
+    def test_nothing_named_means_nothing_asked(self):
+        diff = _file_chunk("a.py", 400)
+        result, done = commitclerk.summarize_diff(
+            diff, [], lambda p, c: self.fail("should not call the model")
+        )
+        self.assertEqual((result, done), (diff, 0))
+
+    def test_the_summarizer_sees_the_whole_file_the_budget_could_not_show(self):
+        diff = _file_chunk("huge.py", 400)
+        seen = []
+        commitclerk.summarize_diff(diff, ["huge.py"], lambda p, c: seen.append(c) or "ok")
+        self.assertIn("line 399 in huge.py", seen[0])
+
+    def test_file_order_is_preserved(self):
+        diff = _file_chunk("a.py", 400) + _file_chunk("b.py", 400)
+        result, done = commitclerk.summarize_diff(
+            diff, ["a.py", "b.py"], lambda p, c: f"changed {p}"
+        )
+        self.assertEqual(done, 2)
+        self.assertLess(result.index("changed a.py"), result.index("changed b.py"))
+
+
+class TestDeepen(unittest.TestCase):
+    """The map half of `--deep`, with the network mocked at urlopen."""
+
+    def setUp(self):
+        self.stderr = io.StringIO()
+        patcher = mock.patch.object(commitclerk.sys, "stderr", self.stderr)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.spec = commitclerk.PROVIDERS["openai"]
+
+    def _deepen(self, diff, budget, side_effect):
+        with mock.patch.object(
+            commitclerk.urllib.request, "urlopen", side_effect=side_effect
+        ) as urlopen:
+            result, note = commitclerk.deepen(diff, budget, self.spec, "key", "gpt-4o-mini")
+        return result, note, urlopen
+
+    @staticmethod
+    def _reply(text):
+        return _FakeResponse({"choices": [{"message": {"content": text}}]})
+
+    def test_a_diff_that_fits_costs_no_requests(self):
+        diff = _file_chunk("a.py", 2)
+        result, note, urlopen = self._deepen(diff, 10_000, [])
+        self.assertEqual((result, note), (diff, ""))
+        self.assertEqual(urlopen.call_count, 0)
+
+    def test_one_request_per_oversized_file_and_a_note_to_explain_them(self):
+        diff = _file_chunk("huge.py", 900) + _file_chunk("tiny.py", 2)
+        result, note, urlopen = self._deepen(
+            diff, 2_000, [self._reply("Rewrites the parser.")]
+        )
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertIn("[summary] Rewrites the parser.", result)
+        self.assertEqual(note, commitclerk.DEEP_NOTE)
+        self.assertIn("Summarizing 1 oversized file(s)", self.stderr.getvalue())
+
+    def test_a_failed_summary_is_reported_and_the_commit_goes_on(self):
+        diff = _file_chunk("huge.py", 900) + _file_chunk("tiny.py", 2)
+        result, note, _ = self._deepen(diff, 2_000, [_http_error(401, body="bad key")])
+        self.assertEqual((result, note), (diff, ""))
+        self.assertIn("Could not summarize huge.py", self.stderr.getvalue())
+
+    def test_the_notices_are_ascii(self):
+        diff = _file_chunk("huge.py", 900) + _file_chunk("tiny.py", 2)
+        self._deepen(diff, 2_000, [_http_error(401, body="bad key")])
+        self.assertTrue(self.stderr.getvalue().isascii(), self.stderr.getvalue())
+
+    def test_the_summary_leaves_room_the_trim_alone_could_not(self):
+        # The payoff: at a budget where huge.py's tail was a truncation marker, the
+        # commit message now has a sentence about what is in it.
+        diff = _file_chunk("huge.py", 900) + _file_chunk("tiny.py", 2)
+        result, note, _ = self._deepen(diff, 2_000, [self._reply("Rewrites the parser.")])
+        trimmed = commitclerk.budget_diff(result, 2_000 - len(note))
+        self.assertIn("Rewrites the parser.", trimmed)
+        self.assertIn("line 1 in tiny.py", trimmed)
+
+
 class TestProgName(unittest.TestCase):
     def test_git_subcommand_is_shown_as_git_clerk(self):
         self.assertEqual(commitclerk.prog_name("/usr/local/bin/git-clerk"), "git clerk")
@@ -597,11 +787,13 @@ class TestReadConfig(unittest.TestCase):
             "timeout": 180,
             "max_chars": 8000,
             "house_style": False,
+            "deep": True,
         }))
         values, notices = commitclerk.read_config(self.path)
         self.assertEqual(values["provider"], "ollama")
         self.assertEqual(values["timeout"], 180)
         self.assertIs(values["house_style"], False)
+        self.assertIs(values["deep"], True)
         self.assertEqual(notices, [])
 
     def test_an_unknown_setting_is_reported_and_ignored(self):
@@ -1456,6 +1648,16 @@ class TestBuildUserPrompt(unittest.TestCase):
         self.assertNotIn(
             "earlier commit", commitclerk.build_user_prompt("d", ["a.py"])
         )
+
+    def test_the_deep_note_sits_immediately_above_the_diff_it_explains(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFFBODY", ["a.py"], deep=commitclerk.DEEP_NOTE
+        )
+        self.assertIn("[summary]", prompt)
+        self.assertLess(prompt.index("[summary]"), prompt.index("Unified diff:"))
+
+    def test_no_summaries_means_no_note_about_them(self):
+        self.assertNotIn("[summary]", commitclerk.build_user_prompt("d", ["a.py"]))
 
 
 def _fake_tree(*paths: str):

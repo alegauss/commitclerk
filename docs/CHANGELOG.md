@@ -24,6 +24,8 @@
 
 ## Block C — Diff intelligence
 
+- ✅ **T17** **A commit larger than any budget is only trimmed, so its tail is never described** — summarizing each oversized file separately and writing the message from the summaries is the one path that scales past a context window.
+
 ## Block D — Trust & safety
 
 ## Block E — Configuration & conventions

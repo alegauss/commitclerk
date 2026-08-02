@@ -57,6 +57,7 @@ fix: prevent duplicate webhook deliveries on retry
 | 🗂️ **Classifica o que mudou** | Cada arquivo é tipado como `code` · `test` · `docs` · `generated` · `config` · `vendor` · `binary`, então um lockfile ou um bump de `vendor/` nunca vira o assunto da sua mensagem de commit. |
 | 🧭 **Vê o que o diff esconde** | Renomeações, mudanças de permissão, remoções e o *tamanho* de arquivos binários vêm do `git --stat --summary`, então um `git mv` é descrito como um move, não como uma reescrita. |
 | 📐 **Justo em commits grandes** | Diffs que estouram o orçamento são cortados por arquivo, não no fim, então o último arquivo alterado nunca fica invisível para o modelo — e lockfiles e bumps de `vendor/` são reduzidos a uma linha, para não sufocarem a sua mudança de verdade. |
+| 🔬 **Vai além da janela de contexto** | Para o commit de 5 000 linhas que não cabe em orçamento nenhum, o `--deep` resume cada arquivo grande demais em uma requisição barata só dele e escreve a mensagem a partir desses resumos mais os diffs reais dos arquivos menores — assim o final da mudança é *descrito* em vez de cortado fora. Opcional, porque custa uma requisição por arquivo grande. |
 
 ## Requisitos
 
@@ -106,7 +107,8 @@ clerk             # ou: git clerk
 
 ```
 clerk [-m TÍTULO] [--context NOTA] [--dry-run] [--provider NOME] [--base-url URL]
-      [--model MODELO] [--timeout S] [--max-chars N] [--no-house-style] [--version]
+      [--model MODELO] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
+      [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -125,6 +127,7 @@ preferir rodar a partir de um clone do repositório, troque `clerk` por
 | `--model MODELO` | o padrão do provedor — `gpt-4o-mini` (ou `$OPENAI_MODEL`) no `openai` | Modelo a chamar. |
 | `--timeout S` | `60` | Segundos de espera por requisição à API. Aumente para um modelo local lento. |
 | `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo; arquivos gerados e vendorizados são reduzidos antes a uma linha. |
+| `--deep` | desligado | Para o commit que não cabe em orçamento nenhum: resume cada arquivo **grande demais** em uma requisição barata só dele e depois escreve a mensagem a partir desses resumos mais os diffs reais dos arquivos menores. Custa uma requisição extra por arquivo grande — e nada quando o diff já cabe. |
 | `--no-house-style` | desligado | Pula o `git log` por trás tanto do fingerprint de house style quanto dos exemplos extraídos do histórico. Útil quando o histórico é importado ou gerado por máquina, ou para manter o texto de mensagens antigas fora da rede. |
 | `--version` | — | Mostra a versão e sai. |
 
@@ -149,6 +152,10 @@ clerk --model gpt-4o
 
 # Diff muito grande: aumente o orçamento para cortar menos de cada arquivo
 clerk --max-chars 120000
+
+# Um commit de 5000 linhas que não cabe em orçamento nenhum: resuma os arquivos
+# grandes em vez de cortá-los, para o final da mudança também ser descrito
+clerk --deep
 
 # Um modelo local, para o diff nunca sair da sua máquina — sem chave de API
 clerk --provider ollama
@@ -233,6 +240,18 @@ sobra para o código. Em um repositório real, um bump de lockfile com 300 pacot
 lado de uma correção de duas linhas caiu de 39 505 caracteres de diff para 342 — com
 a correção de duas linhas intacta.
 
+Ainda assim, existe um commit que orçamento nenhum resolve: um upgrade vendorizado,
+uma passada de formatador, uma refatoração enorme. Repartir 60 000 caracteres com
+justiça entre doze arquivos gigantes mostra ao modelo os primeiros 5% de cada um, e
+todo o resto vira um marcador de corte sobre o qual a mensagem só pode ficar calada.
+Para esse caso existe o `--deep`: cada arquivo que o repartidor por arquivo estava
+prestes a cortar ganha uma requisição barata só dele, responde em no máximo duas
+linhas, e a mensagem final é escrita a partir desses resumos mais os diffs **reais**
+dos arquivos menores. São N+1 requisições, por isso é opcional — e um commit que já
+cabe no orçamento não gasta nenhuma. Um resumo que não puder ser obtido nunca é
+inventado: aquele arquivo volta a ser cortado como sempre foi, e a falha é avisada
+na saída de erro.
+
 Há um terceiro ponto cego, estrutural: um diff unificado não diz que um arquivo foi
 *renomeado* (a menos que o repositório tenha detecção de rename ligada), que a
 permissão dele mudou, nem qual o tamanho de um arquivo binário. O `commitclerk`
@@ -275,6 +294,7 @@ todos os repositórios, e qualquer projeto que discorde sobrescreve.
 | `timeout` | número | `--timeout` |
 | `max_chars` | número | `--max-chars` |
 | `house_style` | booleano | `false` é `--no-house-style` |
+| `deep` | booleano | `true` é `--deep` |
 | `ticket_refs` | booleano | — (desligado por padrão; veja abaixo) |
 | `ticket_pattern` | string | — (implica `ticket_refs`) |
 
@@ -419,6 +439,7 @@ aponte para algum lugar em que você confia.
 - Nada além disso é transmitido, armazenado ou registrado pela ferramenta: sem telemetria, sem analytics, sem configuração remota.
 - A chave da API é lida do ambiente e nunca é gravada em disco.
 - O custo é uma única chamada à API por commit. Com o modelo padrão de qualquer um dos provedores e um diff típico, é uma fração de centavo.
+- **O `--deep` muda esses dois números.** Ele gasta uma requisição extra por arquivo grande demais para o orçamento, e cada uma dessas requisições leva o diff daquele arquivo **inteiro**, em vez da fatia cortada que o `--max-chars` teria enviado. Mesmo endpoint, mesma chave, mesmo provedor — mais código seu, e N+1 chamadas em vez de uma. É desligado por padrão exatamente por isso, e um commit que já cabe no orçamento não dispara nada disso.
 
 ## Roadmap
 
