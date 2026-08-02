@@ -48,14 +48,6 @@ its content as a claim.
 
 ## Block D — Trust & safety
 
-### §T20 `.clerkignore`
-
-`.gitignore` semantics, one file, ~20 lines of `fnmatch`. Matching files still
-appear to the model as `path/to/secret.env (excluded, 12 lines changed)` so the
-message can mention that they changed without their contents leaving the machine.
-This is what lets a security team say yes to a repo that has three sensitive files
-rather than no to the whole repo.
-
 ### §T22 Prove the no-egress claim
 
 The README promises "no telemetry, no analytics, no remote config". A CI job that
@@ -91,6 +83,30 @@ diff and history content are data and never instruction, and validate the output
 shape (T29) rather than trusting it. A corpus case in T50 should be a history
 containing a deliberately adversarial commit message. Nobody in this niche
 documents this. Doing so is a credibility asset, not an admission.
+
+### §T20 `.clerkignore` turns a per-repository veto into a per-file one
+
+`.gitignore` semantics over one file at the repository root, found the way `.clerk.json`
+is and committed like it: exclusion is a property of the repository, and a personal copy
+would mean a teammate's run transmits what yours withheld.
+
+A matched file keeps its diff header and loses its body, exactly as a lockfile does
+today -- the same `demote_diff` pass with its 500-character floor lifted, because a
+three-line `.env` is the case this exists for. The model reads `secret.env (config,
+excluded, +12 -3)`.
+
+**Excluded is a state, not a class.** The class says what kind of file it is and is what picks the type prefix; exclusion says only what the model may see. Folding them together would make an excluded lockfile indistinguishable from excluded source.
+
+It runs **before the secret scan**, which is what makes it the escape hatch T19
+promised: content that is never transmitted has nothing to refuse over, so a false
+positive stops costing a whole `--no-scan`.
+
+**The path is still sent.** Only contents are withheld, and any claim otherwise would be the false assurance `--redact` was careful not to make.
+
+Supported: `#` comments, blank lines, `!` negation with last match winning, `/`-anchored
+patterns, `*` and `**`. Unsupported syntax is an error at exit 2, never a pattern that
+silently matches nothing -- a rule that quietly does nothing is a file quietly
+transmitted.
 
 ## Block E — Configuration & conventions
 
