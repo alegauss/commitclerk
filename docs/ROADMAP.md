@@ -33,6 +33,7 @@ which lives in the branch name and in the author's head.*
 ## Block C — Diff intelligence
 
 - 📋 **T65** (deps: —) **A line the diff deletes is described as work that was done** — A commit whose only mention of a project sat on a removed roadmap line produced a body claiming that project had adopted the tool, which is the doc guard's own failure one step further in. → §T65
+- 💭 **T66** (deps: —) **A file named only in the diff's prose is described as a file this commit changed** — A commit touching two files produced a body claiming a third was updated, named nowhere but in the added prose, with the real file list sitting in the same prompt. → §T66
 
 *Every file reaches the model, classified, with generated noise collapsed, the doc guard
 honest on mixed commits, and partial staging called out. What is left is the commit no
@@ -43,6 +44,7 @@ budget can fit.*
 *This block is what turns "a neat script" into "a tool a company can approve".*
 
 - 💭 **T22** (deps: T53) **The no-egress claim is documented and never tested** — running the suite with socket creation monkeypatched to raise turns the claim into a build failure the moment it stops being true. → §T22
+- 💭 **T67** (deps: T19 ✅) **A repository whose tests carry credential fixtures must pass --redact on every commit** — This one now does, and the prose describing the problem is refused too: `.clerkignore` would hide the tests it exists to show, and turning `scan` off surrenders the feature everywhere. → §T67
 
 ## Block E — Configuration & conventions
 
@@ -112,6 +114,9 @@ the output got better or worse.*
 - 💭 **T58** (deps: T54) **Six documentation surfaces are updated by hand per shipped flag** — every flag and provider has to reach both READMEs and `docs/llms.txt`, and the artifact line count quoted in `README.md` went stale three times in one afternoon. → §T58
 - 📋 **T60** (deps: —) **Instruction examples leak into the output** — `_RULES` illustrates a rule with `("regenerated the lockfile")` and three generations out of three emitted that phrase verbatim on commits containing no lockfile. → §T60
 - 💭 **T64** (deps: —) **Line endings differ between contributors and the build compares artifact text** — pinning text files to LF removes both the `git add` warning on Windows and a check failure nobody can reproduce locally. → §T64
+- 💭 **T68** (deps: —) **Every end-to-end check hand-builds a git repository in a shell script** — One such script's `cd` failed and the commands ran against the real checkout instead, overwriting its git identity and committing a stray file into it. → §T68
+- 💭 **T69** (deps: —) **`main` gains a branch per feature and nothing ever splits it** — Six shipped tasks took its cognitive complexity from 22 to 36 against a limit of 15, and every one of them had to re-read the whole function to find where its branch belonged. → §T69
+- 💭 **T70** (deps: —) **Each new module costs a hand-written re-export block and a dozen lint findings** — Four modules shipped this session took ruff's unused-import count from 95 to 133, all of them names re-exported by hand so the tests can reach them. → §T70
 
 ## Non-goals
 

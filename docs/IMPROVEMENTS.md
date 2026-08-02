@@ -46,6 +46,25 @@ The `-m` title was right throughout, because the author wrote it. So what needs 
 guard is the body: what a removed line contributes is the fact of its removal, and never
 its content as a claim.
 
+### §T66 The file list is in the prompt and loses to the prose
+
+Observed on this repository. A commit that changed `docs/IMPROVEMENTS.md` and
+`docs/ROADMAP.md` came back with "Updated `SECURITY.md` to document the new threat
+model". `SECURITY.md` was not staged. It appeared only inside the added prose, which
+described a mitigation that a *later* commit would document.
+
+This is not the doc guard failing and it is not T60. The guard's concern is the type
+prefix, and the message was correctly `docs:`. T60 is about phrases from `_RULES`
+leaking. Here the prompt carried an accurate `Files changed:` list, and the model
+narrated a filename from the diff body over it.
+
+That makes it the founding failure in its purest form: a commit message asserting a
+change to a file the commit does not contain, which no reader of `git log --follow
+SECURITY.md` can distinguish from the truth. The file list is already present and
+already correct, so the fix is a question of weight and placement rather than of new
+context -- the same lesson the doc guard learned when it had to move *after* the diff to
+be obeyed.
+
 ## Block D — Trust & safety
 
 ### §T22 Prove the no-egress claim
@@ -54,6 +73,25 @@ The README promises "no telemetry, no analytics, no remote config". A CI job tha
 runs the whole suite with `socket.socket` patched to raise turns that promise from
 a claim into a test. Cheap, and it is the kind of thing a security reviewer
 actually looks for.
+
+### §T67 The escape hatch T19 promised does not fit a test fixture
+
+T19's design named `.clerkignore` as what would keep the false-positive cost low.
+Shipping both showed it does not, for the one false positive this repository actually
+has.
+
+A test fixture is a credential *shape* on purpose. `tests/test_commitclerk.py` carries
+`AKIAIOSFODNN7EXAMPLE`, `sk-`-prefixed strings and a PEM header because that is what the
+scanner is being tested against. Every commit touching those tests is refused, and the
+three ways out are all wrong: `--redact` masks the fixtures the model most needs to see
+when the diff *is* the scanner, `.clerkignore` on `tests/` hides the whole test file
+from every future commit, and `"scan": false` gives up the protection everywhere to
+accommodate one path.
+
+The missing distinction is between "withhold this content" and "this content is expected
+here". They are different statements and today only the first can be made. Whatever the
+answer is, it must not be a global suppression: a rule that switches the scanner off for
+a directory is a rule that hides the next real key committed into it.
 
 ## Block E — Configuration & conventions
 
@@ -459,3 +497,61 @@ Pinning `* text=auto eol=lf` (with `*.cmd text eol=crlf`, since `run-commit.cmd`
 a batch file and cmd.exe is entitled to its own convention) makes the build
 deterministic and silences the noise. Small, and it protects the one CI check that
 underwrites the single-file promise.
+
+### §T68 A throwaway repository is a fixture, not a shell script
+
+Nothing in `tests/` can make a git repository, so every check of behaviour that needs
+one is a shell script written from scratch at the moment it is needed: `git init`, a
+`user.email`, some files, a `git add`, and a run of the CLI against it.
+
+The failure mode is not hypothetical. One of those scripts had its `mkdir` and `cd` fail
+while the remaining commands ran anyway, so `git config user.email` and `git add -A`
+landed in the real checkout. It set the repository's committer identity to a fake one,
+authored a commit under it, and committed a stray `app.py` -- caught afterwards and
+undone by hand, which is not a thing that should need catching.
+
+A fixture that yields a temporary repository and removes it cannot make that mistake,
+and cannot leave the wrong identity behind when it fails halfway. It also stops each
+check from re-deciding what a minimal repository looks like, which is why the same six
+lines were written three different ways in one afternoon. It pairs with T53: that one
+removes the API key, this one removes the checkout.
+
+### §T69 Every feature is one more branch in one function
+
+`main` reads the config, resolves eleven settings through the ladder, resolves a
+provider, reads the diff, classifies it, excludes, scans, redacts, builds context,
+budgets, deepens, calls, trails and commits. Each shipped flag adds a branch and each
+one is individually justified.
+
+Measured across one session: 22, then 24, 25, 29, 32, 33, 35, 36, against a configured
+limit of 15. Two extractions happened along the way because they were forced --
+`call_target`, so `--offline` could skip provider resolution, and `finish`, so the
+offline and online paths could share a tail without copying it. Both made the function
+smaller *and* made the feature possible, which is the tell: the shape is not merely
+untidy, it is what a new path has to fight.
+
+The cost is not aesthetic. Adding `--offline` meant reading the whole function to find
+where a return could go, and adding the scan meant finding the one point that is after
+`classify_files` and before every request. That question should be answerable from a
+signature.
+
+### §T70 The re-export layer is maintained by hand and paid for in lint
+
+`__init__.py` re-exports roughly every public name in the package, because the tests
+address one flat namespace (`commitclerk.scan_diff`) and so does the single-file build,
+where concatenation makes that namespace real. The package has to fake it.
+
+Nothing derives the list. Each new module means hand-writing an import block,
+remembering the constants as well as the functions, and choosing which few names also go
+in `__all__`. Miss one and a test fails with `AttributeError` at the point of use rather
+than at import.
+
+The debt is measurable: `secrets`, `offline`, `excludes` and `fencing` took F401 from 95
+to 133 in one session. Every one of those findings is a name that is genuinely unused
+*in that file* and genuinely required by the tests, so the lint is not wrong and neither
+is the code -- which is exactly the shape of a problem that never gets fixed, because no
+single commit is responsible for it.
+
+Whatever replaces it has to keep both properties the flat namespace buys:
+`COMMITCLERK_SOURCE=dist` running the same suite, and a test naming a helper without
+knowing its module.
