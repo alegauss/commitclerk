@@ -22,8 +22,18 @@ HISTORY_DEPTH = 200
 MAX_HOUSE_STYLE_CHARS = 600
 # Below this a "convention" is an accident.
 MIN_COMMITS = 5
-# ASCII record separator: it cannot occur in a commit message, unlike a newline.
+# ASCII record and unit separators: neither can occur in a commit message, unlike a
+# newline. The record separator *leads* each record because `git log --name-only`
+# prints the touched paths after the format string, and they belong to that commit.
 RECORD_SEP = "\x1e"
+FIELD_SEP = "\x1f"
+
+# Worked examples: how many, how much of each body, and how little overlap is still
+# worth calling an example.
+MAX_EXAMPLES = 3
+MAX_EXAMPLE_BODY_CHARS = 400
+MAX_EXAMPLES_CHARS = 1_400
+MIN_PATH_OVERLAP = 0.1
 
 _CONVENTIONAL_RE = re.compile(
     r"^(?P<type>[A-Za-z][A-Za-z0-9]{1,11})(?:\((?P<scope>[^()\n]{1,40})\))?!?:\s+\S"
@@ -71,9 +81,18 @@ def split_records(text: str) -> list[str]:
 
 
 def parse_commit(record: str) -> tuple[str, str]:
-    """One record's subject line and its body."""
-    subject, _, body = record.partition("\n")
+    """One record's subject line and its body, without the touched-path list."""
+    message = record.split(FIELD_SEP, 1)[0]
+    subject, _, body = message.partition("\n")
     return subject.strip(), body.strip("\n")
+
+
+def commit_paths(record: str) -> list[str]:
+    """The files one record's commit touched, or [] when it carries no path list."""
+    parts = record.split(FIELD_SEP, 1)
+    if len(parts) < 2:
+        return []
+    return [line.strip() for line in parts[1].splitlines() if line.strip()]
 
 
 def subject_type_scope(subject: str) -> tuple[str | None, str | None]:
@@ -141,6 +160,20 @@ def _fold(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
+def _clip(text: str, limit: int) -> str:
+    """`text` shortened to `limit`, cut at a line boundary when one is available."""
+    if len(text) <= limit:
+        return text
+    kept: list[str] = []
+    used = 0
+    for line in text.splitlines():
+        if used + len(line) + 1 > limit:
+            break
+        kept.append(line)
+        used += len(line) + 1
+    return "\n".join(kept) + "\n[...]" if kept else text[:limit] + "[...]"
+
+
 def _ranked(values) -> list:
     """(value, count) pairs, most frequent first, ties broken alphabetically."""
     counts: dict = {}
@@ -169,6 +202,106 @@ def dominant_language(subjects: list[str]) -> str | None:
     if top < max(2, len(subjects) * 0.25) or top < runner_up * 2:
         return None
     return best
+
+
+def strip_trailers(body: str) -> str:
+    """A body without its trailing trailer block.
+
+    An example is borrowed for its *tone*, and a copied `Co-authored-by:` would
+    credit a person who had nothing to do with the commit being written.
+    """
+    if not trailer_keys(body):
+        return body
+    paragraphs = [p for p in body.split("\n\n") if p.strip()]
+    return "\n\n".join(paragraphs[:-1])
+
+
+def path_tokens(paths: list[str]) -> set:
+    """Every path plus every directory above it — the vocabulary commits are compared on.
+
+    Including the ancestors is what makes the score mean "same subsystem" rather
+    than "same file": two commits under `src/api/` overlap even with no file in
+    common, while two that touch the identical file overlap far more strongly.
+    """
+    tokens = set()
+    for path in paths:
+        current = path.replace("\\", "/").strip().strip("/")
+        while current:
+            tokens.add(current)
+            current = current.rsplit("/", 1)[0] if "/" in current else ""
+    return tokens
+
+
+def similar_commits(
+    records: list[str],
+    paths: list[str],
+    *,
+    limit: int = MAX_EXAMPLES,
+    min_overlap: float = MIN_PATH_OVERLAP,
+) -> list[str]:
+    """Past commits whose touched paths overlap `paths` most, best first.
+
+    Jaccard, so a commit that touched four hundred files does not win every
+    comparison by sheer size. Below `min_overlap` an "example" is just a recent
+    commit about unrelated code, which teaches the model nothing and costs budget.
+    """
+    target = path_tokens(paths)
+    if not target:
+        return []
+    scored = []
+    for index, record in enumerate(records):
+        tokens = path_tokens(commit_paths(record))
+        if not tokens:
+            continue
+        overlap = len(target & tokens) / len(target | tokens)
+        if overlap >= min_overlap:
+            # `index` breaks ties towards the more recent commit: git log is newest
+            # first, and the newer of two equally relevant examples is the better one.
+            scored.append((-overlap, index, record))
+    scored.sort()
+    return [record for _, _, record in scored[:limit]]
+
+
+# Emphatic on purpose. Past commit messages are the one thing in this prompt that
+# looks exactly like the answer, and the tool's founding failure is describing work
+# from *earlier* commits as work done in this one.
+_EXAMPLES_HEADER = (
+    "How this repo writes commit messages about these same files. Each block below "
+    "is a DIFFERENT, EARLIER commit, shown only so you can match its voice, "
+    "structure and level of detail. Nothing in them is part of the commit you are "
+    "describing now, and no claim they make may be restated as work done here."
+)
+
+
+def worked_examples(
+    records: list[str],
+    paths: list[str],
+    *,
+    limit: int = MAX_EXAMPLES,
+    body_limit: int = MAX_EXAMPLE_BODY_CHARS,
+    total_limit: int = MAX_EXAMPLES_CHARS,
+) -> str:
+    """Few-shot examples drawn from this repo's own history, or "" when there are none.
+
+    The classic few-shot quality jump, except the examples are perfectly
+    on-distribution: the same team wrote them about the same code. It improves as
+    the repository ages and costs no extra API call.
+    """
+    blocks = []
+    used = len(_EXAMPLES_HEADER)
+    for record in similar_commits(records, paths, limit=limit):
+        subject, body = parse_commit(record)
+        if not subject:
+            continue
+        block = "--- earlier commit, for style only ---\n" + subject
+        body = strip_trailers(body).strip()
+        if body:
+            block += "\n" + _clip(body, body_limit)
+        if used + len(block) + 2 > total_limit:
+            break
+        blocks.append(block)
+        used += len(block) + 2
+    return "\n\n".join([_EXAMPLES_HEADER] + blocks) if blocks else ""
 
 
 def known_scopes(records: list[str]) -> list[str]:

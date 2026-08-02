@@ -1060,11 +1060,31 @@ class TestBuildUserPrompt(unittest.TestCase):
     def test_no_scope_means_no_scope_line(self):
         self.assertNotIn("Scope:", commitclerk.build_user_prompt("d", ["a.py"]))
 
+    def test_worked_examples_come_before_the_file_list(self):
+        prompt = commitclerk.build_user_prompt(
+            "DIFFBODY", ["a.py"], examples="EARLIER COMMITS HERE"
+        )
+        self.assertIn("EARLIER COMMITS HERE", prompt)
+        self.assertLess(prompt.index("EARLIER COMMITS"), prompt.index("Files changed:"))
+
+    def test_no_examples_means_no_example_block(self):
+        self.assertNotIn(
+            "earlier commit", commitclerk.build_user_prompt("d", ["a.py"])
+        )
+
 
 def _fake_tree(*paths: str):
     """An `isfile` that answers for a made-up checkout, so no tempdir is needed."""
     present = set(paths)
     return lambda path: path in present
+
+
+def _record(subject: str, body: str = "", paths=()) -> str:
+    """One `git log` record, shaped exactly as `get_recent_commits` returns them."""
+    record = f"{subject}\n{body}"
+    if paths:
+        record += commitclerk.FIELD_SEP + "\n\n" + "\n".join(paths) + "\n"
+    return record
 
 
 class TestPackageRoot(unittest.TestCase):
@@ -1216,8 +1236,140 @@ class TestKnownScopes(unittest.TestCase):
         self.assertEqual(commitclerk.known_scopes([_record("feat: one")]), [])
 
 
-def _record(subject: str, body: str = "") -> str:
-    return f"{subject}\n{body}"
+class TestCommitPaths(unittest.TestCase):
+    def test_paths_are_read_back_off_a_record(self):
+        record = _record("feat: x", "- y", ["src/a.py", "tests/test_a.py"])
+        self.assertEqual(commitclerk.commit_paths(record), ["src/a.py", "tests/test_a.py"])
+
+    def test_the_body_does_not_swallow_the_path_list(self):
+        record = _record("feat: x", "- y", ["src/a.py"])
+        self.assertEqual(commitclerk.parse_commit(record), ("feat: x", "- y"))
+
+    def test_a_record_without_paths_yields_none(self):
+        self.assertEqual(commitclerk.commit_paths(_record("feat: x", "- y")), [])
+
+
+class TestPathTokens(unittest.TestCase):
+    def test_every_ancestor_directory_is_a_token(self):
+        self.assertEqual(
+            commitclerk.path_tokens(["src/api/http/retry.ts"]),
+            {"src", "src/api", "src/api/http", "src/api/http/retry.ts"},
+        )
+
+    def test_a_root_file_is_its_own_only_token(self):
+        self.assertEqual(commitclerk.path_tokens(["README.md"]), {"README.md"})
+
+    def test_windows_separators_are_understood(self):
+        self.assertEqual(commitclerk.path_tokens(["src\\a.py"]), {"src", "src/a.py"})
+
+
+class TestSimilarCommits(unittest.TestCase):
+    records = [
+        _record("feat(api): add retry", "- one", ["src/api/retry.ts", "src/api/http.ts"]),
+        _record("docs: fix a typo", "- two", ["README.md"]),
+        _record("fix(api): handle a 429", "- three", ["src/api/retry.ts"]),
+        _record("chore: bump the runner", "- four", [".github/workflows/ci.yml"]),
+    ]
+
+    def test_the_closest_commits_come_first(self):
+        chosen = commitclerk.similar_commits(self.records, ["src/api/retry.ts"])
+        subjects = [commitclerk.parse_commit(r)[0] for r in chosen]
+        self.assertEqual(subjects[0], "fix(api): handle a 429")
+        self.assertIn("feat(api): add retry", subjects)
+
+    def test_unrelated_commits_are_not_offered_as_examples(self):
+        chosen = commitclerk.similar_commits(self.records, ["src/api/retry.ts"])
+        subjects = [commitclerk.parse_commit(r)[0] for r in chosen]
+        self.assertNotIn("docs: fix a typo", subjects)
+        self.assertNotIn("chore: bump the runner", subjects)
+
+    def test_the_limit_is_honoured(self):
+        self.assertEqual(
+            len(commitclerk.similar_commits(self.records, ["src/api/retry.ts"], limit=1)),
+            1,
+        )
+
+    def test_a_huge_commit_does_not_win_by_size_alone(self):
+        # Jaccard, not raw intersection: the sprawling commit touches the target
+        # file but is mostly about other things, so the focused one still wins.
+        records = [
+            _record("chore: reformat everything", "", [f"src/f{n}.py" for n in range(50)]),
+            _record("fix: correct the parser", "", ["src/f1.py"]),
+        ]
+        chosen = commitclerk.similar_commits(records, ["src/f1.py"], limit=1)
+        self.assertEqual(commitclerk.parse_commit(chosen[0])[0], "fix: correct the parser")
+
+    def test_records_without_paths_cannot_be_scored(self):
+        self.assertEqual(commitclerk.similar_commits([_record("feat: x")], ["a.py"]), [])
+
+    def test_no_staged_paths_means_no_examples(self):
+        self.assertEqual(commitclerk.similar_commits(self.records, []), [])
+
+
+class TestStripTrailers(unittest.TestCase):
+    def test_a_trailer_block_is_dropped(self):
+        body = "- did a thing\n\nCo-authored-by: Someone <s@example.com>"
+        self.assertEqual(commitclerk.strip_trailers(body), "- did a thing")
+
+    def test_a_body_that_is_only_trailers_becomes_empty(self):
+        self.assertEqual(commitclerk.strip_trailers("Refs: PROJ-1"), "")
+
+    def test_a_body_without_trailers_is_untouched(self):
+        self.assertEqual(commitclerk.strip_trailers("- one\n- two"), "- one\n- two")
+
+
+class TestWorkedExamples(unittest.TestCase):
+    records = [
+        _record(
+            "feat(api): add retry with backoff",
+            "- retries transient failures\n- honours Retry-After",
+            ["src/api/retry.ts"],
+        ),
+        _record("docs: fix a typo", "- two", ["README.md"]),
+    ]
+
+    def test_a_relevant_past_commit_becomes_an_example(self):
+        block = commitclerk.worked_examples(self.records, ["src/api/retry.ts"])
+        self.assertIn("feat(api): add retry with backoff", block)
+        self.assertIn("- honours Retry-After", block)
+
+    def test_the_block_says_loudly_that_the_examples_are_other_commits(self):
+        block = commitclerk.worked_examples(self.records, ["src/api/retry.ts"])
+        self.assertIn("DIFFERENT, EARLIER commit", block)
+        self.assertIn("may be restated as work done here", block)
+        self.assertIn("earlier commit, for style only", block)
+
+    def test_nothing_relevant_produces_nothing(self):
+        self.assertEqual(commitclerk.worked_examples(self.records, ["totally/other.go"]), "")
+
+    def test_no_history_produces_nothing(self):
+        self.assertEqual(commitclerk.worked_examples([], ["src/api/retry.ts"]), "")
+
+    def test_a_borrowed_trailer_never_credits_the_wrong_person(self):
+        records = [
+            _record(
+                "fix: correct the parser",
+                "- fixed it\n\nCo-authored-by: Someone Else <s@example.com>",
+                ["src/parse.py"],
+            )
+        ]
+        block = commitclerk.worked_examples(records, ["src/parse.py"])
+        self.assertIn("- fixed it", block)
+        self.assertNotIn("Co-authored-by", block)
+
+    def test_a_long_example_body_is_clipped_at_a_line_boundary(self):
+        long_body = "\n".join(f"- bullet number {n} with some padding text" for n in range(40))
+        records = [_record("feat: big one", long_body, ["src/a.py"])]
+        block = commitclerk.worked_examples(records, ["src/a.py"], body_limit=120)
+        self.assertIn("[...]", block)
+        self.assertNotIn("bullet number 39", block)
+
+    def test_the_whole_block_stays_inside_its_budget(self):
+        records = [
+            _record(f"feat: change {n}", "- x" * 200, ["src/a.py"]) for n in range(10)
+        ]
+        block = commitclerk.worked_examples(records, ["src/a.py"])
+        self.assertLessEqual(len(block), commitclerk.MAX_EXAMPLES_CHARS)
 
 
 class TestSubjectTypeScope(unittest.TestCase):
@@ -1471,6 +1623,15 @@ class TestRecentCommits(unittest.TestCase):
         self.assertIn("feat 6", block)
         self.assertIn("Scopes in use: core 6.", block)
         self.assertLessEqual(len(block), commitclerk.MAX_HOUSE_STYLE_CHARS)
+
+    def test_each_record_carries_the_files_that_commit_touched(self):
+        self.assertEqual(commitclerk.commit_paths(self.records[0]), ["f5.py"])
+        self.assertEqual(commitclerk.commit_paths(self.records[-1]), ["f0.py"])
+
+    def test_examples_are_drawn_from_the_commit_that_touched_the_same_file(self):
+        block = commitclerk.worked_examples(self.records, ["f3.py"])
+        self.assertIn("feat(core): add f3", block)
+        self.assertNotIn("add f4", block)
 
     def test_a_directory_outside_a_repo_yields_no_records(self):
         outside = tempfile.mkdtemp()

@@ -14,27 +14,10 @@ shipped in full and its section is gone; letters are never reused.
 
 This block is where commitclerk can be *better than its competitors rather than
 merely different from them*. Its founding insight — the diff alone misleads — is
-exploited twice so far: for documentation-only commits, and by the house-style
-fingerprint. The repository is full of further context that is local, free,
-private, and still unused.
-
-### B.1 — The repo already knows what a good commit looks like here
-
-The house-style fingerprint measures *how* this repo writes commits. **T8,
-few-shot from your own history,** is the same `git log` data used harder: score
-recent commits by path overlap with the current diff (Jaccard over touched
-directories is enough), take the top two or three, and include their title+body as
-worked examples. This is the classic few-shot quality jump, except the examples are
-*perfectly* on-distribution because the same team wrote them about the same code.
-It gets better as the repo ages, costs no extra API call, and — importantly for
-this project's identity — involves **no telemetry and no server**: the model that
-adapts to your team is the prompt, and it is rebuilt locally every run.
-
-Budget note: cap each example body at ~400 characters and subtract that from the
-diff budget (§C.1) rather than adding it on top, as the fingerprint already does.
-Unlike the fingerprint, the examples are past commit message **text** sent
-verbatim, so `README.md` → *Privacy and cost* and `SECURITY.md` → *Where your data
-goes* both have to say so.
+exploited three times so far: for documentation-only commits, by the house-style
+fingerprint, and by the worked examples drawn from commits about the same files.
+What is left is context the repository holds but the *history* does not: the
+branch name, and the author's own intent.
 
 ### B.2 — Ticket trailers
 
@@ -116,9 +99,8 @@ file-class mix (§C.2) narrowed to the types the house-style fingerprint found i
 this repo, scope from the workspace-manifest inference the online path already
 uses, and a body of grouped bullets (`- Update 3 files under src/api/`). Every
 input it needs is already computed locally on every run. It is not as good as the
-model. It is
-infinitely better than an error at the moment someone is trying to commit, and it
-is what the hook falls back to automatically on any failure.
+model, and it is infinitely better than an error at the moment someone is trying
+to commit — which is why the hook falls back to it automatically on any failure.
 
 ### D.4 — Prove the no-egress claim
 
@@ -164,9 +146,9 @@ same flexibility while keeping everyone on one upstream, and it makes T48's
 
 A Brazilian team keeping an English-only git history because their tool cannot do
 otherwise is a real and common friction. `--lang pt-BR` adds one line to the
-prompt. Note the interaction with §B.1: once the fingerprint can *detect* the
-repo's language from history, the flag becomes a fallback rather than a
-requirement — detect, don't ask.
+prompt, and the house-style fingerprint already *detects* the repo's language
+from history — so the flag is a fallback and an override, not the primary
+mechanism. Detect, don't ask; the flag is for the repo that is switching.
 
 ### E.4 — Linting is the sleeper feature
 

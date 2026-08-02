@@ -19,6 +19,7 @@ land.
 Format, exactly one line per task:
 `- **T<n> SHIPPED** (Block X §Y — short title) — YYYY-MM-DD.`
 
+- **T8 SHIPPED** (Block B §B.1 — few-shot worked examples from history) — 2026-08-02.
 - **T10 SHIPPED** (Block B §B.3 — monorepo scope inference) — 2026-08-02.
 - **T7 SHIPPED** (Block B §B.1 — house-style fingerprint + `--no-house-style`) — 2026-08-02.
 - **T55 SHIPPED** (Block J §J.5 — package split + single-file build) — 2026-07-27.

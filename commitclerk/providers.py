@@ -364,22 +364,19 @@ def call_model(
     diff: str,
     files: list[str],
     *,
-    title: str | None = None,
-    guard: str = "",
-    summary: str = "",
-    classes: dict | None = None,
-    house_style: str = "",
-    scope: str = "",
+    context: dict | None = None,
     base: str | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> str:
+    # One bag rather than one parameter per prompt section: every context source the
+    # tool grows (guard, summary, classes, house style, examples, scope, ...) would
+    # otherwise widen this signature and every call site along with it. The keys are
+    # `build_user_prompt`'s keyword arguments, which is the only contract there is.
+    context = context or {}
     payload = spec["payload"](
         model,
-        _system_prompt(body_only=title is not None),
-        build_user_prompt(
-            diff, files, title=title, guard=guard, summary=summary, classes=classes,
-            house_style=house_style, scope=scope,
-        ),
+        _system_prompt(body_only=context.get("title") is not None),
+        build_user_prompt(diff, files, **context),
     )
 
     headers = {"Content-Type": "application/json"}

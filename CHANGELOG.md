@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Worked examples drawn from your own history.** The same `git log` that measures
+  house style now also reports which files each past commit touched, and the two or
+  three whose paths overlap the staged diff most are included in the prompt as
+  examples. This is the classic few-shot quality jump, except the examples are
+  perfectly on-distribution: the same team wrote them about the same code, and they
+  get better as the repository ages. Scoring is Jaccard over each path and its parent
+  directories, so a sprawling reformat that happens to touch your file does not beat
+  a focused fix to it, and a commit with too little overlap is left out rather than
+  padded in. Because past commit messages are the one thing in the prompt that looks
+  exactly like the answer — and describing *earlier* work as this commit's work is the
+  founding failure this tool exists to prevent — each example is fenced, labelled an
+  earlier commit, and preceded by an explicit instruction to copy its voice and never
+  its content. Trailer blocks are stripped, so a borrowed `Co-authored-by:` can never
+  credit someone who had nothing to do with your commit. Bodies are clipped at 400
+  characters, the whole block at 1 400, and all of it comes out of the `--max-chars`
+  diff budget. `--no-house-style` turns it off along with the fingerprint.
 - **Monorepo scopes are inferred from the workspace layout.** `feat: add retry` in a
   forty-package repo is nearly useless; `feat(billing-api): add retry` is not. Each
   staged file is walked up to the nearest directory holding a workspace manifest
@@ -142,6 +158,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`call_model` takes one `context` dict instead of a keyword argument per prompt
+  section.** Every context source the tool grows — the guard, the change summary, the
+  file classes, the house style, the worked examples, the inferred scope — was widening
+  that signature and every call site with it. The dict's keys are exactly
+  `build_user_prompt`'s keyword arguments, which is the only contract there ever was.
 - **The source is now a package, and `dist/commitclerk.py` is a build of it.** The
   single file had grown past 1 000 lines, at which point "read the whole thing before
   you trust it" stops being a promise and becomes theatre. The code is now six modules

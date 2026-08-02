@@ -61,7 +61,6 @@ under-exploited: the repository is full of cheap, local, zero-cost context.* →
 
 | ID | Status | Task | Depends on |
 | --- | --- | --- | --- |
-| T8 | 💭 | **Few-shot from your own history** — pick the 2–3 past commits whose touched paths overlap the current diff most and include their title+body as examples. Local, free, no telemetry, and it improves with the repo's age. → §B.1 | — |
 | T9 | 💭 | Branch/ticket context: parse an issue key out of the branch name (`feat/PROJ-123-thing`) via a configurable regex and emit a `Refs: PROJ-123` trailer. → §B.2 | T25 |
 | T12 | 💭 | `--context "<note>"` for one-off intent, plus `.clerk/context.md` for standing repo facts ("this repo ships a CLI; `clerk` is the binary name"). → §B.5 | T25 |
 

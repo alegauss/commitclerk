@@ -36,9 +36,11 @@ the model used to echo it as "feat: implement <feature>" even though the feature
 shipped in an earlier commit. The rules in `prompt.py` (and the -m override)
 keep the message about what THIS commit actually changes.
 
-`history.py` reads the last 200 commit subjects and bodies and measures the types,
-scopes, body shape and language this repo actually uses, so the message written
-belongs in this history rather than being generically correct. `files.py` walks
+`history.py` reads the last 200 commit subjects, bodies and touched paths: it
+measures the types, scopes, body shape and language this repo actually uses, and
+picks the past commits that overlap the current diff as worked examples, so the
+message written belongs in this history rather than being generically correct.
+`files.py` walks
 each staged file up to its nearest workspace manifest, so a monorepo change
 confined to one package is scoped to it.
 
@@ -92,20 +94,30 @@ from .files import (  # noqa: E402
     scope_note,
 )
 from .history import (  # noqa: E402
+    FIELD_SEP,
     HISTORY_DEPTH,
+    MAX_EXAMPLE_BODY_CHARS,
+    MAX_EXAMPLES,
+    MAX_EXAMPLES_CHARS,
     MAX_HOUSE_STYLE_CHARS,
     MIN_COMMITS,
+    MIN_PATH_OVERLAP,
     RECORD_SEP,
     body_shape,
     bullet_marker,
+    commit_paths,
     dominant_language,
     house_style,
     known_scopes,
     parse_commit,
+    path_tokens,
+    similar_commits,
     split_records,
     strip_prefix,
+    strip_trailers,
     subject_type_scope,
     trailer_keys,
+    worked_examples,
 )
 from .gitio import (  # noqa: E402
     MAX_SUMMARY_CHARS,
@@ -166,6 +178,7 @@ __all__ = [
     "doc_guard_note",
     "house_style",
     "known_scopes",
+    "worked_examples",
     "scope_note",
     "get_recent_commits",
     "budget_diff",

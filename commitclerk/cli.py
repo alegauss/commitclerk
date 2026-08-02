@@ -19,7 +19,13 @@ from .gitio import (
     partially_staged,
     unstaged_warning,
 )
-from .history import HISTORY_DEPTH, MIN_COMMITS, house_style, known_scopes
+from .history import (
+    HISTORY_DEPTH,
+    MIN_COMMITS,
+    house_style,
+    known_scopes,
+    worked_examples,
+)
 from .providers import (
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
@@ -103,10 +109,11 @@ def main() -> int:
     parser.add_argument(
         "--no-house-style",
         action="store_true",
-        help=f"Do not read the last {HISTORY_DEPTH} commits to match this repo's own "
-             "conventions (types, scopes, body shape, language). Nothing but subjects "
-             "and bodies is read, and nothing leaves the machine that the diff would "
-             "not already send.",
+        help=f"Do not read the last {HISTORY_DEPTH} commits. Turns off both the "
+             "house-style fingerprint (the types, scopes, body shape and language "
+             "this repo uses) and the worked examples drawn from past commits that "
+             "touched the same files. Use it to keep past commit message text off "
+             "the wire, or when the history is not a style worth copying.",
     )
     args = parser.parse_args()
 
@@ -154,25 +161,32 @@ def main() -> int:
     # no scopes -- only the second is a reason for scope inference to stay quiet.
     vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
     scope = scope_note(files, vocabulary)
-    # Subtracted from the diff budget, not added on top of it: the extra context is
-    # worth a few hundred characters of diff, but it must not silently raise what
-    # the user asked to send.
-    context_cost = len(house) + len(scope)
-    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - context_cost))
+    examples = worked_examples(records, files)
 
+    context = {
+        "guard": guard,
+        "summary": summary,
+        "classes": classes,
+        "house_style": house,
+        "examples": examples,
+        "scope": scope,
+    }
     if args.message:
-        body = call_model(
-            spec, api_key, model, diff, files, title=args.message, guard=guard,
-            summary=summary, classes=classes, house_style=house, scope=scope,
-            base=base, timeout=args.timeout,
-        )
-        message = f"{args.message}\n\n{body}".rstrip() + "\n"
-    else:
-        message = call_model(
-            spec, api_key, model, diff, files, guard=guard,
-            summary=summary, classes=classes, house_style=house, scope=scope,
-            base=base, timeout=args.timeout,
-        )
+        context["title"] = args.message
+
+    # Subtracted from the diff budget, not added on top of it: the extra context is
+    # worth a couple of thousand characters of diff, but it must not silently raise
+    # what the user asked to send.
+    spent = len(house) + len(scope) + len(examples)
+    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - spent))
+
+    message = call_model(
+        spec, api_key, model, diff, files,
+        context=context, base=base, timeout=args.timeout,
+    )
+    if args.message:
+        # The model was asked for the body only, so the author's title leads.
+        message = f"{args.message}\n\n{message}".rstrip() + "\n"
 
     if args.dry_run:
         print(message)

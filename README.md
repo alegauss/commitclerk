@@ -47,7 +47,7 @@ fix: prevent duplicate webhook deliveries on retry
 | ✍️ **You can own the title** | `-m "feat: add X"` uses your title verbatim and lets the AI write only the body. |
 | 📄 **Doc-aware** | Detects documentation commits — pure *and* mixed with code — and refuses to describe already-shipped features as new work. See [Why it exists](#why-it-exists). |
 | 🧾 **Conventional Commits** | Emits `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:` prefixes. |
-| 🏠 **Writes like your repo** | Reads your last 200 commits to learn the types, scopes, body shape and language your team actually uses, so the message belongs in *your* history instead of being generically correct. Local, no extra API call. |
+| 🏠 **Writes like your repo** | Reads your last 200 commits to learn the types, scopes, body shape and language your team actually uses, and shows the model the past commits that touched these same files as worked examples. The message belongs in *your* history instead of being generically correct. Local, no extra API call. |
 | 📦 **Monorepo-aware scopes** | Staged files are walked up to the nearest workspace manifest, so a change confined to one package becomes `fix(billing-api): …`. Spread across packages, it refuses to name one and hide the rest. |
 | 👀 **Dry run** | `--dry-run` prints the message and commits nothing. |
 | 🔧 **Model agnostic** | OpenAI, Anthropic or a local Ollama model via `--provider`, any model via `--model`, and any OpenAI-compatible endpoint via `--base-url`. |
@@ -124,7 +124,7 @@ the tool from a repository checkout instead, replace `clerk` with
 | `--model MODEL` | the provider's default — `gpt-4o-mini` (or `$OPENAI_MODEL`) for `openai` | Model to call. |
 | `--timeout S` | `60` | Seconds to wait for each API request. Raise it for a slow local model. |
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model; generated and vendored files are collapsed to a one-line placeholder first. |
-| `--no-house-style` | off | Skip the `git log` that measures your repo's own conventions. Use it when the history is imported, machine-generated, or otherwise not a style you want copied. |
+| `--no-house-style` | off | Skip the `git log` behind both the house-style fingerprint and the worked examples. Use it when the history is imported or machine-generated, or to keep past commit message text off the wire. |
 | `--version` | — | Print the version and exit. |
 
 ### Examples
@@ -234,6 +234,7 @@ The same rule set also keeps titles imperative and under 72 characters, keeps bo
 git diff --staged ──▶ per-file budget (--max-chars) ──▶ doc-only? ──┐
 git diff --stat --summary ──▶ renames, modes, binary sizes ─────────┤
 git log -n200 ──▶ house style: types, scopes, body shape, language ─┤
+            └──▶ past commits about these files ──▶ worked examples ─┤
 nearest workspace manifest ──▶ inferred scope ──────────────────────┴──▶ prompt
                                                                           │
                                         provider API (--provider) ◀────────┘
@@ -244,7 +245,7 @@ nearest workspace manifest ──▶ inferred scope ─────────�
 The source is a seven-module package under [`commitclerk/`](commitclerk/) — `diffing`,
 `files`, `history`, `gitio`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (1496 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (1648 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -321,7 +322,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 ## Privacy and cost
 
 - **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.
-- **A summary of your recent commit *messages* is sent too.** The house-style block carries counts and shapes measured from the last 200 subjects and bodies — types, scopes, body shape, median subject length, trailer keys, language — not the messages themselves. Scope names and trailer keys are the exception and appear verbatim, since counting them would be useless. No diff, author, email, date or SHA from history is read. `--no-house-style` skips the `git log`.
+- **Some of your recent commit *messages* are sent too.** The house-style block carries counts and shapes measured from the last 200 subjects and bodies — types, scopes, body shape, median subject length, trailer keys, language — not the messages themselves, except scope names and trailer keys, which appear verbatim because counting them would be useless. Separately, the two or three past commits that touched the same files as your staged diff are sent **verbatim** as style examples, subject plus body clipped to 400 characters, with trailer blocks (and the email addresses in them) stripped first. No diff, author, email, date or SHA from history is read. `--no-house-style` skips the `git log` and both of these.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
 - Cost is a single API call per commit. With either provider's default model and a typical diff, that is a fraction of a cent.

@@ -44,6 +44,7 @@ def build_user_prompt(
     summary: str = "",
     classes: dict | None = None,
     house_style: str = "",
+    examples: str = "",
     scope: str = "",
 ) -> str:
     classes = classes or {}
@@ -53,6 +54,10 @@ def build_user_prompt(
         # guard it is not competing with the diff for the model's attention — it
         # describes the shape of the answer, not what the answer is about.
         parts += [house_style, ""]
+    if examples:
+        # Beside the fingerprint, and well before the diff. Both answer "how should
+        # this be written"; everything from the file list down answers "about what".
+        parts += [examples, ""]
     parts += ["Files changed:"] + [
         f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
     ]

@@ -51,9 +51,11 @@ the model used to echo it as "feat: implement <feature>" even though the feature
 shipped in an earlier commit. The rules in `prompt.py` (and the -m override)
 keep the message about what THIS commit actually changes.
 
-`history.py` reads the last 200 commit subjects and bodies and measures the types,
-scopes, body shape and language this repo actually uses, so the message written
-belongs in this history rather than being generically correct. `files.py` walks
+`history.py` reads the last 200 commit subjects, bodies and touched paths: it
+measures the types, scopes, body shape and language this repo actually uses, and
+picks the past commits that overlap the current diff as worked examples, so the
+message written belongs in this history rather than being generically correct.
+`files.py` walks
 each staged file up to its nearest workspace manifest, so a monorepo change
 confined to one package is scoped to it.
 
@@ -537,8 +539,18 @@ HISTORY_DEPTH = 200
 MAX_HOUSE_STYLE_CHARS = 600
 # Below this a "convention" is an accident.
 MIN_COMMITS = 5
-# ASCII record separator: it cannot occur in a commit message, unlike a newline.
+# ASCII record and unit separators: neither can occur in a commit message, unlike a
+# newline. The record separator *leads* each record because `git log --name-only`
+# prints the touched paths after the format string, and they belong to that commit.
 RECORD_SEP = "\x1e"
+FIELD_SEP = "\x1f"
+
+# Worked examples: how many, how much of each body, and how little overlap is still
+# worth calling an example.
+MAX_EXAMPLES = 3
+MAX_EXAMPLE_BODY_CHARS = 400
+MAX_EXAMPLES_CHARS = 1_400
+MIN_PATH_OVERLAP = 0.1
 
 _CONVENTIONAL_RE = re.compile(
     r"^(?P<type>[A-Za-z][A-Za-z0-9]{1,11})(?:\((?P<scope>[^()\n]{1,40})\))?!?:\s+\S"
@@ -586,9 +598,18 @@ def split_records(text: str) -> list[str]:
 
 
 def parse_commit(record: str) -> tuple[str, str]:
-    """One record's subject line and its body."""
-    subject, _, body = record.partition("\n")
+    """One record's subject line and its body, without the touched-path list."""
+    message = record.split(FIELD_SEP, 1)[0]
+    subject, _, body = message.partition("\n")
     return subject.strip(), body.strip("\n")
+
+
+def commit_paths(record: str) -> list[str]:
+    """The files one record's commit touched, or [] when it carries no path list."""
+    parts = record.split(FIELD_SEP, 1)
+    if len(parts) < 2:
+        return []
+    return [line.strip() for line in parts[1].splitlines() if line.strip()]
 
 
 def subject_type_scope(subject: str) -> tuple[str | None, str | None]:
@@ -656,6 +677,20 @@ def _fold(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
+def _clip(text: str, limit: int) -> str:
+    """`text` shortened to `limit`, cut at a line boundary when one is available."""
+    if len(text) <= limit:
+        return text
+    kept: list[str] = []
+    used = 0
+    for line in text.splitlines():
+        if used + len(line) + 1 > limit:
+            break
+        kept.append(line)
+        used += len(line) + 1
+    return "\n".join(kept) + "\n[...]" if kept else text[:limit] + "[...]"
+
+
 def _ranked(values) -> list:
     """(value, count) pairs, most frequent first, ties broken alphabetically."""
     counts: dict = {}
@@ -684,6 +719,106 @@ def dominant_language(subjects: list[str]) -> str | None:
     if top < max(2, len(subjects) * 0.25) or top < runner_up * 2:
         return None
     return best
+
+
+def strip_trailers(body: str) -> str:
+    """A body without its trailing trailer block.
+
+    An example is borrowed for its *tone*, and a copied `Co-authored-by:` would
+    credit a person who had nothing to do with the commit being written.
+    """
+    if not trailer_keys(body):
+        return body
+    paragraphs = [p for p in body.split("\n\n") if p.strip()]
+    return "\n\n".join(paragraphs[:-1])
+
+
+def path_tokens(paths: list[str]) -> set:
+    """Every path plus every directory above it — the vocabulary commits are compared on.
+
+    Including the ancestors is what makes the score mean "same subsystem" rather
+    than "same file": two commits under `src/api/` overlap even with no file in
+    common, while two that touch the identical file overlap far more strongly.
+    """
+    tokens = set()
+    for path in paths:
+        current = path.replace("\\", "/").strip().strip("/")
+        while current:
+            tokens.add(current)
+            current = current.rsplit("/", 1)[0] if "/" in current else ""
+    return tokens
+
+
+def similar_commits(
+    records: list[str],
+    paths: list[str],
+    *,
+    limit: int = MAX_EXAMPLES,
+    min_overlap: float = MIN_PATH_OVERLAP,
+) -> list[str]:
+    """Past commits whose touched paths overlap `paths` most, best first.
+
+    Jaccard, so a commit that touched four hundred files does not win every
+    comparison by sheer size. Below `min_overlap` an "example" is just a recent
+    commit about unrelated code, which teaches the model nothing and costs budget.
+    """
+    target = path_tokens(paths)
+    if not target:
+        return []
+    scored = []
+    for index, record in enumerate(records):
+        tokens = path_tokens(commit_paths(record))
+        if not tokens:
+            continue
+        overlap = len(target & tokens) / len(target | tokens)
+        if overlap >= min_overlap:
+            # `index` breaks ties towards the more recent commit: git log is newest
+            # first, and the newer of two equally relevant examples is the better one.
+            scored.append((-overlap, index, record))
+    scored.sort()
+    return [record for _, _, record in scored[:limit]]
+
+
+# Emphatic on purpose. Past commit messages are the one thing in this prompt that
+# looks exactly like the answer, and the tool's founding failure is describing work
+# from *earlier* commits as work done in this one.
+_EXAMPLES_HEADER = (
+    "How this repo writes commit messages about these same files. Each block below "
+    "is a DIFFERENT, EARLIER commit, shown only so you can match its voice, "
+    "structure and level of detail. Nothing in them is part of the commit you are "
+    "describing now, and no claim they make may be restated as work done here."
+)
+
+
+def worked_examples(
+    records: list[str],
+    paths: list[str],
+    *,
+    limit: int = MAX_EXAMPLES,
+    body_limit: int = MAX_EXAMPLE_BODY_CHARS,
+    total_limit: int = MAX_EXAMPLES_CHARS,
+) -> str:
+    """Few-shot examples drawn from this repo's own history, or "" when there are none.
+
+    The classic few-shot quality jump, except the examples are perfectly
+    on-distribution: the same team wrote them about the same code. It improves as
+    the repository ages and costs no extra API call.
+    """
+    blocks = []
+    used = len(_EXAMPLES_HEADER)
+    for record in similar_commits(records, paths, limit=limit):
+        subject, body = parse_commit(record)
+        if not subject:
+            continue
+        block = "--- earlier commit, for style only ---\n" + subject
+        body = strip_trailers(body).strip()
+        if body:
+            block += "\n" + _clip(body, body_limit)
+        if used + len(block) + 2 > total_limit:
+            break
+        blocks.append(block)
+        used += len(block) + 2
+    return "\n\n".join([_EXAMPLES_HEADER] + blocks) if blocks else ""
 
 
 def known_scopes(records: list[str]) -> list[str]:
@@ -845,18 +980,25 @@ def get_staged_summary() -> str:
 
 
 def get_recent_commits(depth: int = HISTORY_DEPTH) -> list[str]:
-    """The last `depth` non-merge commits as `subject\\n\\nbody` records.
+    """The last `depth` non-merge commits as `subject\\n\\nbody<FIELD_SEP>paths` records.
 
     Merges are excluded because their subjects are generated by git, not written
     by the team, and a busy repo's history is otherwise half "Merge pull request".
-    Any failure returns no records: a house-style fingerprint is an enhancement,
-    and it must never be the reason a commit cannot be written. Old commits in a
-    long-lived repo are a real source of undecodable bytes, so that case is caught
-    here rather than crashing three frames up.
+    One call carries both halves of the history context: the message, which the
+    house-style fingerprint measures, and the touched paths, which decide which
+    past commits are worth showing as worked examples.
+
+    Any failure returns no records: history context is an enhancement, and it must
+    never be the reason a commit cannot be written. Old commits in a long-lived
+    repo are a real source of undecodable bytes, so that case is caught here rather
+    than crashing three frames up.
     """
     try:
         result = run(
-            ["git", "log", f"-n{depth}", "--no-merges", f"--format=%s%n%b{RECORD_SEP}"],
+            [
+                "git", "log", f"-n{depth}", "--no-merges", "--name-only",
+                f"--format={RECORD_SEP}%s%n%b{FIELD_SEP}",
+            ],
             check=False,
         )
     except (OSError, UnicodeDecodeError):
@@ -906,6 +1048,7 @@ def build_user_prompt(
     summary: str = "",
     classes: dict | None = None,
     house_style: str = "",
+    examples: str = "",
     scope: str = "",
 ) -> str:
     classes = classes or {}
@@ -915,6 +1058,10 @@ def build_user_prompt(
         # guard it is not competing with the diff for the model's attention — it
         # describes the shape of the answer, not what the answer is about.
         parts += [house_style, ""]
+    if examples:
+        # Beside the fingerprint, and well before the diff. Both answer "how should
+        # this be written"; everything from the file list down answers "about what".
+        parts += [examples, ""]
     parts += ["Files changed:"] + [
         f"- {f} ({classes[f]})" if f in classes else f"- {f}" for f in files
     ]
@@ -1289,22 +1436,19 @@ def call_model(
     diff: str,
     files: list[str],
     *,
-    title: str | None = None,
-    guard: str = "",
-    summary: str = "",
-    classes: dict | None = None,
-    house_style: str = "",
-    scope: str = "",
+    context: dict | None = None,
     base: str | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> str:
+    # One bag rather than one parameter per prompt section: every context source the
+    # tool grows (guard, summary, classes, house style, examples, scope, ...) would
+    # otherwise widen this signature and every call site along with it. The keys are
+    # `build_user_prompt`'s keyword arguments, which is the only contract there is.
+    context = context or {}
     payload = spec["payload"](
         model,
-        _system_prompt(body_only=title is not None),
-        build_user_prompt(
-            diff, files, title=title, guard=guard, summary=summary, classes=classes,
-            house_style=house_style, scope=scope,
-        ),
+        _system_prompt(body_only=context.get("title") is not None),
+        build_user_prompt(diff, files, **context),
     )
 
     headers = {"Content-Type": "application/json"}
@@ -1400,10 +1544,11 @@ def main() -> int:
     parser.add_argument(
         "--no-house-style",
         action="store_true",
-        help=f"Do not read the last {HISTORY_DEPTH} commits to match this repo's own "
-             "conventions (types, scopes, body shape, language). Nothing but subjects "
-             "and bodies is read, and nothing leaves the machine that the diff would "
-             "not already send.",
+        help=f"Do not read the last {HISTORY_DEPTH} commits. Turns off both the "
+             "house-style fingerprint (the types, scopes, body shape and language "
+             "this repo uses) and the worked examples drawn from past commits that "
+             "touched the same files. Use it to keep past commit message text off "
+             "the wire, or when the history is not a style worth copying.",
     )
     args = parser.parse_args()
 
@@ -1451,25 +1596,32 @@ def main() -> int:
     # no scopes -- only the second is a reason for scope inference to stay quiet.
     vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
     scope = scope_note(files, vocabulary)
-    # Subtracted from the diff budget, not added on top of it: the extra context is
-    # worth a few hundred characters of diff, but it must not silently raise what
-    # the user asked to send.
-    context_cost = len(house) + len(scope)
-    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - context_cost))
+    examples = worked_examples(records, files)
 
+    context = {
+        "guard": guard,
+        "summary": summary,
+        "classes": classes,
+        "house_style": house,
+        "examples": examples,
+        "scope": scope,
+    }
     if args.message:
-        body = call_model(
-            spec, api_key, model, diff, files, title=args.message, guard=guard,
-            summary=summary, classes=classes, house_style=house, scope=scope,
-            base=base, timeout=args.timeout,
-        )
-        message = f"{args.message}\n\n{body}".rstrip() + "\n"
-    else:
-        message = call_model(
-            spec, api_key, model, diff, files, guard=guard,
-            summary=summary, classes=classes, house_style=house, scope=scope,
-            base=base, timeout=args.timeout,
-        )
+        context["title"] = args.message
+
+    # Subtracted from the diff budget, not added on top of it: the extra context is
+    # worth a couple of thousand characters of diff, but it must not silently raise
+    # what the user asked to send.
+    spent = len(house) + len(scope) + len(examples)
+    diff = budget_diff(demote_diff(diff, classes), max(0, args.max_chars - spent))
+
+    message = call_model(
+        spec, api_key, model, diff, files,
+        context=context, base=base, timeout=args.timeout,
+    )
+    if args.message:
+        # The model was asked for the body only, so the author's title leads.
+        message = f"{args.message}\n\n{message}".rstrip() + "\n"
 
     if args.dry_run:
         print(message)

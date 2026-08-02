@@ -45,7 +45,7 @@ fix: prevent duplicate webhook deliveries on retry
 | ✍️ **O título pode ser seu** | `-m "feat: add X"` usa seu título literalmente e deixa a IA escrever só o corpo. |
 | 📄 **Consciente de documentação** | Detecta commits de documentação — puros *e* misturados com código — e evita descrever features já entregues como se fossem novas. Veja [Por que existe](#por-que-existe). |
 | 🧾 **Conventional Commits** | Gera prefixos `feat:` / `fix:` / `docs:` / `chore:` / `refactor:` / `test:` / `build:` / `perf:`. |
-| 🏠 **Escreve como o seu repositório** | Lê os seus últimos 200 commits para aprender os tipos, escopos, formato de corpo e idioma que o seu time realmente usa, de modo que a mensagem pertença ao *seu* histórico em vez de ser genericamente correta. Local, sem chamada extra à API. |
+| 🏠 **Escreve como o seu repositório** | Lê os seus últimos 200 commits para aprender os tipos, escopos, formato de corpo e idioma que o seu time realmente usa, e mostra ao modelo os commits passados que mexeram nesses mesmos arquivos como exemplos. A mensagem pertence ao *seu* histórico em vez de ser genericamente correta. Local, sem chamada extra à API. |
 | 📦 **Escopo ciente de monorepo** | Cada arquivo no stage é rastreado até o manifesto de workspace mais próximo, então uma mudança contida em um pacote vira `fix(billing-api): …`. Espalhada por vários pacotes, ela se recusa a nomear um e esconder o resto. |
 | 👀 **Dry run** | `--dry-run` imprime a mensagem e não commita nada. |
 | 🔧 **Independente de modelo** | OpenAI, Anthropic ou um modelo local do Ollama via `--provider`, qualquer modelo via `--model`, e qualquer endpoint compatível com a OpenAI via `--base-url`. |
@@ -121,7 +121,7 @@ preferir rodar a partir de um clone do repositório, troque `clerk` por
 | `--model MODELO` | o padrão do provedor — `gpt-4o-mini` (ou `$OPENAI_MODEL`) no `openai` | Modelo a chamar. |
 | `--timeout S` | `60` | Segundos de espera por requisição à API. Aumente para um modelo local lento. |
 | `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo; arquivos gerados e vendorizados são reduzidos antes a uma linha. |
-| `--no-house-style` | desligado | Pula o `git log` que mede as convenções do próprio repositório. Útil quando o histórico é importado, gerado por máquina ou simplesmente não é um estilo que você queira copiar. |
+| `--no-house-style` | desligado | Pula o `git log` por trás tanto do fingerprint de house style quanto dos exemplos extraídos do histórico. Útil quando o histórico é importado ou gerado por máquina, ou para manter o texto de mensagens antigas fora da rede. |
 | `--version` | — | Mostra a versão e sai. |
 
 ### Exemplos
@@ -300,7 +300,7 @@ aponte para algum lugar em que você confia.
 ## Privacidade e custo
 
 - **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou a API da Anthropic com `--provider anthropic`, ou o que `--base-url` apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, use `--provider ollama` (modelo local, sem chave, nada pela rede) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
-- **Um resumo das suas *mensagens* de commit recentes também é enviado.** O bloco de house style leva contagens e formatos medidos a partir dos últimos 200 títulos e corpos — tipos, escopos, formato do corpo, tamanho mediano do título, chaves de trailer, idioma —, não as mensagens em si. Nomes de escopo e chaves de trailer são a exceção e aparecem literalmente, já que contá-los não serviria de nada. Nenhum diff, autor, e-mail, data ou SHA do histórico é lido. `--no-house-style` pula o `git log`.
+- **Algumas das suas *mensagens* de commit recentes também são enviadas.** O bloco de house style leva contagens e formatos medidos a partir dos últimos 200 títulos e corpos — tipos, escopos, formato do corpo, tamanho mediano do título, chaves de trailer, idioma —, não as mensagens em si, exceto nomes de escopo e chaves de trailer, que aparecem literalmente porque contá-los não serviria de nada. Além disso, os dois ou três commits passados que mexeram nos mesmos arquivos do seu diff staged são enviados **literalmente** como exemplos de estilo: título mais corpo cortado em 400 caracteres, com os blocos de trailer (e os e-mails dentro deles) removidos antes. Nenhum diff, autor, e-mail, data ou SHA do histórico é lido. `--no-house-style` pula o `git log` e as duas coisas.
 - Nada além disso é transmitido, armazenado ou registrado pela ferramenta: sem telemetria, sem analytics, sem configuração remota.
 - A chave da API é lida do ambiente e nunca é gravada em disco.
 - O custo é uma única chamada à API por commit. Com o modelo padrão de qualquer um dos provedores e um diff típico, é uma fração de centavo.

@@ -36,18 +36,28 @@ credit will be given in the advisory unless you prefer to stay anonymous.
 ## Where your data goes
 
 `commitclerk` makes exactly **one** network request per run: an HTTPS POST of the
-prompt (the staged diff, the staged file list, the rules, and a measured summary
-of your recent commit *messages*) to the endpoint you configured. Nothing else is
-transmitted — no telemetry, no analytics, no remote config, no second call.
+prompt (the staged diff, the staged file list, the rules, a measured summary of
+your recent commit *messages*, and two or three past commit messages as style
+examples) to the endpoint you configured. Nothing else is transmitted — no
+telemetry, no analytics, no remote config, no second call.
 
-The commit-message summary is the "house style" block: `commitclerk` reads the
-subjects and bodies of the last 200 non-merge commits locally and sends only
-**counts and shapes** derived from them — the types and scopes in use, the body
-shape, the median subject length, the trailer keys, the language. No commit
-message text is transmitted, with one exception: **scope names** (the `api` in
-`feat(api):`) and **trailer keys** (`Refs`) appear verbatim, because a count of
-them would be useless. No diff, patch, author, email, date or SHA from history is
-read or sent. `--no-house-style` skips the `git log` entirely.
+`commitclerk` reads the subjects, bodies and touched file paths of the last 200
+non-merge commits locally, with one `git log`, and uses them in two ways:
+
+- **The "house style" block** sends only **counts and shapes** derived from them —
+  the types and scopes in use, the body shape, the median subject length, the
+  trailer keys, the language. No message text, with one exception: **scope names**
+  (the `api` in `feat(api):`) and **trailer keys** (`Refs`) appear verbatim,
+  because a count of them would be useless.
+- **Worked examples** are the exception to that rule and the one place past commit
+  message **text is transmitted verbatim**: the two or three commits whose touched
+  paths overlap your staged diff most are included as few-shot examples, subject
+  plus body, each body clipped to 400 characters. Trailer blocks are stripped
+  first, so `Co-authored-by:` lines and the email addresses in them are not sent.
+
+No diff, patch, author, email, date or SHA from history is read or sent. Pass
+`--no-house-style` to skip the `git log` entirely — that is the switch to use if
+past commit message text must not leave the machine.
 
 Scope inference is the only part of the tool that touches files outside the staged
 diff, and it never **reads** one: it asks whether a manifest (`package.json`,
@@ -74,8 +84,9 @@ before the request is built.
 
 ## What is out of scope
 
-- **The staged diff, and the house-style summary of past commit messages, being
-  sent to the configured API endpoint.** This is the
+- **The staged diff, the house-style summary of past commit messages, and the past
+  commit messages used as style examples, being sent to the configured API
+  endpoint.** This is the
   documented, intentional behavior of the tool — see
   [Privacy and cost](README.md#privacy-and-cost). Do not use `commitclerk` on
   repositories whose contents may not leave your machine, unless you are running a
