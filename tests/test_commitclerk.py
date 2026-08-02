@@ -1068,6 +1068,41 @@ class TestTicketSettings(unittest.TestCase):
         self.assertIs(_wants_refs({"ticket_refs": False, "ticket_pattern": r"X-\d+"}), False)
 
 
+class TestWantsExamples(unittest.TestCase):
+    """One `git log`, two data flows, and a switch for each."""
+
+    def wants(self, house_style_on=True, cli=None, project=None, user=None):
+        return commitclerk._wants_examples(house_style_on, cli, project, user)
+
+    def test_the_key_is_a_recognised_setting(self):
+        self.assertIs(commitclerk.SETTINGS["examples"], bool)
+
+    def test_examples_are_on_when_nothing_refuses_them(self):
+        self.assertIs(self.wants(), True)
+
+    def test_the_flag_refuses_the_text_and_keeps_the_fingerprint(self):
+        # --no-examples answers only this question; the caller's house_style_on
+        # is untouched, which is the whole point of splitting the switch.
+        self.assertIs(self.wants(cli=False), False)
+
+    def test_refusing_the_whole_git_log_refuses_the_examples_too(self):
+        self.assertIs(self.wants(house_style_on=False), False)
+
+    def test_examples_true_cannot_reach_into_a_history_nothing_read(self):
+        self.assertIs(self.wants(house_style_on=False, project=True), False)
+
+    def test_a_config_file_can_refuse_them(self):
+        self.assertIs(self.wants(project=False), False)
+        self.assertIs(self.wants(user=False), False)
+
+    def test_the_project_file_overrides_the_user_file(self):
+        self.assertIs(self.wants(project=True, user=False), True)
+        self.assertIs(self.wants(project=False, user=True), False)
+
+    def test_the_flag_beats_a_file_that_asks_for_them(self):
+        self.assertIs(self.wants(cli=False, project=True, user=True), False)
+
+
 class TestResolveBase(unittest.TestCase):
     def setUp(self):
         self.spec = commitclerk.PROVIDERS["openai"]

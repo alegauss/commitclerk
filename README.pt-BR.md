@@ -108,7 +108,7 @@ clerk             # ou: git clerk
 ```
 clerk [-m TÍTULO] [--context NOTA] [--dry-run] [--provider NOME] [--base-url URL]
       [--model MODELO] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
-      [--version]
+      [--no-examples] [--version]
 ```
 
 A instalação cria três pontos de entrada idênticos: `clerk`, `commitclerk` e
@@ -129,6 +129,7 @@ preferir rodar a partir de um clone do repositório, troque `clerk` por
 | `--max-chars N` | `60000` | Orçamento de caracteres do diff. Um diff maior é cortado **por arquivo**, de modo que todo arquivo alterado chega ao modelo; arquivos gerados e vendorizados são reduzidos antes a uma linha. |
 | `--deep` | desligado | Para o commit que não cabe em orçamento nenhum: resume cada arquivo **grande demais** em uma requisição barata só dele e depois escreve a mensagem a partir desses resumos mais os diffs reais dos arquivos menores. Custa uma requisição extra por arquivo grande — e nada quando o diff já cabe. |
 | `--no-house-style` | desligado | Pula o `git log` por trás tanto do fingerprint de house style quanto dos exemplos extraídos do histórico. Útil quando o histórico é importado ou gerado por máquina, ou para manter o texto de mensagens antigas fora da rede. |
+| `--no-examples` | desligado | Não envia **texto** de mensagens de commit antigas, mas mantém o fingerprint, que leva apenas contagens e formatos. É a metade estreita do `--no-house-style`, para um time que aceita compartilhar uma estatística sobre o próprio histórico, mas não o histórico. Implícito no `--no-house-style`. |
 | `--version` | — | Mostra a versão e sai. |
 
 Todo padrão dessa tabela também pode vir de um [arquivo de
@@ -165,6 +166,9 @@ clerk --provider ollama --timeout 300
 
 # Fork recente, com um histórico importado que você não quer copiar
 clerk --no-house-style
+
+# Copie as convenções, mas mantenha o texto das mensagens antigas fora da rede
+clerk --no-examples
 
 # Diga a única coisa que o diff não mostra
 clerk --context "this reverts the caching experiment we ran last sprint"
@@ -294,6 +298,7 @@ todos os repositórios, e qualquer projeto que discorde sobrescreve.
 | `timeout` | número | `--timeout` |
 | `max_chars` | número | `--max-chars` |
 | `house_style` | booleano | `false` é `--no-house-style` |
+| `examples` | booleano | `false` é `--no-examples` (ignorado sob `"house_style": false`, que já recusa as duas coisas) |
 | `deep` | booleano | `true` é `--deep` |
 | `ticket_refs` | booleano | — (desligado por padrão; veja abaixo) |
 | `ticket_pattern` | string | — (implica `ticket_refs`) |
@@ -435,7 +440,7 @@ aponte para algum lugar em que você confia.
 ## Privacidade e custo
 
 - **Seu diff staged é enviado para a API que você configurou** — `https://api.openai.com/v1` por padrão, ou a API da Anthropic com `--provider anthropic`, ou o que `--base-url` ou um `.clerk.json` do repositório apontar. Em um repositório cujo conteúdo não pode sair da sua máquina, use `--provider ollama` (modelo local, sem chave, nada pela rede) ou simplesmente não use a ferramenta ali. Confira a política da sua empresa antes.
-- **Algumas das suas *mensagens* de commit recentes também são enviadas.** O bloco de house style leva contagens e formatos medidos a partir dos últimos 200 títulos e corpos — tipos, escopos, formato do corpo, tamanho mediano do título, chaves de trailer, idioma —, não as mensagens em si, exceto nomes de escopo e chaves de trailer, que aparecem literalmente porque contá-los não serviria de nada. Além disso, os dois ou três commits passados que mexeram nos mesmos arquivos do seu diff staged são enviados **literalmente** como exemplos de estilo: título mais corpo cortado em 400 caracteres, com os blocos de trailer (e os e-mails dentro deles) removidos antes. Nenhum diff, autor, e-mail, data ou SHA do histórico é lido. `--no-house-style` pula o `git log` e as duas coisas.
+- **Algumas das suas *mensagens* de commit recentes também são enviadas.** O bloco de house style leva contagens e formatos medidos a partir dos últimos 200 títulos e corpos — tipos, escopos, formato do corpo, tamanho mediano do título, chaves de trailer, idioma —, não as mensagens em si, exceto nomes de escopo e chaves de trailer, que aparecem literalmente porque contá-los não serviria de nada. Além disso, os dois ou três commits passados que mexeram nos mesmos arquivos do seu diff staged são enviados **literalmente** como exemplos de estilo: título mais corpo cortado em 400 caracteres, com os blocos de trailer (e os e-mails dentro deles) removidos antes. Nenhum diff, autor, e-mail, data ou SHA do histórico é lido. São dois fluxos de dados diferentes e cada um tem a sua chave: `--no-examples` corta as mensagens literais e mantém as contagens, e `--no-house-style` pula o `git log` e as duas coisas.
 - Nada além disso é transmitido, armazenado ou registrado pela ferramenta: sem telemetria, sem analytics, sem configuração remota.
 - A chave da API é lida do ambiente e nunca é gravada em disco.
 - O custo é uma única chamada à API por commit. Com o modelo padrão de qualquer um dos provedores e um diff típico, é uma fração de centavo.

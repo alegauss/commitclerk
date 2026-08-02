@@ -110,7 +110,7 @@ clerk             # or: git clerk
 ```
 clerk [-m TITLE] [--context NOTE] [--dry-run] [--provider NAME] [--base-url URL]
       [--model MODEL] [--timeout S] [--max-chars N] [--deep] [--no-house-style]
-      [--version]
+      [--no-examples] [--version]
 ```
 
 Installing gives you three identical entry points: `clerk`, `commitclerk`, and
@@ -132,6 +132,7 @@ the tool from a repository checkout instead, replace `clerk` with
 | `--max-chars N` | `60000` | Character budget for the diff. A larger diff is trimmed **per file**, so every changed file still reaches the model; generated and vendored files are collapsed to a one-line placeholder first. |
 | `--deep` | off | For a commit no budget can fit: summarise each **oversized** file in its own cheap request, then write the message from those summaries plus the smaller files' real diffs. Costs one extra request per oversized file — and nothing at all when the diff already fits. |
 | `--no-house-style` | off | Skip the `git log` behind both the house-style fingerprint and the worked examples. Use it when the history is imported or machine-generated, or to keep past commit message text off the wire. |
+| `--no-examples` | off | Send no past commit message **text**, but keep the fingerprint, which reports only counts and shapes. The narrow half of `--no-house-style`, for a team that will share a statistic about its history but not the history itself. Implied by `--no-house-style`. |
 | `--version` | — | Print the version and exit. |
 
 Every default in that table can also come from a [config file](#configuration) —
@@ -168,6 +169,9 @@ clerk --provider ollama --timeout 300
 
 # Fresh fork with an imported history you do not want copied
 clerk --no-house-style
+
+# Copy the conventions, but keep past commit message text off the wire
+clerk --no-examples
 
 # Tell it the one thing the diff cannot show
 clerk --context "this reverts the caching experiment we ran last sprint"
@@ -268,7 +272,7 @@ The source is an eleven-module package under [`commitclerk/`](commitclerk/) — 
 `context`, `diffing`, `deep`, `files`, `history`, `gitio`, `trailers`, `prompt`,
 `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (2299 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (2330 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start
@@ -307,6 +311,7 @@ repository, and any project that disagrees overrides it.
 | `timeout` | number | `--timeout` |
 | `max_chars` | number | `--max-chars` |
 | `house_style` | boolean | `false` is `--no-house-style` |
+| `examples` | boolean | `false` is `--no-examples` (ignored under `"house_style": false`, which already refuses both) |
 | `deep` | boolean | `true` is `--deep` |
 | `ticket_refs` | boolean | — (off by default; see below) |
 | `ticket_pattern` | string | — (implies `ticket_refs`) |
@@ -446,7 +451,7 @@ is a **different destination for your diff**, so point it somewhere you trust.
 ## Privacy and cost
 
 - **Your staged diff is sent to the API you configured** — `https://api.openai.com/v1` by default, or Anthropic's API with `--provider anthropic`, or whatever `--base-url` or a `.clerk.json` in the repository names. On a repository whose contents may not leave your machine, run `--provider ollama` (a local model, no key, nothing over the network) or don't run the tool there at all. Check your employer's policy first.
-- **Some of your recent commit *messages* are sent too.** The house-style block carries counts and shapes measured from the last 200 subjects and bodies — types, scopes, body shape, median subject length, trailer keys, language — not the messages themselves, except scope names and trailer keys, which appear verbatim because counting them would be useless. Separately, the two or three past commits that touched the same files as your staged diff are sent **verbatim** as style examples, subject plus body clipped to 400 characters, with trailer blocks (and the email addresses in them) stripped first. No diff, author, email, date or SHA from history is read. `--no-house-style` skips the `git log` and both of these.
+- **Some of your recent commit *messages* are sent too.** The house-style block carries counts and shapes measured from the last 200 subjects and bodies — types, scopes, body shape, median subject length, trailer keys, language — not the messages themselves, except scope names and trailer keys, which appear verbatim because counting them would be useless. Separately, the two or three past commits that touched the same files as your staged diff are sent **verbatim** as style examples, subject plus body clipped to 400 characters, with trailer blocks (and the email addresses in them) stripped first. No diff, author, email, date or SHA from history is read. Those are two different data flows and each has its own switch: `--no-examples` drops the verbatim messages and keeps the counts, and `--no-house-style` skips the `git log` and both of them.
 - Nothing else is transmitted, stored, or logged by this tool: no telemetry, no analytics, no remote config.
 - The API key is read from the environment and never written to disk.
 - Cost is a single API call per commit. With either provider's default model and a typical diff, that is a fraction of a cent.

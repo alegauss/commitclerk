@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--no-examples`: refuse the message text without refusing the statistic.**
+  One `git log` feeds two very different things. The house-style fingerprint
+  sends **counts and shapes** — how many `feat:` subjects, which scopes, the
+  median title length. The worked examples send **past commit message text,
+  verbatim**. Until now a single switch turned off both, so a team that would
+  happily share a statistic about its history but not the history itself had to
+  give up the conventions too. `--no-examples` (or `"examples": false` in
+  `.clerk.json`, so an organisation sets it once instead of trusting every
+  developer to remember a flag) drops the verbatim messages and keeps the
+  fingerprint. `--no-house-style` is unchanged and still refuses both, which is
+  why `"examples": true` under `"house_style": false` cannot re-enable
+  anything — there is no history read to draw from.
 - **`--deep`: the 5 000-line commit stops being described from its first 5%.**
   A vendored upgrade, a formatter run or a large refactor is bigger than any
   budget worth paying for, and trimming it fairly still means every big file

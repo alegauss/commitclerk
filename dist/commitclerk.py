@@ -33,6 +33,7 @@ single-file build with `python commitclerk.py`):
     clerk --deep                # summarize each file too big for the budget
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     clerk --no-house-style      # do not copy this repo's own commit conventions
+    clerk --no-examples         # keep the fingerprint, send no past message text
     clerk --context "reverts the caching experiment"   # why, in one sentence
     git clerk                   # same tool, as a native git subcommand
 
@@ -48,8 +49,8 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style, deep, ticket_refs, ticket_pattern). A setting is taken from the
-first place that has it:
+house_style, examples, deep, ticket_refs, ticket_pattern). A setting is taken
+from the first place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
@@ -123,6 +124,10 @@ SETTINGS = {
     "timeout": int,
     "max_chars": int,
     "house_style": bool,
+    # The narrow half of `house_style`: the fingerprint is counts and shapes, the
+    # examples are past commit message text verbatim, and a team can refuse the
+    # second while keeping the first. `"house_style": false` still refuses both.
+    "examples": bool,
     # Off unless asked for: it spends one extra request per oversized file, and a
     # setting that multiplies a bill has no business defaulting to on.
     "deep": bool,
@@ -2010,6 +2015,19 @@ def _wants_refs(settings: dict) -> bool | None:
     return True if "ticket_pattern" in settings else None
 
 
+def _wants_examples(house_style_on, cli, project, user) -> bool:
+    """Whether worked examples may be sent, given the fingerprint's own answer.
+
+    The narrow half of one refusal: the fingerprint transmits counts and shapes,
+    the examples transmit past commit message text verbatim, and a team can want
+    the first without the second. Gated on the fingerprint rather than resolved
+    beside it, because refusing the whole `git log` has already refused the
+    examples -- `"examples": true` under `"house_style": false` would otherwise
+    ask for text out of a history nothing read.
+    """
+    return bool(house_style_on and layered(cli, None, project, user, True))
+
+
 def deepen(
     diff: str,
     budget: int,
@@ -2137,6 +2155,15 @@ def main() -> int:
              "touched the same files. Use it to keep past commit message text off "
              "the wire, or when the history is not a style worth copying.",
     )
+    parser.add_argument(
+        "--no-examples",
+        action="store_true",
+        default=None,
+        help="Do not send past commit message text. Turns off the worked examples "
+             "drawn from earlier commits that touched the same files, and keeps the "
+             "house-style fingerprint, which reports only counts and shapes. Implied "
+             "by --no-house-style.",
+    )
     args = parser.parse_args()
 
     root = get_repo_root()
@@ -2165,6 +2192,10 @@ def main() -> int:
     house_style_on = layered(
         False if args.no_house_style else None, None,
         project.get("house_style"), user.get("house_style"), True,
+    )
+    examples_on = _wants_examples(
+        house_style_on, False if args.no_examples else None,
+        project.get("examples"), user.get("examples"),
     )
     deep_on = layered(
         True if args.deep else None, None, project.get("deep"), user.get("deep"), False,
@@ -2227,7 +2258,7 @@ def main() -> int:
     # no scopes -- only the second is a reason for scope inference to stay quiet.
     vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
     scope = scope_note(files, vocabulary)
-    examples = worked_examples(records, files)
+    examples = worked_examples(records, files) if examples_on else ""
     author = context_note(read_context_file(context_path(root)), args.context)
 
     context = {

@@ -28,6 +28,8 @@
 
 ## Block D — Trust & safety
 
+- ✅ **T61** **One switch hides two very different data flows** — `--no-examples` refuses past commit message text on its own, so a team can keep the counts-and-shapes fingerprint while `--no-house-style` still refuses both.
+
 ## Block E — Configuration & conventions
 
 - ✅ **T25** **A team convention is retyped as flags on every commit** — a `.clerk.json` at the repository root and a `~/.config/clerk/config.json` are read through one precedence ladder, CLI > env > project > user > default, written in a single function.

@@ -84,6 +84,19 @@ def _wants_refs(settings: dict) -> bool | None:
     return True if "ticket_pattern" in settings else None
 
 
+def _wants_examples(house_style_on, cli, project, user) -> bool:
+    """Whether worked examples may be sent, given the fingerprint's own answer.
+
+    The narrow half of one refusal: the fingerprint transmits counts and shapes,
+    the examples transmit past commit message text verbatim, and a team can want
+    the first without the second. Gated on the fingerprint rather than resolved
+    beside it, because refusing the whole `git log` has already refused the
+    examples -- `"examples": true` under `"house_style": false` would otherwise
+    ask for text out of a history nothing read.
+    """
+    return bool(house_style_on and layered(cli, None, project, user, True))
+
+
 def deepen(
     diff: str,
     budget: int,
@@ -211,6 +224,15 @@ def main() -> int:
              "touched the same files. Use it to keep past commit message text off "
              "the wire, or when the history is not a style worth copying.",
     )
+    parser.add_argument(
+        "--no-examples",
+        action="store_true",
+        default=None,
+        help="Do not send past commit message text. Turns off the worked examples "
+             "drawn from earlier commits that touched the same files, and keeps the "
+             "house-style fingerprint, which reports only counts and shapes. Implied "
+             "by --no-house-style.",
+    )
     args = parser.parse_args()
 
     root = get_repo_root()
@@ -239,6 +261,10 @@ def main() -> int:
     house_style_on = layered(
         False if args.no_house_style else None, None,
         project.get("house_style"), user.get("house_style"), True,
+    )
+    examples_on = _wants_examples(
+        house_style_on, False if args.no_examples else None,
+        project.get("examples"), user.get("examples"),
     )
     deep_on = layered(
         True if args.deep else None, None, project.get("deep"), user.get("deep"), False,
@@ -301,7 +327,7 @@ def main() -> int:
     # no scopes -- only the second is a reason for scope inference to stay quiet.
     vocabulary = known_scopes(records) if len(records) >= MIN_COMMITS else None
     scope = scope_note(files, vocabulary)
-    examples = worked_examples(records, files)
+    examples = worked_examples(records, files) if examples_on else ""
     author = context_note(read_context_file(context_path(root)), args.context)
 
     context = {

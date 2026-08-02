@@ -27,6 +27,10 @@ SETTINGS = {
     "timeout": int,
     "max_chars": int,
     "house_style": bool,
+    # The narrow half of `house_style`: the fingerprint is counts and shapes, the
+    # examples are past commit message text verbatim, and a team can refuse the
+    # second while keeping the first. `"house_style": false` still refuses both.
+    "examples": bool,
     # Off unless asked for: it spends one extra request per oversized file, and a
     # setting that multiplies a bill has no business defaulting to on.
     "deep": bool,

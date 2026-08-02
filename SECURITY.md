@@ -66,9 +66,13 @@ non-merge commits locally, with one `git log`, and uses them in two ways:
   plus body, each body clipped to 400 characters. Trailer blocks are stripped
   first, so `Co-authored-by:` lines and the email addresses in them are not sent.
 
-No diff, patch, author, email, date or SHA from history is read or sent. Pass
-`--no-house-style` to skip the `git log` entirely — that is the switch to use if
-past commit message text must not leave the machine.
+No diff, patch, author, email, date or SHA from history is read or sent. Those
+are two different data flows, so there are two switches: **`--no-examples`**
+(or `"examples": false`) is the one to use if past commit message text must not
+leave the machine — it keeps the fingerprint, which is counts and shapes — and
+**`--no-house-style`** (or `"house_style": false`) skips the `git log` entirely
+and refuses both, which is also what makes `"examples": true` under
+`"house_style": false` mean nothing: there is no history to draw from.
 
 When ticket trailers are enabled, the **current branch name** is read as well
 (`git rev-parse --abbrev-ref HEAD`) and matched against a regular expression. It
@@ -119,9 +123,9 @@ written by the tool:
 - `.clerk.json` at the repository root (`git rev-parse --show-toplevel`)
 - `~/.config/clerk/config.json`
 
-Only nine keys are recognised — `provider`, `model`, `base_url`, `timeout`,
-`max_chars`, `house_style`, `deep`, `ticket_refs`, `ticket_pattern` — and each is
-type-checked before it takes effect; a
+Only ten keys are recognised — `provider`, `model`, `base_url`, `timeout`,
+`max_chars`, `house_style`, `examples`, `deep`, `ticket_refs`, `ticket_pattern` —
+and each is type-checked before it takes effect; a
 key that is not one of those is reported on stderr and ignored. **API keys are
 not settings and are never read from either file**, so a config file committed to
 a repository cannot carry, capture or redirect a credential. Nothing from these

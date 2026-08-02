@@ -98,23 +98,6 @@ shape (T29) rather than trusting it. A corpus case in T50 should be a history
 containing a deliberately adversarial commit message. Nobody in this niche
 documents this. Doing so is a credibility asset, not an admission.
 
-### §T61 One switch is hiding two very different data flows
-
-`--no-house-style` currently turns off both halves of the history context, and they
-are not equivalent. The fingerprint transmits **counts and shapes** — how many
-`feat:` subjects, which scopes, median title length. Worked examples transmit
-**past commit message text, verbatim**. A team can reasonably want the first and
-refuse the second: the fingerprint is a statistic about their history, the examples
-are their history.
-
-So: `--no-examples` for the narrow refusal, `--no-house-style` retained as the
-combined one. The flag names then describe what they stop rather than which `git
-log` they skip, which is what a reviewer reading `SECURITY.md` needs. Under T25 the
-same split belongs in `.clerk.json`, so an organisation can set it once rather than
-trusting every developer to pass a flag.
-
----
-
 ## Block E — Configuration & conventions
 
 ### §T26 Rule packs turn forks into configuration

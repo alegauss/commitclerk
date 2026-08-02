@@ -18,6 +18,7 @@ single-file build with `python commitclerk.py`):
     clerk --deep                # summarize each file too big for the budget
     clerk --base-url http://localhost:11434/v1   # any OpenAI-compatible endpoint
     clerk --no-house-style      # do not copy this repo's own commit conventions
+    clerk --no-examples         # keep the fingerprint, send no past message text
     clerk --context "reverts the caching experiment"   # why, in one sentence
     git clerk                   # same tool, as a native git subcommand
 
@@ -33,8 +34,8 @@ Environment:
     CLERK_PROVIDER      optional, selects the provider (default: openai)
 
 Configuration files (JSON; keys provider, model, base_url, timeout, max_chars,
-house_style, deep, ticket_refs, ticket_pattern). A setting is taken from the
-first place that has it:
+house_style, examples, deep, ticket_refs, ticket_pattern). A setting is taken
+from the first place that has it:
     a flag  >  the environment  >  ./.clerk.json  >  ~/.config/clerk/config.json
     >  the built-in default
 `.clerk.json` is looked for at the repository root, so the tool behaves the same
@@ -233,7 +234,13 @@ from .providers import (  # noqa: E402
     suggested_replacement,
 )
 
-from .cli import _wants_refs, deepen, main, prog_name  # noqa: E402  (last: it imports the rest)
+from .cli import (  # noqa: E402  (last: it imports the rest)
+    _wants_examples,
+    _wants_refs,
+    deepen,
+    main,
+    prog_name,
+)
 
 __all__ = [
     "__version__",
