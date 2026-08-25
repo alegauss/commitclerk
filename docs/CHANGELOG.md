@@ -47,4 +47,6 @@
 
 ## Block I — Distribution & reach
 
+- ✅ **T71** **The page ends without a pointer to any other tool the same author publishes** — The page carries one house ad slot above the footer, drawn by japode-ads with storage off, a fixed dark theme and commitclerk kept off its own slot.
+
 ## Block J — Quality engineering

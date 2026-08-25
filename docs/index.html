@@ -291,6 +291,18 @@
   .privacy .lock{font-size:2.4rem;margin-bottom:14px}
   .privacy code{color:var(--amber-bright);font-size:.9em}
 
+  /* ---------- house ad (T71) ----------
+     All of the spacing is the slot's own margin, so a slot the loader collapses — an
+     unreachable catalogue, a browser with no shadow DOM — takes the gap with it instead
+     of leaving a blank strip above the footer.
+
+     min-height is the loader's reserved height for the in-content format, declared here
+     as well because the loader only reserves once its script has run: without it the
+     banner would arrive into a box of zero height and push the footer down the page.
+     Nothing else is styled — the banner is drawn inside a shadow root and this stylesheet
+     cannot reach it, which is the point of the slot having one. */
+  .ad{max-width:780px;min-height:140px;margin:8px auto 0}
+
   /* ---------- footer ---------- */
   footer{border-top:1px solid var(--line);padding:46px 0 38px;margin-top:30px}
   .foot-grid{display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap}
@@ -748,6 +760,26 @@ alias ac='git add -A &amp;&amp; clerk'</div>
   </div>
 </section>
 
+<!-- HOUSE AD (T71) — above the footer rather than inside it: it belongs to the end of the
+     page's content, not to the chrome. The container stays empty; the loader attaches a
+     shadow root and draws inside that, so this stylesheet cannot reach the banner and the
+     banner cannot leak into the page.
+
+     data-ad-theme is fixed because this page is: there is no toggle to follow, and "auto"
+     would hand a reader on a light OS a light card on a dark page.
+     data-ad-memory keeps the loader out of localStorage, so there is nothing to declare.
+     data-ad-exclude is how a site stays off its own slot — see §T71 for why the catalogue
+     cannot do it for us. -->
+<div class="wrap">
+  <div class="ad"
+       data-japode-ads
+       data-ad-format="in-content"
+       data-ad-slot="page-end"
+       data-ad-theme="dark"
+       data-ad-memory="off"
+       data-ad-exclude="commitclerk"></div>
+</div>
+
 <!-- FOOTER -->
 <footer>
   <div class="wrap">
@@ -805,6 +837,11 @@ alias ac='git add -A &amp;&amp; clerk'</div>
     </p>
   </div>
 </footer>
+
+<!-- The house ad loader (T71). Async and last: it never blocks the page, it makes one
+     request however many slots it finds, and if it cannot be reached the slot above
+     collapses itself rather than leaving an empty frame. -->
+<script src="https://ads.japode.com/v1/ads.js" async></script>
 
 <script>
   // reveal-on-scroll
