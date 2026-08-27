@@ -7,7 +7,7 @@
 **Write better git commit messages in one command — powered by your staged diff and an LLM.**
 
 [![PyPI](https://img.shields.io/pypi/v/commitclerk.svg)](https://pypi.org/project/commitclerk/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#requirements)
 [![CI](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml/badge.svg)](https://github.com/alegauss/commitclerk/actions/workflows/ci.yml)
@@ -636,7 +636,7 @@ Also see the [Code of Conduct](CODE_OF_CONDUCT.md) and the [security policy](SEC
 
 ## License
 
-[MIT](LICENSE) © Alexandre Oliveira
+[Apache 2.0](LICENSE) © Alexandre Oliveira
 
 ---
 

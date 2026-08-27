@@ -60,10 +60,10 @@
   <!-- 988px of 1020 -->
   <text x="92" y="502" font-family="DejaVu Sans, sans-serif" font-size="26" fill="#9CAAC8">It reads your staged diff, writes Conventional Commits, and shows you first.</text>
 
-  <!-- badge width = 46 (dot inset) + 260 (measured text) + 28 (trailing pad) -->
-  <rect x="90" y="540" width="334" height="46" rx="23" fill="#151D2F" stroke="#2A3654"/>
+  <!-- badge width = 46 (dot inset) + 335 (measured text) + 28 (trailing pad) -->
+  <rect x="90" y="540" width="409" height="46" rx="23" fill="#151D2F" stroke="#2A3654"/>
   <circle cx="118" cy="563" r="6" fill="#F7BE63"/>
-  <text x="136" y="571" font-family="DejaVu Sans, sans-serif" font-size="20" fill="#9CAAC8">~230 lines · One file · MIT</text>
+  <text x="136" y="571" font-family="DejaVu Sans, sans-serif" font-size="20" fill="#9CAAC8">~230 lines · One file · Apache 2.0</text>
 
   <text x="1110" y="571" text-anchor="end" font-family="DejaVu Sans Mono, monospace" font-size="20" fill="#7F8CAB">alegauss.github.io/commitclerk</text>
 </svg>

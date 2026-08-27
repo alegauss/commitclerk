@@ -7,8 +7,10 @@ name = "commitclerk"
 description = "AI-powered git commit messages from your staged diff. Single file, zero dependencies, and it never turns a CHANGELOG edit into a fake feat:."
 readme = "README.md"
 # A PEP 639 expression, not `{ file = ... }`: the latter dumps the entire licence
-# text into the License field of the PyPI sidebar instead of the word "MIT".
-license = "MIT"
+# text into the License field of the PyPI sidebar instead of the SPDX id.
+# Releases up to and including the last MIT-tagged one stay MIT for whoever
+# downloaded them — relicensing applies from the next release forward.
+license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.8"
 authors = [{ name = "Alexandre Oliveira" }]
