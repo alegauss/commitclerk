@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="commitclerk — better commit messages in one command">
+  <title>commitclerk — better commit messages in one command</title>
+  <desc>Social preview: the commitclerk mark — a signed-off commit node beside the
+  message it wrote — with the wordmark, the proposition, and the repository URL. The
+  palette is fixed, because this file is rasterised to og.png and cannot follow a
+  reader's theme.</desc>
+
+  <!-- Every line here is measured against the card frame: 90px gutters, so 1020px
+       of usable width between x=90 and x=1110. Type set past that runs off the
+       right edge of the card. Re-measure after editing any string: run og-banner.mjs in check mode,
+       from the scripts folder of the alegauss.github.io repo. -->
+  <defs>
+    <linearGradient id="cc-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A0E18"/>
+      <stop offset="1" stop-color="#151D2F"/>
+    </linearGradient>
+    <radialGradient id="cc-glow" cx="0.82" cy="0.05" r="0.7">
+      <stop offset="0" stop-color="#E9A33A" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#E9A33A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cc-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B2540"/>
+      <stop offset=".55" stop-color="#121A2C"/>
+      <stop offset="1" stop-color="#0A0E18"/>
+    </linearGradient>
+    <linearGradient id="cc-seal" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0" stop-color="#F9CB77"/>
+      <stop offset=".55" stop-color="#EDA53C"/>
+      <stop offset="1" stop-color="#D0821F"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#cc-bg)"/>
+  <rect width="1200" height="630" fill="url(#cc-glow)"/>
+  <rect x="0" y="0" width="1200" height="8" fill="#E9A33A"/>
+
+  <!-- the mark, at 128px: logo.svg is drawn on 512, so 0.25 lands it on the
+       same 128px the sibling cards use -->
+  <g transform="translate(90,120) scale(0.25)">
+    <rect width="512" height="512" rx="116" fill="url(#cc-tile)"/>
+    <path d="M148 118 V394" stroke="#E9A33A" stroke-opacity=".34" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="148" cy="122" r="18" fill="#0E1320" stroke="#E9A33A" stroke-opacity=".55" stroke-width="11"/>
+    <circle cx="148" cy="390" r="18" fill="#0E1320" stroke="#E9A33A" stroke-opacity=".55" stroke-width="11"/>
+    <circle cx="148" cy="256" r="72" fill="#E9A33A" fill-opacity=".14"/>
+    <circle cx="148" cy="256" r="56" fill="url(#cc-seal)"/>
+    <path d="M124 258 l19 21 l34 -44" fill="none" stroke="#141B2B" stroke-width="19"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="236" y="202" width="152" height="24" rx="12" fill="#F7BE63"/>
+    <rect x="236" y="250" width="184" height="17" rx="8.5" fill="#8494B8"/>
+    <rect x="236" y="292" width="128" height="17" rx="8.5" fill="#5C6A8C"/>
+  </g>
+
+  <text x="238" y="180" font-family="DejaVu Sans, sans-serif" font-size="52" font-weight="bold" fill="#F1F4FA">commitclerk</text>
+  <text x="240" y="216" font-family="DejaVu Sans Mono, monospace" font-size="20" fill="#7F8CAB">part of alegauss</text>
+
+  <!-- 923px and 633px of 1020 -->
+  <text x="90" y="360" font-family="DejaVu Sans, sans-serif" font-size="66" font-weight="bold" fill="#F1F4FA">Better commit messages</text>
+  <text x="90" y="436" font-family="DejaVu Sans, sans-serif" font-size="66" font-weight="bold" fill="#F7BE63">in one command.</text>
+
+  <!-- 988px of 1020 -->
+  <text x="92" y="502" font-family="DejaVu Sans, sans-serif" font-size="26" fill="#9CAAC8">It reads your staged diff, writes Conventional Commits, and shows you first.</text>
+
+  <!-- badge width = 46 (dot inset) + 260 (measured text) + 28 (trailing pad) -->
+  <rect x="90" y="540" width="334" height="46" rx="23" fill="#151D2F" stroke="#2A3654"/>
+  <circle cx="118" cy="563" r="6" fill="#F7BE63"/>
+  <text x="136" y="571" font-family="DejaVu Sans, sans-serif" font-size="20" fill="#9CAAC8">~230 lines · One file · MIT</text>
+
+  <text x="1110" y="571" text-anchor="end" font-family="DejaVu Sans Mono, monospace" font-size="20" fill="#7F8CAB">alegauss.github.io/commitclerk</text>
+</svg>
