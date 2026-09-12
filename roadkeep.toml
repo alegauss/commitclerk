@@ -71,3 +71,8 @@ undesigned = ["💭"]
 shipped = "✅"
 # the ledger's other door: a line that left without shipping.
 retired = "🗑"
+
+[project]
+name = "commitclerk"
+description = "AI-written commit messages from the staged diff, in one file with no dependencies."
+icon = "🧾"
