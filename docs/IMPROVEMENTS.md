@@ -381,20 +381,19 @@ for that reason.
 
 ### §T50 The prompt is the product and it is currently untested
 
-The existing tests cover `_is_doc`, `is_doc_only`, `truncate` and
-`_system_prompt` — all the deterministic scaffolding, none of the thing that
-actually determines output quality. Any change to `_RULES` today is a change with
-no signal at all.
+The existing tests cover `_is_doc`, `is_doc_only`, `truncate` and `_system_prompt` — all
+the deterministic scaffolding, none of the thing that actually determines output
+quality. Any change to `_RULES` today is a change with no signal at all.
 
 The first of two layers is an **offline golden corpus**: real diffs committed as
-fixtures — doc-only, mixed doc+code, rename-heavy, lockfile-dominated, binary,
-huge — asserted against the *deterministic* pipeline: file classes, budget
-allocation, inferred scope, offline message (§T21), prompt assembly. No network,
-runs in CI on every PR, catches most regressions.
+fixtures — doc-only, mixed doc+code, rename-heavy, lockfile-dominated, binary, huge —
+asserted against the *deterministic* pipeline: file classes, budget allocation, inferred
+scope, the `--offline` message, prompt assembly. No network, runs in CI on every PR,
+catches most regressions.
 
-The fixture corpus is also the most valuable artefact a contributor can donate: a
-diff that produced a bad message is a bug report that becomes a permanent test.
-Say so in `CONTRIBUTING.md` when this lands.
+The fixture corpus is also the most valuable artefact a contributor can donate: a diff
+that produced a bad message is a bug report that becomes a permanent test. Say so in
+`CONTRIBUTING.md` when this lands.
 
 ### §T51 Live evaluation is the layer that scores prose
 
