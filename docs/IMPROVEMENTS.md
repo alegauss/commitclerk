@@ -46,25 +46,6 @@ The `-m` title was right throughout, because the author wrote it. So what needs 
 guard is the body: what a removed line contributes is the fact of its removal, and never
 its content as a claim.
 
-### §T66 The file list is in the prompt and loses to the prose
-
-Observed on this repository. A commit that changed `docs/IMPROVEMENTS.md` and
-`docs/ROADMAP.md` came back with "Updated `SECURITY.md` to document the new threat
-model". `SECURITY.md` was not staged. It appeared only inside the added prose, which
-described a mitigation that a *later* commit would document.
-
-This is not the doc guard failing and it is not T60. The guard's concern is the type
-prefix, and the message was correctly `docs:`. T60 is about phrases from `_RULES`
-leaking. Here the prompt carried an accurate `Files changed:` list, and the model
-narrated a filename from the diff body over it.
-
-That makes it the founding failure in its purest form: a commit message asserting a
-change to a file the commit does not contain, which no reader of `git log --follow
-SECURITY.md` can distinguish from the truth. The file list is already present and
-already correct, so the fix is a question of weight and placement rather than of new
-context -- the same lesson the doc guard learned when it had to move *after* the diff to
-be obeyed.
-
 ## Block D — Trust & safety
 
 ### §T22 Prove the no-egress claim

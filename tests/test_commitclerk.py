@@ -137,6 +137,113 @@ class TestDocLineShare(unittest.TestCase):
         self.assertIsNone(commitclerk.doc_line_share(""))
 
 
+def _prose_chunk(name: str, *lines: str, old: str | None = None) -> str:
+    """A one-hunk chunk for `name` whose body is exactly `lines`, as written."""
+    return (
+        f"diff --git a/{old or name} b/{name}\n"
+        f"--- a/{old or name}\n"
+        f"+++ b/{name}\n"
+        f"@@ -1,{len(lines)} +1,{len(lines)} @@\n"
+        + "".join(f"{line}\n" for line in lines)
+    )
+
+
+class TestUnstagedMentions(unittest.TestCase):
+    """File names the prose mentions that the commit does not change."""
+
+    def test_the_observed_case_names_the_file_only_the_prose_mentions(self):
+        # Two docs staged; the prose names a third, on a removed and an added line.
+        files = ["docs/IMPROVEMENTS.md", "docs/ROADMAP.md"]
+        diff = _prose_chunk(
+            "docs/IMPROVEMENTS.md", "-The mitigations worth documenting in `SECURITY.md`:",
+        ) + _prose_chunk("docs/ROADMAP.md", "+- **T24** `SECURITY.md` does not say it")
+        self.assertEqual(commitclerk.unstaged_mentions(files, diff), ["SECURITY.md"])
+
+    def test_a_staged_file_named_by_its_basename_in_any_case_is_not_reported(self):
+        files = ["docs/ROADMAP.md", "README.md"]
+        diff = _prose_chunk("README.md", "+See ROADMAP.md and roadmap.md, and docs/readme.md.")
+        self.assertEqual(commitclerk.unstaged_mentions(files, diff), [])
+
+    def test_a_rename_source_counts_as_touched(self):
+        diff = _prose_chunk("docs/new.md", " Moved here from old.md.", old="docs/old.md")
+        self.assertEqual(commitclerk.unstaged_mentions(["docs/new.md"], diff), [])
+
+    def test_code_names_a_file_as_an_operand_and_is_not_read(self):
+        diff = _prose_chunk("app.py", '+    open("settings.json")')
+        self.assertEqual(commitclerk.unstaged_mentions(["app.py"], diff), [])
+
+    def test_the_section_heading_git_puts_on_the_hunk_line_is_read(self):
+        diff = (
+            "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n"
+            "@@ -9,1 +9,1 @@ Settings live in config.toml\n+plain words\n"
+        )
+        self.assertEqual(commitclerk.unstaged_mentions(["README.md"], diff), ["config.toml"])
+
+    def test_the_marker_git_writes_in_front_is_not_part_of_the_name(self):
+        diff = _prose_chunk("docs/a.md", "-NOTES.md was here", "+TODO.md is here")
+        self.assertEqual(commitclerk.unstaged_mentions(["docs/a.md"], diff), ["NOTES.md", "TODO.md"])
+
+    def test_context_lines_are_read_because_the_model_reads_them(self):
+        diff = _prose_chunk("README.md", " Unchanged line naming LICENSE.txt.", "+new line")
+        self.assertEqual(commitclerk.unstaged_mentions(["README.md"], diff), ["LICENSE.txt"])
+
+    def test_a_url_tail_and_a_method_call_are_not_file_names(self):
+        diff = _prose_chunk(
+            "README.md",
+            "+See https://example.com/guide.html for more.",
+            "+Call `response.json()` on the reply.",
+        )
+        self.assertEqual(commitclerk.unstaged_mentions(["README.md"], diff), [])
+
+    def test_a_dot_directory_path_is_one_name(self):
+        diff = _prose_chunk("README.md", "+Write it in `.clerk/context.md`, not here.")
+        self.assertEqual(
+            commitclerk.unstaged_mentions(["README.md"], diff), [".clerk/context.md"]
+        )
+
+    def test_names_are_deduplicated_in_the_order_they_first_appear(self):
+        diff = _prose_chunk(
+            "README.md", "+SECURITY.md then CONTRIBUTING.md", "+and SECURITY.md again."
+        )
+        self.assertEqual(
+            commitclerk.unstaged_mentions(["README.md"], diff),
+            ["SECURITY.md", "CONTRIBUTING.md"],
+        )
+
+
+class TestUnstagedMentionNote(unittest.TestCase):
+    def test_no_mention_means_no_note(self):
+        diff = _prose_chunk("README.md", "+plain words")
+        self.assertEqual(commitclerk.unstaged_mention_note(["README.md"], diff), "")
+
+    def test_the_note_names_the_changed_files_and_the_mentioned_ones(self):
+        files = ["docs/IMPROVEMENTS.md", "docs/ROADMAP.md"]
+        diff = _prose_chunk("docs/ROADMAP.md", "+`SECURITY.md` does not say it")
+        note = commitclerk.unstaged_mention_note(files, diff)
+        self.assertIn("only docs/IMPROVEMENTS.md, docs/ROADMAP.md", note)
+        self.assertIn("also names SECURITY.md, but those files are NOT part of this", note)
+        # Forbids the false claim only: a README documenting a config file the
+        # feature reads must still be describable.
+        self.assertNotIn("documents", note)
+        self.assertTrue(note.isascii())
+
+    def test_a_long_file_list_is_counted_rather_than_repeated(self):
+        files = [f"docs/p{i}.md" for i in range(commitclerk.MAX_LISTED_FILES + 1)]
+        diff = _prose_chunk("docs/p0.md", "+See SECURITY.md.")
+        note = commitclerk.unstaged_mention_note(files, diff)
+        self.assertIn(f"only the {len(files)} files listed under 'Files changed'", note)
+        self.assertNotIn("docs/p1.md", note)
+
+    def test_the_mentioned_names_are_capped(self):
+        extra = 3
+        names = [f"n{i}.md" for i in range(commitclerk.MAX_MENTIONS + extra)]
+        diff = _prose_chunk("README.md", "+" + " ".join(names))
+        note = commitclerk.unstaged_mention_note(["README.md"], diff)
+        self.assertIn(names[commitclerk.MAX_MENTIONS - 1], note)
+        self.assertNotIn(names[commitclerk.MAX_MENTIONS], note)
+        self.assertIn(f"and {extra} more", note)
+
+
 class TestClassify(unittest.TestCase):
     def _check(self, cases):
         for path, expected in cases:
@@ -682,6 +789,7 @@ class TestSystemPrompt(unittest.TestCase):
                 self.assertIn("imperative", prompt)
                 self.assertIn("Conventional Commits", prompt)
                 self.assertIn("docs:", prompt)
+                self.assertIn("exactly the ones under 'Files changed'", prompt)
 
 
 class TestProviderTable(unittest.TestCase):
@@ -2557,6 +2665,18 @@ class TestBuildUserPrompt(unittest.TestCase):
 
     def test_no_summaries_means_no_note_about_them(self):
         self.assertNotIn("[summary]", commitclerk.build_user_prompt("d", ["a.py"]))
+
+    def test_the_mention_note_is_read_after_the_diff_and_before_the_guard(self):
+        # After the diff for the guard's reason; the guard keeps the last word.
+        prompt = commitclerk.build_user_prompt(
+            "DIFFBODY", ["README.md"], mentions="MENTIONS", guard="GUARD"
+        )
+        self.assertLess(prompt.index("DIFFBODY"), prompt.index("MENTIONS"))
+        self.assertLess(prompt.index("MENTIONS"), prompt.index("GUARD"))
+
+    def test_no_mentions_means_the_prompt_is_unchanged(self):
+        bare = commitclerk.build_user_prompt("d", ["a.py"])
+        self.assertEqual(commitclerk.build_user_prompt("d", ["a.py"], mentions=""), bare)
 
 
 def _fake_tree(*paths: str):

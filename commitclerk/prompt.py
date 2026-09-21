@@ -11,6 +11,7 @@ from .fencing import FENCE_RULE, fence
 from .files import class_mix
 
 _RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
+- The files this commit changes are exactly the ones under 'Files changed'. A file name that appears inside the diff's text is something that text talks about, not a file this commit touched; never say this commit edits, updates, adds or creates a file missing from that list.
 - Title: imperative mood, max 72 chars, no trailing period.
 - Use a Conventional Commits prefix when applicable (feat:, fix:, chore:, refactor:, docs:, test:, build:, perf:). Documentation-only changes use docs:.
 - Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
@@ -64,6 +65,7 @@ def build_user_prompt(
     context: str = "",
     deep: str = "",
     excluded=(),
+    mentions: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -102,6 +104,10 @@ def build_user_prompt(
     # after the digest of the diff itself, so nothing inside can close it early
     # and continue as if it were the prompt.
     parts += ["", "Unified diff:", fence("DIFF", diff)]
+    if mentions:
+        # After the diff, for the guard's reason: the file list above is correct
+        # and still lost to a file name the prose below it mentioned.
+        parts += ["", mentions]
     if guard:
         # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
         # before the diff, 48 lines of changelog prose came after it and won — the

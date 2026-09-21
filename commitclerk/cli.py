@@ -23,7 +23,7 @@ from .excludes import (
     excluded_paths,
     read_clerkignore,
 )
-from .files import classify_files, doc_guard_note, scope_note
+from .files import classify_files, doc_guard_note, scope_note, unstaged_mention_note
 from .gitio import (
     get_branch_name,
     get_recent_commits,
@@ -501,6 +501,10 @@ def main() -> int:
             budget = max(0, budget - len(note))
 
     diff = budget_diff(diff, budget)
+    # On the diff as sent, not as staged: a name trimmed or demoted away is one
+    # the model never read, and naming it would be noise. Outside the budget,
+    # like the guard: it is bounded by MAX_MENTIONS, and it is no part of the diff.
+    context["mentions"] = unstaged_mention_note(files, diff)
 
     message = call_model(
         spec, api_key, model, diff, files,

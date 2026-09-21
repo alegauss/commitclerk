@@ -1167,6 +1167,89 @@ def doc_guard_note(files: list[str], diff: str = "") -> str:
     return _MIXED_DOCS_NOTE.format(files=", ".join(docs), share=share_text)
 
 
+# A file name as prose spells one: path segments, a dot-directory allowed, ending in
+# an extension repositories commonly hold. Never preceded by a slash or a dot, so
+# the tail of a URL or of a longer dotted name is not read as a name of its own,
+# and never followed by "(", because `response.json()` is a call.
+_MENTION_SUFFIXES = (
+    "md", "mdx", "rst", "txt", "adoc", "py", "js", "jsx", "ts", "tsx", "json", "toml",
+    "yml", "yaml", "cfg", "ini", "html", "css", "sh", "cmd", "ps1", "go", "rs", "java",
+    "rb", "php", "cs", "xml", "sql", "lock",
+)
+_MENTION_RE = re.compile(
+    r"(?<![\w/.-])((?:\.?\w[\w.-]*/)*\.?\w[\w.-]*\.(?:"
+    + "|".join(_MENTION_SUFFIXES)
+    + r"))(?![\w/(-]|\.\w)"
+)
+MAX_MENTIONS = 8
+MAX_LISTED_FILES = 8
+
+
+def _base(path: str) -> str:
+    return path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+
+
+def unstaged_mentions(files: list[str], diff: str) -> list[str]:
+    """File names the documentation in the diff mentions and this commit does not change.
+
+    Documentation chunks only, since that is where a name is narrative: code
+    names a file as an operand, and the model already reads it that way. Read
+    from the first `@@` on -- its section heading and context lines too, because
+    the model reads those as well. A name counts as touched when its basename
+    matches either side of any `diff --git` header or any staged path, compared
+    case-insensitively: telling the model a file it did change is untouched would
+    be the worse error, so a near miss is left alone.
+    """
+    touched = {_base(f) for f in files}
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            touched.update(_base(side) for side in line[len("diff --git "):].split(" "))
+    found: dict = {}
+    for chunk in split_diff(diff):
+        path = chunk_path(chunk)
+        if not path or not _is_doc(path):
+            continue
+        in_body = False
+        for line in chunk.splitlines():
+            if line.startswith("@@"):
+                in_body = True
+                text = line.split("@@", 2)[-1]
+            elif in_body:
+                text = line[1:]  # past the +, - or space git writes in front
+            else:
+                continue
+            for name in _MENTION_RE.findall(text):
+                found.setdefault(_base(name), name)
+    return [name for key, name in found.items() if key not in touched]
+
+
+def unstaged_mention_note(files: list[str], diff: str) -> str:
+    """The reminder that a file named in the prose is not a file this commit changed.
+
+    The file list is at the top of the prompt, correct, and still lost to a name
+    read later in the diff body: a commit staging two docs files came back saying
+    it had updated a third that only its prose mentioned. The list is already
+    there, so what this adds is placement -- read after the diff, the way the doc
+    guard had to be -- and the names spelled out, which is weight.
+    """
+    names = unstaged_mentions(files, diff)
+    if not names:
+        return ""
+    mentioned = ", ".join(names[:MAX_MENTIONS])
+    if len(names) > MAX_MENTIONS:
+        mentioned += f", and {len(names) - MAX_MENTIONS} more"
+    if len(files) <= MAX_LISTED_FILES:
+        changed = f"only {', '.join(files)}"
+    else:
+        changed = f"only the {len(files)} files listed under 'Files changed'"
+    return (
+        f"IMPORTANT - which files this commit changes: {changed}. The diff's text also "
+        f"names {mentioned}, but those files are NOT part of this commit. Never say this "
+        "commit edits, updates, adds or creates them; what the changed files say about "
+        "them can still be described."
+    )
+
+
 # --- from commitclerk/secrets.py --------------------------------------
 
 # Only the shapes that identify a vendor's credential on sight: each is anchored
@@ -2217,6 +2300,7 @@ def assisted_value(version: str, model=None) -> str:
 # --- from commitclerk/prompt.py ---------------------------------------
 
 _RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
+- The files this commit changes are exactly the ones under 'Files changed'. A file name that appears inside the diff's text is something that text talks about, not a file this commit touched; never say this commit edits, updates, adds or creates a file missing from that list.
 - Title: imperative mood, max 72 chars, no trailing period.
 - Use a Conventional Commits prefix when applicable (feat:, fix:, chore:, refactor:, docs:, test:, build:, perf:). Documentation-only changes use docs:.
 - Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
@@ -2270,6 +2354,7 @@ def build_user_prompt(
     context: str = "",
     deep: str = "",
     excluded=(),
+    mentions: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -2308,6 +2393,10 @@ def build_user_prompt(
     # after the digest of the diff itself, so nothing inside can close it early
     # and continue as if it were the prompt.
     parts += ["", "Unified diff:", fence("DIFF", diff)]
+    if mentions:
+        # After the diff, for the guard's reason: the file list above is correct
+        # and still lost to a file name the prose below it mentioned.
+        parts += ["", mentions]
     if guard:
         # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
         # before the diff, 48 lines of changelog prose came after it and won — the
@@ -3178,6 +3267,10 @@ def main() -> int:
             budget = max(0, budget - len(note))
 
     diff = budget_diff(diff, budget)
+    # On the diff as sent, not as staged: a name trimmed or demoted away is one
+    # the model never read, and naming it would be noise. Outside the budget,
+    # like the guard: it is bounded by MAX_MENTIONS, and it is no part of the diff.
+    context["mentions"] = unstaged_mention_note(files, diff)
 
     message = call_model(
         spec, api_key, model, diff, files,

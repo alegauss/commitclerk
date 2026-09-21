@@ -294,7 +294,7 @@ The source is a fifteen-module package under [`commitclerk/`](commitclerk/) — 
 `fencing`, `context`, `excludes`, `diffing`, `deep`, `files`, `secrets`, `offline`,
 `history`, `gitio`, `trailers`, `prompt`, `providers`, `cli` — and
 [`scripts/build_single_file.py`](scripts/build_single_file.py) concatenates it into
-[`dist/commitclerk.py`](dist/commitclerk.py) (3201 lines, no imports beyond the
+[`dist/commitclerk.py`](dist/commitclerk.py) (3294 lines, no imports beyond the
 standard library) so the audit-and-copy path survives. CI rebuilds the artifact, fails
 if it is stale, and runs the whole test suite against it as well as against the
 package. It's meant to be read, forked, and adapted to your team's conventions — start

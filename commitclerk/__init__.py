@@ -169,6 +169,8 @@ from .deep import (  # noqa: E402
 )
 from .files import (  # noqa: E402
     FILE_CLASSES,
+    MAX_LISTED_FILES,
+    MAX_MENTIONS,
     _is_doc,
     binary_paths,
     class_mix,
@@ -180,6 +182,8 @@ from .files import (  # noqa: E402
     package_root,
     package_span,
     scope_note,
+    unstaged_mention_note,
+    unstaged_mentions,
 )
 from .history import (  # noqa: E402
     FIELD_SEP,
@@ -347,6 +351,10 @@ __all__ = [
     "classify",
     "classify_files",
     "doc_guard_note",
+    "unstaged_mention_note",
+    "unstaged_mentions",
+    "MAX_MENTIONS",
+    "MAX_LISTED_FILES",
     "house_style",
     "known_scopes",
     "worked_examples",

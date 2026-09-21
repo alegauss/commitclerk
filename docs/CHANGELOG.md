@@ -25,6 +25,7 @@
 ## Block C — Diff intelligence
 
 - ✅ **T17** **A commit larger than any budget is only trimmed, so its tail is never described** — summarizing each oversized file separately and writing the message from the summaries is the one path that scales past a context window.
+- ✅ **T66** **A file named only in the diff's prose is described as a file this commit changed** — A note read after the diff names the files the commit changes and those its prose only mentions; on the observed commit, claims of an unstaged file fell from 3 in 100 to 0.
 
 ## Block D — Trust & safety
 

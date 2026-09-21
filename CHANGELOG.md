@@ -370,6 +370,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A file the diff's prose only mentions is no longer described as a file the
+  commit changed.** A commit that staged `docs/IMPROVEMENTS.md` and `docs/ROADMAP.md`
+  came back with "Updated the `SECURITY.md` section": the prose it touched talked
+  about `SECURITY.md`, and a name read deep in the diff won over the correct file
+  list at the top of the prompt. The list was never missing, so the fix is where it
+  is read. When the documentation in a diff names files the commit does not touch, a
+  note after the diff says which files the commit does change, names the others, and
+  forbids saying they were edited, added or created. Describing what the changed
+  files say about them is still allowed, because a README documenting a config file
+  the feature reads is the normal case. Measured on that commit with `-m`, against
+  `gpt-4o-mini`: the old prompt claimed the unstaged file in 3 bodies of 100, the new
+  one in 0 of 100. On a `feat:` commit whose README names `.clerk.json`, every body
+  still described that file, with the note and without it.
 - **A single code file no longer switches the documentation guard off.** This was a
   hole in the project's headline claim: the guard required *every* staged file to be
   documentation, so a 900-line CHANGELOG entry plus a one-line docstring fix went
