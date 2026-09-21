@@ -193,7 +193,7 @@ def dominant_language(subjects: list[str]) -> str | None:
     """
     if not subjects:
         return None
-    scores = {name: 0 for name in _LANGUAGE_WORDS}
+    scores = dict.fromkeys(_LANGUAGE_WORDS, 0)
     for subject in subjects:
         words = set(_WORD_RE.findall(_fold(strip_prefix(subject))))
         for name, markers in _LANGUAGE_WORDS.items():

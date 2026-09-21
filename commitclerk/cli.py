@@ -19,8 +19,8 @@ from .deep import (
 from .diffing import MAX_DIFF_CHARS, budget_diff, demote_diff, over_budget_paths
 from .excludes import (
     clerkignore_path,
-    exclusion_notice,
     excluded_paths,
+    exclusion_notice,
     read_clerkignore,
 )
 from .files import classify_files, doc_guard_note, scope_note, unstaged_mention_note
@@ -44,16 +44,6 @@ from .history import (
     worked_examples,
 )
 from .offline import offline_message
-from .secrets import redact_diff, redaction_notice, refusal_notice, scan_diff
-from .trailers import (
-    ASSISTED_TRAILER,
-    DEFAULT_TICKET_PATTERN,
-    TICKET_TRAILER,
-    add_trailer,
-    assisted_value,
-    compile_ticket_pattern,
-    ticket_key,
-)
 from .providers import (
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
@@ -69,6 +59,17 @@ from .providers import (
     resolve_model,
     resolve_provider,
 )
+from .secrets import redact_diff, redaction_notice, refusal_notice, scan_diff
+from .trailers import (
+    ASSISTED_TRAILER,
+    DEFAULT_TICKET_PATTERN,
+    TICKET_TRAILER,
+    add_trailer,
+    assisted_value,
+    compile_ticket_pattern,
+    ticket_key,
+)
+
 
 def prog_name(argv0: str) -> str:
     """Name to show in --help, derived from how the tool was actually invoked.

@@ -68,7 +68,7 @@ def add_trailer(message: str, key: str, value: str) -> str:
     body = message.rstrip("\n")
     if not body.strip():
         return message
-    line = "{}: {}".format(key, value)
+    line = f"{key}: {value}"
     if any(existing.strip() == line for existing in body.splitlines()):
         return message
 

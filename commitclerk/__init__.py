@@ -124,6 +124,15 @@ import unicodedata  # noqa: E402, F401
 import urllib.error  # noqa: E402, F401
 import urllib.request  # noqa: E402, F401
 
+from .cli import (  # noqa: E402
+    _wants_examples,
+    _wants_refs,
+    call_target,
+    deepen,
+    finish,
+    main,
+    prog_name,
+)
 from .config import (  # noqa: E402
     PROJECT_CONFIG,
     SETTINGS,
@@ -143,6 +152,18 @@ from .context import (  # noqa: E402
     context_path,
     read_context_file,
 )
+from .deep import (  # noqa: E402
+    DEEP_NOTE,
+    SUMMARY_INPUT_CHARS,
+    SUMMARY_LINE_CHARS,
+    SUMMARY_MARK,
+    SUMMARY_MAX_LINES,
+    SUMMARY_SYSTEM_PROMPT,
+    clean_summary,
+    summarize_diff,
+    summary_block,
+    summary_user_prompt,
+)
 from .diffing import (  # noqa: E402
     DEMOTE_MIN_CHARS,
     DEMOTED_CLASSES,
@@ -155,17 +176,26 @@ from .diffing import (  # noqa: E402
     split_diff,
     truncate,
 )
-from .deep import (  # noqa: E402
-    DEEP_NOTE,
-    SUMMARY_INPUT_CHARS,
-    SUMMARY_LINE_CHARS,
-    SUMMARY_MARK,
-    SUMMARY_MAX_LINES,
-    SUMMARY_SYSTEM_PROMPT,
-    clean_summary,
-    summarize_diff,
-    summary_block,
-    summary_user_prompt,
+from .excludes import (  # noqa: E402
+    CLERKIGNORE,
+    MAX_NAMED,
+    Rule,
+    clerkignore_path,
+    compile_pattern,
+    excluded,
+    excluded_paths,
+    exclusion_notice,
+    parse_clerkignore,
+    read_clerkignore,
+)
+from .fencing import (  # noqa: E402
+    BEGIN,
+    END,
+    FENCE_RULE,
+    TAG_CHARS,
+    fence,
+    fence_overhead,
+    region_tag,
 )
 from .files import (  # noqa: E402
     FILE_CLASSES,
@@ -184,6 +214,19 @@ from .files import (  # noqa: E402
     scope_note,
     unstaged_mention_note,
     unstaged_mentions,
+)
+from .gitio import (  # noqa: E402
+    MAX_SUMMARY_CHARS,
+    get_branch_name,
+    get_recent_commits,
+    get_repo_root,
+    get_staged_diff,
+    get_staged_files,
+    get_staged_summary,
+    get_unstaged_files,
+    partially_staged,
+    run,
+    unstaged_warning,
 )
 from .history import (  # noqa: E402
     FIELD_SEP,
@@ -212,44 +255,6 @@ from .history import (  # noqa: E402
     trailer_keys,
     worked_examples,
 )
-from .secrets import (  # noqa: E402
-    ENTROPY_TOKEN,
-    MASK,
-    MAX_REPORTED,
-    MIN_ENTROPY,
-    PREFIX_PATTERNS,
-    UNSCANNED_FOR_ENTROPY,
-    Finding,
-    added_lines,
-    looks_random,
-    redact_diff,
-    redaction_notice,
-    refusal_notice,
-    scan_diff,
-    scan_line,
-    shannon_entropy,
-)
-from .fencing import (  # noqa: E402
-    BEGIN,
-    END,
-    FENCE_RULE,
-    TAG_CHARS,
-    fence,
-    fence_overhead,
-    region_tag,
-)
-from .excludes import (  # noqa: E402
-    CLERKIGNORE,
-    MAX_NAMED,
-    Rule,
-    clerkignore_path,
-    compile_pattern,
-    exclusion_notice,
-    excluded,
-    excluded_paths,
-    parse_clerkignore,
-    read_clerkignore,
-)
 from .offline import (  # noqa: E402
     MAX_BULLETS,
     MAX_TITLE,
@@ -262,30 +267,7 @@ from .offline import (  # noqa: E402
     offline_type,
     summary_marks,
 )
-from .gitio import (  # noqa: E402
-    MAX_SUMMARY_CHARS,
-    get_branch_name,
-    get_recent_commits,
-    get_repo_root,
-    get_staged_diff,
-    get_staged_files,
-    get_staged_summary,
-    get_unstaged_files,
-    partially_staged,
-    run,
-    unstaged_warning,
-)
 from .prompt import _system_prompt, build_user_prompt  # noqa: E402
-from .trailers import (  # noqa: E402
-    ASSISTED_TRAILER,
-    DEFAULT_TICKET_PATTERN,
-    OFFLINE_MODEL,
-    TICKET_TRAILER,
-    add_trailer,
-    assisted_value,
-    compile_ticket_pattern,
-    ticket_key,
-)
 from .providers import (  # noqa: E402
     ANTHROPIC_MAX_TOKENS,
     ANTHROPIC_VERSION,
@@ -320,15 +302,32 @@ from .providers import (  # noqa: E402
     retry_delay,
     suggested_replacement,
 )
-
-from .cli import (  # noqa: E402  (last: it imports the rest)
-    _wants_examples,
-    _wants_refs,
-    call_target,
-    deepen,
-    finish,
-    main,
-    prog_name,
+from .secrets import (  # noqa: E402
+    ENTROPY_TOKEN,
+    MASK,
+    MAX_REPORTED,
+    MIN_ENTROPY,
+    PREFIX_PATTERNS,
+    UNSCANNED_FOR_ENTROPY,
+    Finding,
+    added_lines,
+    looks_random,
+    redact_diff,
+    redaction_notice,
+    refusal_notice,
+    scan_diff,
+    scan_line,
+    shannon_entropy,
+)
+from .trailers import (  # noqa: E402
+    ASSISTED_TRAILER,
+    DEFAULT_TICKET_PATTERN,
+    OFFLINE_MODEL,
+    TICKET_TRAILER,
+    add_trailer,
+    assisted_value,
+    compile_ticket_pattern,
+    ticket_key,
 )
 
 __all__ = [

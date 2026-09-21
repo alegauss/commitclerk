@@ -227,22 +227,22 @@ def read_config(path: str | None) -> tuple[dict, list[str]]:
     # ValueError covers both JSONDecodeError and the UnicodeDecodeError a file
     # that is not really UTF-8 raises on read.
     except (OSError, ValueError) as exc:
-        raise ConfigError("cannot read {}: {}".format(path, exc))
+        raise ConfigError(f"cannot read {path}: {exc}")
     if not isinstance(data, dict):
-        raise ConfigError("{} must contain a JSON object".format(path))
+        raise ConfigError(f"{path} must contain a JSON object")
 
     values: dict = {}
     notices: list[str] = []
     for key in sorted(data):
         expected = SETTINGS.get(key)
         if expected is None:
-            notices.append("Note: unknown setting '{}' in {}, ignored.".format(key, path))
+            notices.append(f"Note: unknown setting '{key}' in {path}, ignored.")
             continue
         value = data[key]
         # `bool` is a subclass of `int` in Python, so an int setting has to turn
         # `true` away by hand or `"timeout": true` would mean a one-second timeout.
         if not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
-            raise ConfigError("{}: '{}' must be {}".format(path, key, _TYPE_NAMES[expected]))
+            raise ConfigError(f"{path}: '{key}' must be {_TYPE_NAMES[expected]}")
         values[key] = value
     return values, notices
 
@@ -613,43 +613,6 @@ def count_changes(chunk: str) -> tuple[int, int]:
         elif line.startswith("-") and not line.startswith("---"):
             removed += 1
     return added, removed
-
-
-def doc_line_share(diff: str) -> float | None:
-    """Fraction of the commit's changed lines that live in documentation files."""
-    doc_lines = total = 0
-    for chunk in split_diff(diff):
-        path = chunk_path(chunk)
-        changed = sum(count_changes(chunk))
-        total += changed
-        if path and _is_doc(path):
-            doc_lines += changed
-    return doc_lines / total if total else None
-
-
-def doc_guard_note(files: list[str], diff: str = "") -> str:
-    """The caution about documentation prose for this commit, or "" if none applies.
-
-    Three cases, not two. All documentation is the easy one. The dangerous one is
-    *mixed*: a 900-line CHANGELOG entry plus a one-line typo fix used to switch the
-    guard off entirely and come back as "feat: implement <the feature the changelog
-    describes>" — the exact failure this tool exists to prevent.
-    """
-    docs = [f for f in files if _is_doc(f)]
-    if not docs:
-        return ""
-    if len(docs) == len(files):
-        return _DOC_ONLY_NOTE
-    share = doc_line_share(diff)
-    share_text = ""
-    if share is not None and share >= 0.5:
-        # Capped at 99: code is present by definition here, so rounding 900/901 up
-        # to "100% of the changed lines" would contradict the sentence before it.
-        share_text = (
-            f" Documentation is {min(99, round(share * 100))}% of the changed lines, "
-            "so the commit is mostly a documentation edit."
-        )
-    return _MIXED_DOCS_NOTE.format(files=", ".join(docs), share=share_text)
 
 
 def demote_diff(
@@ -1853,7 +1816,7 @@ def dominant_language(subjects: list[str]) -> str | None:
     """
     if not subjects:
         return None
-    scores = {name: 0 for name in _LANGUAGE_WORDS}
+    scores = dict.fromkeys(_LANGUAGE_WORDS, 0)
     for subject in subjects:
         words = set(_WORD_RE.findall(_fold(strip_prefix(subject))))
         for name, markers in _LANGUAGE_WORDS.items():
@@ -2268,7 +2231,7 @@ def add_trailer(message: str, key: str, value: str) -> str:
     body = message.rstrip("\n")
     if not body.strip():
         return message
-    line = "{}: {}".format(key, value)
+    line = f"{key}: {value}"
     if any(existing.strip() == line for existing in body.splitlines()):
         return message
 

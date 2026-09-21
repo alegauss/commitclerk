@@ -97,22 +97,22 @@ def read_config(path: str | None) -> tuple[dict, list[str]]:
     # ValueError covers both JSONDecodeError and the UnicodeDecodeError a file
     # that is not really UTF-8 raises on read.
     except (OSError, ValueError) as exc:
-        raise ConfigError("cannot read {}: {}".format(path, exc))
+        raise ConfigError(f"cannot read {path}: {exc}")
     if not isinstance(data, dict):
-        raise ConfigError("{} must contain a JSON object".format(path))
+        raise ConfigError(f"{path} must contain a JSON object")
 
     values: dict = {}
     notices: list[str] = []
     for key in sorted(data):
         expected = SETTINGS.get(key)
         if expected is None:
-            notices.append("Note: unknown setting '{}' in {}, ignored.".format(key, path))
+            notices.append(f"Note: unknown setting '{key}' in {path}, ignored.")
             continue
         value = data[key]
         # `bool` is a subclass of `int` in Python, so an int setting has to turn
         # `true` away by hand or `"timeout": true` would mean a one-second timeout.
         if not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
-            raise ConfigError("{}: '{}' must be {}".format(path, key, _TYPE_NAMES[expected]))
+            raise ConfigError(f"{path}: '{key}' must be {_TYPE_NAMES[expected]}")
         values[key] = value
     return values, notices
 

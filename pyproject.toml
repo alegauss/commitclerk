@@ -86,3 +86,8 @@ ignore = [
     # individual instructions.
     "E501",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# The package's facade: every name in it is imported to be re-exported, so the
+# test suite reaches the same `commitclerk.<name>` in the package and the build.
+"commitclerk/__init__.py" = ["F401"]
