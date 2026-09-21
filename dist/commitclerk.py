@@ -2841,8 +2841,10 @@ def prog_name(argv0: str) -> str:
 
     Installed as `git-clerk`, git runs us for `git clerk`, so printing
     `usage: clerk` there would document a command the user did not type.
+    Both separators are split on every platform: `os.path.basename` only knows
+    the host's, so a Windows path came back whole on Linux.
     """
-    base = os.path.basename(argv0)
+    base = argv0.replace("\\", "/").rsplit("/", 1)[-1]
     stem = os.path.splitext(base)[0]
     if stem == "git-clerk":
         return "git clerk"
