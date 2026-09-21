@@ -12,12 +12,6 @@ ref_scheme = "id"
 # ids appear in the always-loaded guide too, and an id the scan misses is an id reused.
 id_sources = ["agents.md"]
 
-# what jumps the queue, in order — this replaces the "Suggested order (not binding)"
-# section the roadmap used to end with, which was advice no command could read. T60 first
-# because it is the product failing at the thing it exists to do; then discovery, then the
-# config-plus-lint pair that unlocks team adoption, then the two corporate blockers.
-priority = ["T60", "T49", "T25", "T28", "T19", "T21", "T62", "T57", "T58", "T40", "T41"]
-
 # where a defect in roadkeep itself is filed, for the `report --issue` handoff. Nothing is
 # ever sent from here: it only addresses the `gh` command a person runs after reading it.
 [report]

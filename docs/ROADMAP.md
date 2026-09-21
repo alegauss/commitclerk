@@ -24,6 +24,17 @@
 > **How to pick work:** `roadkeep brief` — in-progress first, then `priority` in
 > `roadkeep.toml`, then the lowest-numbered task whose deps are all shipped.
 
+## Priority
+
+- T60
+- T49
+- T28
+- T62
+- T57
+- T58
+- T40
+- T41
+
 ## Block B — Context beyond the diff
 
 *The founding insight is that the diff alone misleads. History now answers "how does this
