@@ -123,8 +123,12 @@ _DOC_ONLY_NOTE = (
     "Use the docs: prefix and describe the documentation change itself "
     "(e.g. 'document X', 'record X in the changelog', 'remove completed tasks from the roadmap', "
     "'correct stale claims in README'). Do NOT say a feature was implemented or added: any feature "
-    "described in the diff shipped in an earlier commit; this commit only writes it down."
+    "described in the diff shipped in an earlier commit; this commit only edits the text that "
+    "describes it."
 )
+# "only writes it down" is what that sentence said until a commit whose diff was
+# two deleted roadmap lines came back claiming the deleted work as adopted: on a
+# commit that erases the prose, the guard's own framing is the false one.
 
 # The same caution for the far more common mixed commit. It cannot simply say "do
 # not describe a feature as implemented" — sometimes the code really does implement
@@ -349,4 +353,58 @@ def unstaged_mention_note(files: list[str], diff: str) -> str:
         "commit edits, updates, adds or creates them; what the changed files say about "
         "them can still be described."
     )
+
+
+def deletion_only_docs(diff: str) -> list:
+    """Documentation files this commit removes lines from and adds none to.
+
+    Documentation only, for the reason `unstaged_mentions` reads documentation
+    only: a removed line of prose is a sentence that still reads as a claim,
+    while a removed line of code reads as deleted code and always has. Per file
+    rather than per commit, so a roadmap losing its entry beside a changelog
+    gaining one is still reported for the roadmap.
+
+    Asked of the diff as staged, never as sent: "this file's change is only
+    deletions" is a fact about the commit, and a file whose additions were
+    trimmed off the end would answer yes to a question about the trimmed text.
+    """
+    out = []
+    for chunk in split_diff(diff):
+        path = chunk_path(chunk)
+        if not path or not _is_doc(path):
+            continue
+        added, removed = count_changes(chunk)
+        if removed and not added:
+            out.append(path)
+    return out
+
+
+_DELETION_NOTE = (
+    "IMPORTANT - how to read the removed lines: this commit's only change to {files} is "
+    "deletions. A line the diff marks with '-' is text this commit REMOVES from the file: "
+    "its content is not something this commit does, adds, adopts, supports or documents. "
+    "Report the removal - what was dropped, and that it is gone - and never restate "
+    "anything that appears only on a removed line as work that was done."
+)
+
+
+def deletion_note(diff: str) -> str:
+    """The reminder that a removed line is not a claim this commit makes.
+
+    The failure the doc guard catches, one step further in. A `docs/ROADMAP.md`
+    diff of two deletions and no insertions, whose only mention of a project sat
+    on a removed line, came back as "updates documentation to reflect the
+    adoption of the new standard in ... and Cursarei" -- stating as accomplished
+    the one thing that commit recorded as abandoned. Nothing else in the input
+    can correct it: the words, the file and the block heading read identically
+    either way, and the whole difference between "we did this" and "we stopped
+    doing this" is the one character git writes in front of the line.
+    """
+    docs = deletion_only_docs(diff)
+    if not docs:
+        return ""
+    names = ", ".join(docs[:MAX_LISTED_FILES])
+    if len(docs) > MAX_LISTED_FILES:
+        names += f", and {len(docs) - MAX_LISTED_FILES} more"
+    return _DELETION_NOTE.format(files=names)
 

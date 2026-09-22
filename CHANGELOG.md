@@ -370,6 +370,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A line the diff deletes is no longer described as work that was done.** A
+  `docs/ROADMAP.md` commit of two deletions and no insertions came back as
+  "updates documentation to reflect the adoption of the new standard in ... and
+  Cursarei" — the project's name occurred exactly once in the whole diff, on a
+  removed line, and the body stated as accomplished the one thing that commit
+  recorded as abandoned. It was caught by hand and amended before pushing; a
+  commit read less closely keeps it. The failure is directional and nothing else
+  in the input can correct it: a unified diff marks a removed line with one
+  character, and the words, the file and the section heading read identically
+  whether the line is arriving or leaving. So the rules now state that a line
+  marked `-` is text the commit *removes* and that what it contributes is the
+  fact of its removal, and a documentation file whose whole change is deletions
+  gets a note of its own after the diff, naming it and asking for the removal to
+  be the subject. The documentation guard's own wording was part of the misread —
+  it told the model that a documented feature "shipped in an earlier commit; this
+  commit only writes it down", which is false of a commit that erases the prose,
+  and it now says the commit edits the text that describes it.
 - **A file the diff's prose only mentions is no longer described as a file the
   commit changed.** A commit that staged `docs/IMPROVEMENTS.md` and `docs/ROADMAP.md`
   came back with "Updated the `SECURITY.md` section": the prose it touched talked

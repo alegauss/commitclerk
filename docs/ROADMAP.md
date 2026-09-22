@@ -43,8 +43,6 @@ which lives in the branch name and in the author's head.*
 
 ## Block C — Diff intelligence
 
-- 📋 **T65** (deps: —) **A line the diff deletes is described as work that was done** — A commit whose only mention of a project sat on a removed roadmap line produced a body claiming that project had adopted the tool, which is the doc guard's own failure one step further in. → §T65
-
 *Every file reaches the model, classified, with generated noise collapsed, the doc guard
 honest on mixed commits, and partial staging called out. What is left is the commit no
 budget can fit.*

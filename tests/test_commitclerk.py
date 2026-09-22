@@ -88,6 +88,14 @@ class TestDocGuardNote(unittest.TestCase):
         self.assertIn("every file in this commit is documentation", note)
         self.assertIn("docs:", note)
 
+    def test_the_documentation_only_note_does_not_assume_prose_was_added(self):
+        # "this commit only writes it down" is false of a commit that deletes the
+        # prose, and it is the sentence a deletion-only roadmap edit was read
+        # through when it came back claiming the deleted work as adopted.
+        note = commitclerk.doc_guard_note(["docs/ROADMAP.md"])
+        self.assertNotIn("writes it down", note)
+        self.assertIn("only edits the text that describes it", note)
+
     def test_a_mixed_commit_now_gets_a_note_at_all(self):
         # The bug this task fixes: one code file used to switch the guard off.
         note = commitclerk.doc_guard_note(["CHANGELOG.md", "app.py"])
@@ -241,6 +249,72 @@ class TestUnstagedMentionNote(unittest.TestCase):
         note = commitclerk.unstaged_mention_note(["README.md"], diff)
         self.assertIn(names[commitclerk.MAX_MENTIONS - 1], note)
         self.assertNotIn(names[commitclerk.MAX_MENTIONS], note)
+        self.assertIn(f"and {extra} more", note)
+
+
+class TestDeletionOnlyDocs(unittest.TestCase):
+    """Documentation whose whole change is lines going away."""
+
+    def test_the_observed_case_is_two_deletions_and_no_insertions(self):
+        diff = _prose_chunk(
+            "docs/ROADMAP.md",
+            "-- **T12** adopt the new standard in Cursarei",
+            "-  Tracked since March.",
+        )
+        self.assertEqual(commitclerk.deletion_only_docs(diff), ["docs/ROADMAP.md"])
+
+    def test_one_added_line_is_enough_to_make_it_an_edit(self):
+        diff = _prose_chunk("docs/ROADMAP.md", "-old line", "+new line")
+        self.assertEqual(commitclerk.deletion_only_docs(diff), [])
+
+    def test_an_addition_only_change_is_not_reported(self):
+        self.assertEqual(
+            commitclerk.deletion_only_docs(_prose_chunk("README.md", "+a new sentence")), []
+        )
+
+    def test_code_deletions_are_not_reported(self):
+        # A removed line of code reads as deleted code; a removed line of prose
+        # still reads as a sentence making a claim.
+        diff = _prose_chunk("app.py", "-    retry(url)")
+        self.assertEqual(commitclerk.deletion_only_docs(diff), [])
+
+    def test_one_file_per_chunk_in_diff_order(self):
+        diff = (
+            _prose_chunk("docs/ROADMAP.md", "-retired")
+            + _prose_chunk("docs/CHANGELOG.md", "+shipped")
+            + _prose_chunk("README.md", "-stale claim")
+        )
+        self.assertEqual(
+            commitclerk.deletion_only_docs(diff), ["docs/ROADMAP.md", "README.md"]
+        )
+
+    def test_a_file_header_is_not_counted_as_a_changed_line(self):
+        # `--- a/x` and `+++ b/x` are not a removal and an addition.
+        self.assertEqual(commitclerk.deletion_only_docs(_prose_chunk("README.md")), [])
+
+
+class TestDeletionNote(unittest.TestCase):
+    def test_no_deletion_only_documentation_means_no_note(self):
+        diff = _prose_chunk("docs/ROADMAP.md", "-old line", "+new line")
+        self.assertEqual(commitclerk.deletion_note(diff), "")
+
+    def test_the_note_names_the_file_and_forbids_the_claim(self):
+        diff = _prose_chunk("docs/ROADMAP.md", "-- **T12** adopt the standard in Cursarei")
+        note = commitclerk.deletion_note(diff)
+        self.assertIn("only change to docs/ROADMAP.md is deletions", note)
+        self.assertIn("REMOVES", note)
+        self.assertIn("never restate", note)
+        # The removal itself is still the subject of the message.
+        self.assertIn("Report the removal", note)
+        self.assertTrue(note.isascii())
+
+    def test_several_files_are_listed_and_capped(self):
+        extra = 2
+        paths = [f"docs/p{i}.md" for i in range(commitclerk.MAX_LISTED_FILES + extra)]
+        diff = "".join(_prose_chunk(path, "-gone") for path in paths)
+        note = commitclerk.deletion_note(diff)
+        self.assertIn(paths[commitclerk.MAX_LISTED_FILES - 1], note)
+        self.assertNotIn(paths[commitclerk.MAX_LISTED_FILES], note)
         self.assertIn(f"and {extra} more", note)
 
 
@@ -790,6 +864,7 @@ class TestSystemPrompt(unittest.TestCase):
                 self.assertIn("Conventional Commits", prompt)
                 self.assertIn("docs:", prompt)
                 self.assertIn("exactly the ones under 'Files changed'", prompt)
+                self.assertIn("marks with '-' is text this commit REMOVES", prompt)
 
 
 class TestProviderTable(unittest.TestCase):
@@ -2677,6 +2752,20 @@ class TestBuildUserPrompt(unittest.TestCase):
     def test_no_mentions_means_the_prompt_is_unchanged(self):
         bare = commitclerk.build_user_prompt("d", ["a.py"])
         self.assertEqual(commitclerk.build_user_prompt("d", ["a.py"], mentions=""), bare)
+
+    def test_the_deletion_note_has_the_last_word_over_the_guard(self):
+        # The guard says the prose describes an earlier commit's work; on a
+        # deletion-only diff the prose is being retired, and the specific fact
+        # must be the one read last.
+        prompt = commitclerk.build_user_prompt(
+            "DIFFBODY", ["docs/ROADMAP.md"], guard="GUARD", deletions="DELETIONS"
+        )
+        self.assertLess(prompt.index("DIFFBODY"), prompt.index("GUARD"))
+        self.assertLess(prompt.index("GUARD"), prompt.index("DELETIONS"))
+
+    def test_no_deletion_note_means_the_prompt_is_unchanged(self):
+        bare = commitclerk.build_user_prompt("d", ["a.py"])
+        self.assertEqual(commitclerk.build_user_prompt("d", ["a.py"], deletions=""), bare)
 
 
 def _fake_tree(*paths: str):

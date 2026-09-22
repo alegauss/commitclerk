@@ -12,6 +12,7 @@ from .files import class_mix
 
 _RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
 - The files this commit changes are exactly the ones under 'Files changed'. A file name that appears inside the diff's text is something that text talks about, not a file this commit touched; never say this commit edits, updates, adds or creates a file missing from that list.
+- A line the diff marks with '-' is text this commit REMOVES. What it contributes is the fact of its removal: never restate something that appears only on a removed line as work that was done, a feature that was added or a decision that was adopted.
 - Title: imperative mood, max 72 chars, no trailing period.
 - Use a Conventional Commits prefix when applicable (feat:, fix:, chore:, refactor:, docs:, test:, build:, perf:). Documentation-only changes use docs:.
 - Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
@@ -66,6 +67,7 @@ def build_user_prompt(
     deep: str = "",
     excluded=(),
     mentions: str = "",
+    deletions: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -109,10 +111,16 @@ def build_user_prompt(
         # and still lost to a file name the prose below it mentioned.
         parts += ["", mentions]
     if guard:
-        # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
-        # before the diff, 48 lines of changelog prose came after it and won — the
-        # model still wrote "feat: implement real-time collaboration" for a commit
-        # whose only code change was a docstring. Read after the diff, it obeys.
+        # After the diff, on purpose. Measured against gpt-4o-mini: with the guard
+        # placed before the diff, 48 lines of changelog prose came after it and won
+        # — the model still wrote "feat: implement real-time collaboration" for a
+        # commit whose only code change was a docstring. Read after the diff, it obeys.
         parts += ["", guard]
+    if deletions:
+        # After the guard, which is the general case this contradicts: the guard
+        # says the documentation prose describes work from an earlier commit, and
+        # on a deletion-only diff the prose is being retired instead. The more
+        # specific fact has to be the one read last.
+        parts += ["", deletions]
     return "\n".join(parts)
 

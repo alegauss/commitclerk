@@ -23,7 +23,13 @@ from .excludes import (
     exclusion_notice,
     read_clerkignore,
 )
-from .files import classify_files, doc_guard_note, scope_note, unstaged_mention_note
+from .files import (
+    classify_files,
+    deletion_note,
+    doc_guard_note,
+    scope_note,
+    unstaged_mention_note,
+)
 from .gitio import (
     get_branch_name,
     get_recent_commits,
@@ -466,6 +472,10 @@ def main() -> int:
     # trimming, and demotion must happen before budgeting so the space a lockfile
     # was using is handed to the files the commit is actually about.
     guard = doc_guard_note(files, diff)
+    # Beside the guard and on the same untrimmed diff: "this file's change is only
+    # deletions" is a claim about the commit, and read after the budget a file
+    # whose additions were trimmed off the end would answer yes to it.
+    deletions = deletion_note(diff)
     records = get_recent_commits() if house_style_on else []
     house = house_style(records)
     # None means no history was read, which is not the same as a history that shows
@@ -477,6 +487,7 @@ def main() -> int:
 
     context = {
         "guard": guard,
+        "deletions": deletions,
         "summary": summary,
         "classes": classes,
         "house_style": house,

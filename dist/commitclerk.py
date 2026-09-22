@@ -986,8 +986,12 @@ _DOC_ONLY_NOTE = (
     "Use the docs: prefix and describe the documentation change itself "
     "(e.g. 'document X', 'record X in the changelog', 'remove completed tasks from the roadmap', "
     "'correct stale claims in README'). Do NOT say a feature was implemented or added: any feature "
-    "described in the diff shipped in an earlier commit; this commit only writes it down."
+    "described in the diff shipped in an earlier commit; this commit only edits the text that "
+    "describes it."
 )
+# "only writes it down" is what that sentence said until a commit whose diff was
+# two deleted roadmap lines came back claiming the deleted work as adopted: on a
+# commit that erases the prose, the guard's own framing is the false one.
 
 # The same caution for the far more common mixed commit. It cannot simply say "do
 # not describe a feature as implemented" — sometimes the code really does implement
@@ -1211,6 +1215,60 @@ def unstaged_mention_note(files: list[str], diff: str) -> str:
         "commit edits, updates, adds or creates them; what the changed files say about "
         "them can still be described."
     )
+
+
+def deletion_only_docs(diff: str) -> list:
+    """Documentation files this commit removes lines from and adds none to.
+
+    Documentation only, for the reason `unstaged_mentions` reads documentation
+    only: a removed line of prose is a sentence that still reads as a claim,
+    while a removed line of code reads as deleted code and always has. Per file
+    rather than per commit, so a roadmap losing its entry beside a changelog
+    gaining one is still reported for the roadmap.
+
+    Asked of the diff as staged, never as sent: "this file's change is only
+    deletions" is a fact about the commit, and a file whose additions were
+    trimmed off the end would answer yes to a question about the trimmed text.
+    """
+    out = []
+    for chunk in split_diff(diff):
+        path = chunk_path(chunk)
+        if not path or not _is_doc(path):
+            continue
+        added, removed = count_changes(chunk)
+        if removed and not added:
+            out.append(path)
+    return out
+
+
+_DELETION_NOTE = (
+    "IMPORTANT - how to read the removed lines: this commit's only change to {files} is "
+    "deletions. A line the diff marks with '-' is text this commit REMOVES from the file: "
+    "its content is not something this commit does, adds, adopts, supports or documents. "
+    "Report the removal - what was dropped, and that it is gone - and never restate "
+    "anything that appears only on a removed line as work that was done."
+)
+
+
+def deletion_note(diff: str) -> str:
+    """The reminder that a removed line is not a claim this commit makes.
+
+    The failure the doc guard catches, one step further in. A `docs/ROADMAP.md`
+    diff of two deletions and no insertions, whose only mention of a project sat
+    on a removed line, came back as "updates documentation to reflect the
+    adoption of the new standard in ... and Cursarei" -- stating as accomplished
+    the one thing that commit recorded as abandoned. Nothing else in the input
+    can correct it: the words, the file and the block heading read identically
+    either way, and the whole difference between "we did this" and "we stopped
+    doing this" is the one character git writes in front of the line.
+    """
+    docs = deletion_only_docs(diff)
+    if not docs:
+        return ""
+    names = ", ".join(docs[:MAX_LISTED_FILES])
+    if len(docs) > MAX_LISTED_FILES:
+        names += f", and {len(docs) - MAX_LISTED_FILES} more"
+    return _DELETION_NOTE.format(files=names)
 
 
 # --- from commitclerk/secrets.py --------------------------------------
@@ -2264,6 +2322,7 @@ def assisted_value(version: str, model=None) -> str:
 
 _RULES = """- Describe what THIS commit changes, not what the changed text says. Prose added to documentation (CHANGELOG, ROADMAP, README, *.md) often describes features in past/present tense that ALREADY shipped in earlier commits; never restate that as work implemented in this commit.
 - The files this commit changes are exactly the ones under 'Files changed'. A file name that appears inside the diff's text is something that text talks about, not a file this commit touched; never say this commit edits, updates, adds or creates a file missing from that list.
+- A line the diff marks with '-' is text this commit REMOVES. What it contributes is the fact of its removal: never restate something that appears only on a removed line as work that was done, a feature that was added or a decision that was adopted.
 - Title: imperative mood, max 72 chars, no trailing period.
 - Use a Conventional Commits prefix when applicable (feat:, fix:, chore:, refactor:, docs:, test:, build:, perf:). Documentation-only changes use docs:.
 - Body: 2 to 6 bullets summarizing the WHY and key changes; describe intent and behaviour, not a file-by-file diff replay.
@@ -2318,6 +2377,7 @@ def build_user_prompt(
     deep: str = "",
     excluded=(),
     mentions: str = "",
+    deletions: str = "",
 ) -> str:
     classes = classes or {}
     parts = []
@@ -2361,11 +2421,17 @@ def build_user_prompt(
         # and still lost to a file name the prose below it mentioned.
         parts += ["", mentions]
     if guard:
-        # Last, on purpose. Measured against gpt-4o-mini: with the guard placed
-        # before the diff, 48 lines of changelog prose came after it and won — the
-        # model still wrote "feat: implement real-time collaboration" for a commit
-        # whose only code change was a docstring. Read after the diff, it obeys.
+        # After the diff, on purpose. Measured against gpt-4o-mini: with the guard
+        # placed before the diff, 48 lines of changelog prose came after it and won
+        # — the model still wrote "feat: implement real-time collaboration" for a
+        # commit whose only code change was a docstring. Read after the diff, it obeys.
         parts += ["", guard]
+    if deletions:
+        # After the guard, which is the general case this contradicts: the guard
+        # says the documentation prose describes work from an earlier commit, and
+        # on a deletion-only diff the prose is being retired instead. The more
+        # specific fact has to be the one read last.
+        parts += ["", deletions]
     return "\n".join(parts)
 
 
@@ -3194,6 +3260,10 @@ def main() -> int:
     # trimming, and demotion must happen before budgeting so the space a lockfile
     # was using is handed to the files the commit is actually about.
     guard = doc_guard_note(files, diff)
+    # Beside the guard and on the same untrimmed diff: "this file's change is only
+    # deletions" is a claim about the commit, and read after the budget a file
+    # whose additions were trimmed off the end would answer yes to it.
+    deletions = deletion_note(diff)
     records = get_recent_commits() if house_style_on else []
     house = house_style(records)
     # None means no history was read, which is not the same as a history that shows
@@ -3205,6 +3275,7 @@ def main() -> int:
 
     context = {
         "guard": guard,
+        "deletions": deletions,
         "summary": summary,
         "classes": classes,
         "house_style": house,

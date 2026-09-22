@@ -22,30 +22,6 @@ branch name, and the author's own intent.
 
 ## Block C — Diff intelligence
 
-### §T65 The removed line read as an accomplishment
-
-The founding insight is that the diff alone misleads, and the doc guard is the first
-place that was made concrete: prose describing shipped work is not work that was
-implemented. This is the same misreading one step further in — not prose that describes
-a change, but prose the change *deletes*.
-
-Measured on a real commit. The staged diff for a `docs/ROADMAP.md` was two deletions and
-no insertions, and the only occurrence of one project's name anywhere in it sat on a `-`
-line: the backlog entry being retired. The generated body read *"updates documentation
-to reflect the adoption of the new standard in ... and Cursarei"* — asserting as
-accomplished the one thing that commit recorded as abandoned. The author caught it and
-amended before pushing; a commit read less closely keeps it.
-
-What makes this a line rather than a prompt tweak is that the failure is directional. A
-unified diff marks a removed line with one character, and that character carries the
-whole difference between "we did this" and "we stopped doing this". Every other signal
-in the hunk — the words, the file, the block heading — reads identically either way, so
-nothing else in the input can correct it.
-
-The `-m` title was right throughout, because the author wrote it. So what needs the
-guard is the body: what a removed line contributes is the fact of its removal, and never
-its content as a claim.
-
 ## Block D — Trust & safety
 
 ### §T22 Prove the no-egress claim
