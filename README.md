@@ -634,6 +634,22 @@ Contributions are very welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the 
 
 Also see the [Code of Conduct](CODE_OF_CONDUCT.md) and the [security policy](SECURITY.md).
 
+## More tools by alegauss
+
+For Claude Code:
+
+- **[Claude Code Tray](https://alegauss.github.io/claude-tray/)**: your rate-limit usage as a Windows tray icon that turns red before you run out.
+- **[roadkeep](https://alegauss.github.io/roadkeep/)**: keeps ROADMAP, CHANGELOG and IMPROVEMENTS to one format, as a CLI and a Claude Code plugin.
+- **[polyweave](https://alegauss.github.io/polyweave/)**: a Claude Code plugin that makes a game's 3D assets, sounds and names by declaring what each has to satisfy.
+
+For Windows developers:
+
+- **[winwright](https://alegauss.github.io/winwright/)**: drives a Windows desktop app from a test and reports what was actually observed.
+- **[FreeWilly](https://alegauss.github.io/freewilly/)**: Docker on Windows without Docker Desktop, with no admin prompt and no telemetry.
+- **[Quickshell](https://alegauss.github.io/quickshell/)**: an SSH client for Windows with sessions, keys, SFTP and tunnels, and without the rest of the suite.
+
+All of them: [alegauss.github.io](https://alegauss.github.io/)
+
 ## License
 
 [Apache 2.0](LICENSE) © Alexandre Oliveira
