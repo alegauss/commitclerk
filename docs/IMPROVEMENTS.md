@@ -511,3 +511,29 @@ single commit is responsible for it.
 Whatever replaces it has to keep both properties the flat namespace buys:
 `COMMITCLERK_SOURCE=dist` running the same suite, and a test naming a helper without
 knowing its module.
+
+## Block K — The landing page on the design system
+
+### §T72 The page on the package
+
+The landing page is `docs/index.html`, 46 KB and 895 lines, of which 327 are one
+`<style>` block (lines 36 to 364). Most of that block is chrome the hub and the other
+product sites also draw: the tokens on `:root`, `nav` and `.nav-links`, `.hero` and
+`.hero-cta`, `.btn`, `.card` and `.grid`, `footer` and `.foot-*`, and the `.sponsor`
+block generated from the hub's `sponsor.json`. The rest belongs to this page: the
+terminal mock-ups (`.term`, `.codeblock`, `.copy-btn`), `.steps`, `.split`, `.proj`, the
+table and the `.disclaimer`.
+
+The move: link `tokens.css` and `site.css` from jsDelivr at a pinned version of
+`@viglet/viglet-design-system`, and set `data-tone="cool"`, because the ground is navy
+(`#0A0E18`). The accent comes from the hub's `projects.json`: `233,163,58` / `#F7BE63`,
+which is the page's amber today, so nothing changes colour. Delete the rules `site.css`
+covers and keep the page-specific ones. The Google tag, which loads unconditionally at
+line 7, loads only after consent, as the hub's AG1. The page stays plain HTML with no
+build step. It is dark-only today; if it takes the package's light ground too, that is
+stated in the commit.
+
+Done when no rule left in the page's `<style>` duplicates one `site.css` provides; the
+text of the page is unchanged; screenshots in each theme it renders, light and dark, are
+compared before and after, with the differences listed in the commit; and the page is
+listed in the design system's `consumers.json` through VDS217.

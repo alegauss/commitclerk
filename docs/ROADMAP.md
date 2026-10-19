@@ -126,6 +126,10 @@ the output got better or worse.*
 - 💭 **T69** (deps: —) **`main` gains a branch per feature and nothing ever splits it** — Six shipped tasks took its cognitive complexity from 22 to 36 against a limit of 15, and every one of them had to re-read the whole function to find where its branch belonged. → §T69
 - 💭 **T70** (deps: —) **Each new module costs a hand-written re-export block and a dozen lint findings** — Four modules shipped this session took ruff's unused-import count from 95 to 133, all of them names re-exported by hand so the tests can reach them. → §T70
 
+## Block K — The landing page on the design system
+
+- 💭 **T72** (deps: viglet-design-system: VDS216) **The landing page carries its own inline CSS for the nav, hero, cards and footer, outside the design system** — The hub and every other product site take the look from one package, and this page would stay the one copy that drifts. → §T72
+
 ## Non-goals
 
 Deliberately **not** built — check this list before proposing work:
