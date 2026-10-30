@@ -77,6 +77,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'pypi'
         run: python scripts/bump_version.py --level "${{ inputs.level }}"
 
+      # dist/commitclerk.py embeds __version__, so it is rebuilt after the bump;
+      # otherwise the release commit would ship a stale single-file build that
+      # CI's `build_single_file.py --check` rejects.
+      - name: Rebuild the single-file build
+        if: github.event_name == 'workflow_dispatch'
+        run: python scripts/build_single_file.py
+
       - name: Read the resulting version
         id: version
         run: echo "version=$(python -c 'import commitclerk; print(commitclerk.__version__)')" >> "$GITHUB_OUTPUT"
@@ -93,16 +100,19 @@ jobs:
           git push origin "HEAD:${GITHUB_REF_NAME}"
           git push origin "v${version}"
 
+      # Built into packages/, not dist/: dist/ also holds the committed
+      # dist/commitclerk.py, which twine and the PyPI upload would reject as an
+      # unknown distribution format.
       - name: Build sdist and wheel
-        run: python -m build
+        run: python -m build --outdir packages/
 
       - name: Validate metadata
-        run: python -m twine check dist/*
+        run: python -m twine check packages/*
 
       - uses: actions/upload-artifact@v7
         with:
           name: dist
-          path: dist/
+          path: packages/
 
   publish-testpypi:
     name: Publish to TestPyPI

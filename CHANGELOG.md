@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limitation.
 - **`Assisted-by:` — provenance, for the teams whose policy now requires it.**
   Set `"assisted_by": true` and the finished message carries
-  `Assisted-by: commitclerk 0.2.1 (gpt-4o-mini)`, which is the line those teams
+  `Assisted-by: commitclerk 0.3.0 (gpt-4o-mini)`, which is the line those teams
   add by hand today. **Off by default and with no flag**, exactly like
   `ticket_refs`: whether your history records AI assistance is something a
   repository decides once, not something each commit re-argues, and an
