@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-30
+
 ### Added
 
 - **Repository content now reaches the model fenced, and `SECURITY.md` documents
@@ -480,6 +482,7 @@ Initial public release.
 - `run-commit.cmd`: Windows wrapper that verifies `OPENAI_API_KEY`, stages
   everything, and forwards its arguments to `commitclerk.py`.
 
-[Unreleased]: https://github.com/alegauss/commitclerk/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/alegauss/commitclerk/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/alegauss/commitclerk/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/alegauss/commitclerk/releases/tag/v0.2.1
 [0.1.0]: https://github.com/alegauss/commitclerk/commit/6f72451

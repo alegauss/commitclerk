@@ -107,7 +107,7 @@ copy a single script than install anything.
 
 from __future__ import annotations
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 # Re-exported so this package's namespace matches the single-file build's exactly:
 # in `dist/commitclerk.py` these are plain module-level imports, and the tests

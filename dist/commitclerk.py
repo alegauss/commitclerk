@@ -138,7 +138,7 @@ import unicodedata
 import urllib.error
 import urllib.request
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 
 # --- from commitclerk/config.py ---------------------------------------
