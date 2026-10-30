@@ -107,6 +107,9 @@ is not specific to one commit.*
 - 💭 **T47** (deps: —) **The README is the only documentation and it is outgrowing itself** — a docs site can take the depth, as long as the README stays the canonical quick start and never becomes a stub. → §T47
 - 💭 **T48** (deps: T26) **Every team writes its rule pack from nothing** — ready-made packs for the Angular convention, strict Conventional Commits, ticket-mandatory enterprise and pt-BR turn configuration into something shareable. → §T48
 - 💭 **T49** (deps: —) **A CLI nobody can watch is a CLI nobody tries** — a demo cast at the top of the README is the highest-leverage adoption change on this list and it costs an afternoon. → §T49
+- 📋 **T73** (deps: —) **pipx install commitclerk gives 0.2.1, without the providers, flags and secret scan the README describes** — Whoever follows the README to Ollama or --offline concludes the tool is broken, and one of its two real differences is not in what people install. → §T73
+- 📋 **T74** (deps: —) **A release happens only when someone remembers to dispatch it, so PyPI sat three months behind main** — A pushed version tag that publishes by itself is what keeps the installed tool equal to the README without a habit to keep. → §T74
+- 📋 **T75** (deps: T73) **The README opens with the same promise as every other AI commit generator, and what only this one does sits far below** — In a category with thousand-star rivals and an editor button, the docs-only detection and the secret scan are the only reason to switch. → §T75
 
 ## Block J — Quality engineering
 

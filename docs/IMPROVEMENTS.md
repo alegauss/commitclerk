@@ -334,6 +334,69 @@ for that reason.
 
 ---
 
+### §T73 Publish 0.3 from main
+
+The release on PyPI and GitHub is v0.2.1, of 28/07/2026, and the version in the code is
+still 0.2.1 after 58 commits. The README describes `--provider anthropic`, Ollama,
+`--base-url`, `--offline`, `--deep`, `.clerkignore`, the pre-flight secret scan and the
+house style; `pipx install commitclerk` delivers none of them. Whoever tries Ollama or
+`--offline` from the README concludes the tool is broken, and the scan, one of the two
+things only this tool does, is missing from what people install. The portfolio review of
+30/10/2026 (visibility repo, `produtos/commitclerk.md`) found this, and the author
+confirmed the release stopped only for lack of habit: 0.3 comes from the current `main`.
+
+The design: a minor bump (new providers and flags, nothing removed), cut through
+`publish.yml` as it stands, first to TestPyPI and then to PyPI. Before the cut, every
+flag the README documents is checked against `--help` of the built wheel, and the
+CHANGELOG's unreleased entries become the 0.3.0 notes. Both READMEs and `docs/llms.txt`
+already describe 0.3; the check is that they do not describe anything past it.
+
+Done means `pipx install commitclerk` then `commitclerk --provider ollama --help` works
+on a clean machine.
+
+### §T74 A pushed tag is the release
+
+`publish.yml` publishes when a person dispatches it or publishes a GitHub Release by
+hand. Nothing else does, and so v0.2.1 stayed the release for three months while `main`
+gained two providers and the secret scan. The portfolio review of 30/10/2026 (visibility
+repo, `estrategia/portfolio.md`) asks the same for roadkeep and commitclerk: a release
+that happens without anyone remembering it, so PyPI never again sits months behind
+`main`.
+
+The design:
+
+- **A pushed `v*` tag is the release.** The workflow gains `push: tags: ['v*']`; the tag must equal the package's version (the guard the release path already has), and the job builds, tests, publishes to PyPI by Trusted Publishing and creates the GitHub Release with the CHANGELOG section as its body.
+- **The tag is cut by the bump, not by hand.** `scripts/bump_version.py` commits and tags together, so pushing the tag is the one step; T43 later decides patch, minor or major from the commits.
+- **The manual dispatch stays** for TestPyPI rehearsals.
+- **RELEASING.md** says the new path in three lines.
+
+A tag pushed by `GITHUB_TOKEN` does not start workflows; the bump runs locally or with a
+token that does, and the section says which.
+
+### §T75 Commit messages that don't lie
+
+AI commit-message generators are a crowded category: aicommits and OpenCommit have
+thousands of stars, and Copilot and JetBrains AI put the same button inside the editor.
+The README opens with "Write better git commit messages in one command — powered by your
+staged diff and an LLM", which is the line every one of them uses. What only this tool
+does sits far below the fold: the documentation-only detection, so a CHANGELOG edit
+never becomes a fake `feat:` (line 241 of 661), and the secret scan that refuses before
+anything is sent. The GitHub description already says it better ("A clerk records what
+actually changed").
+
+The portfolio review of 30/10/2026 (visibility repo, `estrategia/portfolio.md` and
+`produtos/commitclerk.md`) positions it by that difference: "commit messages that don't
+lie".
+
+The design:
+
+- **The first screen** carries the tagline, one sentence on the fake `feat:` with a two-line before/after, and one on the scan ("a staged key never leaves the machine"). Install comes next; the feature table after.
+- **The PyPI summary, the GitHub description and the landing page** say the same sentence, as do both READMEs (pt-BR included).
+- **The comparison** with aicommits, OpenCommit and the editor buttons is one honest short table, not a claim of being better at the common part.
+
+Depends on 0.3 being published: the scan the new opening sells has to be what `pipx`
+installs.
+
 ## Block J — Quality engineering
 
 ### §T50 The prompt is the product and it is currently untested
