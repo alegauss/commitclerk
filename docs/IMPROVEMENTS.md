@@ -334,26 +334,6 @@ for that reason.
 
 ---
 
-### §T73 Publish 0.3 from main
-
-The release on PyPI and GitHub is v0.2.1, of 28/07/2026, and the version in the code is
-still 0.2.1 after 58 commits. The README describes `--provider anthropic`, Ollama,
-`--base-url`, `--offline`, `--deep`, `.clerkignore`, the pre-flight secret scan and the
-house style; `pipx install commitclerk` delivers none of them. Whoever tries Ollama or
-`--offline` from the README concludes the tool is broken, and the scan, one of the two
-things only this tool does, is missing from what people install. The portfolio review of
-30/10/2026 (visibility repo, `produtos/commitclerk.md`) found this, and the author
-confirmed the release stopped only for lack of habit: 0.3 comes from the current `main`.
-
-The design: a minor bump (new providers and flags, nothing removed), cut through
-`publish.yml` as it stands, first to TestPyPI and then to PyPI. Before the cut, every
-flag the README documents is checked against `--help` of the built wheel, and the
-CHANGELOG's unreleased entries become the 0.3.0 notes. Both READMEs and `docs/llms.txt`
-already describe 0.3; the check is that they do not describe anything past it.
-
-Done means `pipx install commitclerk` then `commitclerk --provider ollama --help` works
-on a clean machine.
-
 ### §T74 A pushed tag is the release
 
 `publish.yml` publishes when a person dispatches it or publishes a GitHub Release by

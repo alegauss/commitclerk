@@ -50,6 +50,7 @@
 ## Block I — Distribution & reach
 
 - ✅ **T71** **The page ends without a pointer to any other tool the same author publishes** — The page carries one house ad slot above the footer, drawn by japode-ads with storage off, a fixed dark theme and commitclerk kept off its own slot.
+- ✅ **T73** **pipx install commitclerk gives 0.2.1, without the providers, flags and secret scan the README describes** — pip install commitclerk now gives 0.3.0 from main: Anthropic and Ollama, --offline, --deep, .clerkignore and the secret scan, cut by publish.yml after a TestPyPI rehearsal.
 
 ## Block J — Quality engineering
 
